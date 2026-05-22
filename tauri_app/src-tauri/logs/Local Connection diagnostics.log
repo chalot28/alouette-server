@@ -1,0 +1,29 @@
+[2026-05-22 12:50:49.524] SYSTEM: --- Spawning Primary Command ---
+[12:50:49.568] [stdout] 
+[12:50:49.568] [stdout] Pinging 127.0.0.1 with 32 bytes of data:
+[12:50:49.569] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:50.576] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:51.580] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:52.586] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:53.588] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:54.602] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:55.618] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:56.623] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:57.629] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:58.632] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:50:59.644] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:00.660] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:01.672] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:02.677] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:03.680] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:04.693] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:05.703] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:06.711] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:07.725] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:08.733] [stdout] Reply from 127.0.0.1: bytes=32 time<1ms TTL=128
+[12:51:08.734] [stdout] 
+[12:51:08.734] [stdout] Ping statistics for 127.0.0.1:
+[12:51:08.734] [stdout]     Packets: Sent = 20, Received = 20, Lost = 0 (0% loss),
+[12:51:08.734] [stdout] Approximate round trip times in milli-seconds:
+[12:51:08.734] [stdout]     Minimum = 0ms, Maximum = 0ms, Average = 0ms
+[2026-05-22 12:51:08.739] SYSTEM: --- Primary Command Exited with Code: Some(0) ---

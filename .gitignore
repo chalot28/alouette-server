@@ -1,0 +1,3 @@
+/target
+tauri_app/src-tauri/target
+tauri_app/ui/node_modules
