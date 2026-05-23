@@ -5,6 +5,8 @@ use core_engine::{ProcessManager, ProcessState, ProjectConfig, ResourceMonitor};
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 use tokio::sync::Mutex;
+use std::fs;
+use std::path::Path;
 
 struct AppState {
     process_manager: Arc<Mutex<ProcessManager>>,
@@ -122,6 +124,75 @@ async fn check_port_status(port: u16) -> Option<u32> {
 async fn force_kill_process(pid: u32) -> Result<(), String> {
     core_engine::terminate_process_tree(pid).await;
     Ok(())
+}
+
+#[derive(serde::Serialize, Clone)]
+struct FileNode {
+    name: String,
+    path: String,
+    is_dir: bool,
+    children: Option<Vec<FileNode>>,
+}
+
+#[tauri::command]
+fn get_project_files(dir_path: Option<String>) -> Result<Vec<FileNode>, String> {
+    let path_str = dir_path.unwrap_or_else(|| {
+        std::env::current_dir()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string()
+    });
+    
+    let path = Path::new(&path_str);
+    if !path.exists() {
+        return Err("Directory does not exist".to_string());
+    }
+    
+    read_dir_recursive(path, 0)
+}
+
+fn read_dir_recursive(path: &Path, depth: usize) -> Result<Vec<FileNode>, String> {
+    if depth > 4 {
+        return Ok(Vec::new());
+    }
+    
+    let mut entries = Vec::new();
+    let read_entries = fs::read_dir(path).map_err(|e| e.to_string())?;
+    
+    for entry_result in read_entries {
+        if let Ok(entry) = entry_result {
+            let entry_path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            
+            if name.starts_with('.') || name == "node_modules" || name == "target" || name == "gen" {
+                continue;
+            }
+            
+            let is_dir = entry_path.is_dir();
+            let children = if is_dir {
+                Some(read_dir_recursive(&entry_path, depth + 1)?)
+            } else {
+                None
+            };
+            
+            entries.push(FileNode {
+                name,
+                path: entry_path.to_string_lossy().to_string(),
+                is_dir,
+                children,
+            });
+        }
+    }
+    
+    entries.sort_by(|a, b| {
+        if a.is_dir != b.is_dir {
+            b.is_dir.cmp(&a.is_dir)
+        } else {
+            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+        }
+    });
+    
+    Ok(entries)
 }
 
 fn main() {
@@ -280,7 +351,8 @@ fn main() {
             register_project,
             deregister_project,
             check_port_status,
-            force_kill_process
+            force_kill_process,
+            get_project_files
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

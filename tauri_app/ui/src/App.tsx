@@ -1,21 +1,17 @@
 import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import {
-  Play,
-  Square,
-  Plus,
-  Trash2,
-  Terminal as TerminalIcon,
-  Cpu,
-  Database,
-  Layers,
-  Settings,
-  Sun,
-  Moon,
-  Info,
-  Monitor
-} from "lucide-react";
+import { Layers, Activity, User, Terminal as TerminalIcon, Plus } from "lucide-react";
+
+// Components
+import Header from "./components/Header";
+import ProcessMonitor from "./components/ProcessMonitor";
+import ConfigSetup from "./components/ConfigSetup";
+import TabList from "./components/TabList";
+import TerminalPanel from "./components/TerminalPanel";
+import ProcessManager from "./components/ProcessManager";
+import DiagnosticsPanel from "./components/DiagnosticsPanel";
+import FileExplorer from "./components/FileExplorer";
 
 // Interfaces
 interface Project {
@@ -62,8 +58,18 @@ export default function App() {
   const [projectLogs, setProjectLogs] = useState<{ [id: string]: LogLine[] }>({});
   const [resourceHistory, setResourceHistory] = useState<ResourceHistory>({});
 
-  // Previous Project ID for full-page config tab memory
-  const [prevProjectId, setPrevProjectId] = useState<string>("");
+  // Bottom nav tab (for right-bottom panel between manager / user)
+  const [rightBottomTab, setRightBottomTab] = useState<"manager" | "user">("manager");
+
+  // Dynamic UI States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [logFilter, setLogFilter] = useState<"all" | "stdout" | "stderr" | "system">("all");
+  const [logSearchQuery, setLogSearchQuery] = useState("");
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [settingMenuOpen, setSettingMenuOpen] = useState(false);
+  const [uptimeSeconds, setUptimeSeconds] = useState(0);
+
+  // Form State
   const [newProjName, setNewProjName] = useState("");
   const [newProjCmd, setNewProjCmd] = useState("");
   const [newProjArgs, setNewProjArgs] = useState("");
@@ -75,9 +81,7 @@ export default function App() {
   const [newProjCpu, setNewProjCpu] = useState<string>("");
   const [newProjRam, setNewProjRam] = useState<string>("");
   const [newProjPort, setNewProjPort] = useState<string>("");
-  const [envKeyInput, setEnvKeyInput] = useState("");
-  const [envValInput, setEnvValInput] = useState("");
-  
+
   // Port conflict state
   const [portConflict, setPortConflict] = useState<{ port: number; pid: number } | null>(null);
 
@@ -94,6 +98,24 @@ export default function App() {
     // Set theme class on document element
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  // System Uptime Counter
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setUptimeSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Window click listener to automatically close dropdowns
+  useEffect(() => {
+    const handleWindowClick = () => {
+      setFileMenuOpen(false);
+      setSettingMenuOpen(false);
+    };
+    window.addEventListener("click", handleWindowClick);
+    return () => window.removeEventListener("click", handleWindowClick);
+  }, []);
 
   useEffect(() => {
     // Load initial project list config from backend
@@ -156,6 +178,30 @@ export default function App() {
     };
   }, []);
 
+  // Populate configuration fields when active project changes
+  useEffect(() => {
+    if (activeProjectId && activeProjectId !== "__create_project__") {
+      const activeProj = projects.find((p) => p.id === activeProjectId);
+      if (activeProj) {
+        setNewProjName(activeProj.name);
+        setNewProjCmd(activeProj.command);
+        setNewProjArgs(activeProj.args.join(" "));
+        setNewProjCwd(activeProj.cwd || "");
+        setNewProjSetup(activeProj.setup_command || "");
+        setNewProjSetupArgs(activeProj.setup_args ? activeProj.setup_args.join(" ") : "");
+        setNewProjRestart(activeProj.auto_restart !== false);
+        setNewProjCpu(activeProj.max_cpu_percent ? String(activeProj.max_cpu_percent) : "");
+        setNewProjRam(activeProj.max_ram_mb ? String(activeProj.max_ram_mb) : "");
+        setNewProjPort(activeProj.port ? String(activeProj.port) : "");
+        if (activeProj.env) {
+          setNewProjEnv(Object.entries(activeProj.env).map(([key, value]) => ({ key, value })));
+        } else {
+          setNewProjEnv([]);
+        }
+      }
+    }
+  }, [activeProjectId, projects]);
+
   // Sync state parameters when clicking around tabs
   const activeProject = projects.find((p) => p.id === activeProjectId);
   const activeState = projectStates[activeProjectId] || { type: "Stopped" };
@@ -195,7 +241,7 @@ export default function App() {
     try {
       const list = await invoke<Project[]>("get_projects");
       setProjects(list);
-      
+
       // Hydrate state for each loaded project
       for (const p of list) {
         const state = await invoke<ProcessState>("get_project_state", { projectId: p.id });
@@ -236,12 +282,49 @@ export default function App() {
     }
   };
 
+  const handleStartProject = async (id: string) => {
+    try {
+      const proj = projects.find((p) => p.id === id);
+      if (!proj) return;
+      
+      const occupiedPid = proj.port ? await invoke<number | null>("check_port_status", { port: proj.port }) : null;
+      if (occupiedPid) {
+        setPortConflict({ port: proj.port!, pid: occupiedPid });
+        return;
+      }
+
+      setProjectLogs((prev) => ({ ...prev, [id]: [] }));
+      setResourceHistory((prev) => ({
+        ...prev,
+        [id]: { cpu: [], ram: [] }
+      }));
+      await invoke("start_project_process", { projectId: id });
+    } catch (e: any) {
+      alert(`Execution failed: ${e}`);
+    }
+  };
+
+  const handleStopProject = async (id: string) => {
+    try {
+      await invoke("stop_project_process", { projectId: id });
+    } catch (e: any) {
+      alert(`Teardown failed: ${e}`);
+    }
+  };
+
+  const forceKillProcess = async (pid: number) => {
+    try {
+      await invoke("force_kill_process", { pid });
+    } catch (e: any) {
+      alert(`Force kill failed: ${e}`);
+    }
+  };
+
   const handleForceKillAndStart = async () => {
     if (!portConflict || !activeProjectId) return;
     try {
       await invoke("force_kill_process", { pid: portConflict.pid });
       setPortConflict(null);
-      // Wait 500ms for OS to release the socket
       setTimeout(async () => {
         await handleStart(true);
       }, 500);
@@ -276,7 +359,6 @@ export default function App() {
       ? newProjSetupArgs.split(" ").map((s) => s.trim()).filter((s) => s.length > 0)
       : undefined;
 
-    // Convert env array to object dictionary
     const envObj: { [key: string]: string } = {};
     newProjEnv.forEach((item) => {
       if (item.key.trim()) {
@@ -289,7 +371,7 @@ export default function App() {
     const portVal = newProjPort ? parseInt(newProjPort, 10) : undefined;
 
     const newConfig: Project = {
-      id,
+      id: activeProjectId && activeProjectId !== "__create_project__" ? activeProjectId : id,
       name: newProjName,
       command: newProjCmd,
       args: argsArray,
@@ -300,31 +382,13 @@ export default function App() {
       env: Object.keys(envObj).length > 0 ? envObj : undefined,
       max_cpu_percent: maxCpuVal,
       max_ram_mb: maxRamVal,
-      port: portVal,
+      port: portVal
     };
 
     try {
       await invoke("register_project", { config: newConfig });
-      
-      // Clear configuration input buffers
-      setNewProjName("");
-      setNewProjCmd("");
-      setNewProjArgs("");
-      setNewProjCwd("");
-      setNewProjSetup("");
-      setNewProjSetupArgs("");
-      setNewProjRestart(true);
-      setNewProjEnv([]);
-      setNewProjCpu("");
-      setNewProjRam("");
-      setNewProjPort("");
-      setEnvKeyInput("");
-      setEnvValInput("");
-      setPrevProjectId("");
-
-      // Reload lists
       await loadProjects();
-      setActiveProjectId(id);
+      alert("Configuration saved successfully!");
     } catch (e: any) {
       alert(`Failed to save project: ${e}`);
     }
@@ -346,9 +410,68 @@ export default function App() {
   const handleTerminalScroll = () => {
     if (!terminalRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = terminalRef.current;
-    // User is within 30px of bottom, autoScroll remains true
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 30;
     setAutoScroll(isAtBottom);
+  };
+
+  const handleResetSetupForm = () => {
+    setActiveProjectId("__create_project__");
+    setNewProjName("");
+    setNewProjCmd("");
+    setNewProjArgs("");
+    setNewProjCwd("");
+    setNewProjSetup("");
+    setNewProjSetupArgs("");
+    setNewProjRestart(true);
+    setNewProjEnv([]);
+    setNewProjCpu("");
+    setNewProjRam("");
+    setNewProjPort("");
+  };
+
+  // Export / Import Mock Helpers
+  const handleExportConfig = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projects, null, 2));
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "alouette_configurations.json");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    setFileMenuOpen(false);
+  };
+
+  const handleImportMockConfig = async () => {
+    const mockProjects: Project[] = [
+      {
+        id: "ping-diagnostics",
+        name: "Local Connection diagnostics",
+        command: "ping",
+        args: ["127.0.0.1", "-n", "20"],
+        auto_restart: false
+      },
+      {
+        id: "mock-backend",
+        name: "Node API Server",
+        command: "node",
+        args: ["server.js"],
+        auto_restart: true,
+        port: 8080,
+        max_cpu_percent: 50,
+        max_ram_mb: 256
+      }
+    ];
+
+    try {
+      for (const p of mockProjects) {
+        await invoke("register_project", { config: p });
+      }
+      await loadProjects();
+      alert("Loaded mock templates successfully!");
+    } catch (e: any) {
+      alert(`Demo import failed: ${e}`);
+    }
+    setFileMenuOpen(false);
   };
 
   // 4. Drawing high-density Canvas Graph Engine
@@ -373,7 +496,6 @@ export default function App() {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Draw Grid Overlay
     const gridStyle =
       document.documentElement.getAttribute("data-theme") === "light"
         ? "rgba(0, 0, 0, 0.05)"
@@ -391,7 +513,6 @@ export default function App() {
 
     if (data.length === 0) return;
 
-    // Draw graph line
     const maxVal = isPercent ? 100 : Math.max(16, ...data) * 1.1;
 
     ctx.beginPath();
@@ -402,19 +523,17 @@ export default function App() {
       else ctx.lineTo(x, y);
     });
 
-    // Fill area under line
     const fillCtx = ctx;
     fillCtx.lineTo((w * (data.length - 1)) / 29, h);
     fillCtx.lineTo(0, h);
     fillCtx.closePath();
 
     const gradient = ctx.createLinearGradient(0, 0, 0, h);
-    gradient.addColorStop(0, strokeColor.replace("1)", "0.2)"));
+    gradient.addColorStop(0, strokeColor.replace("1)", "0.15)"));
     gradient.addColorStop(1, strokeColor.replace("1)", "0.0)"));
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // Outline stroke path
     ctx.beginPath();
     data.forEach((val, idx) => {
       const x = (w * idx) / 29;
@@ -427,489 +546,250 @@ export default function App() {
     ctx.stroke();
   };
 
+  const wipeConfig = () => {
+    setProjects([]);
+    setProjectStates({});
+    setProjectLogs({});
+    setResourceHistory({});
+    setActiveProjectId("");
+  };
+
+  // Filter project lists based on Search input
+  const filteredProjects = projects.filter((p) => {
+    const q = searchQuery.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.command.toLowerCase().includes(q) ||
+      p.args.join(" ").toLowerCase().includes(q)
+    );
+  });
+
+  // Filter logs inside Terminal
+  const filteredLogs = activeLogs.filter((log) => {
+    if (logFilter !== "all" && log.stream !== logFilter) return false;
+    if (logSearchQuery.trim()) {
+      return log.text.toLowerCase().includes(logSearchQuery.toLowerCase());
+    }
+    return true;
+  });
+
   return (
     <div className="app-container">
-      {/* Sidebar Section */}
-      <aside className="sidebar">
-        <header className="sidebar-header">
-          <div className="brand">
-            <Layers className="brand-icon" size={20} />
-            <span>Alouette Engine</span>
+      {/* 1. Global Header Bar */}
+      <Header
+        theme={theme}
+        setTheme={setTheme}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        fileMenuOpen={fileMenuOpen}
+        setFileMenuOpen={setFileMenuOpen}
+        settingMenuOpen={settingMenuOpen}
+        setSettingMenuOpen={setSettingMenuOpen}
+        handleExportConfig={handleExportConfig}
+        handleImportMockConfig={handleImportMockConfig}
+        wipeConfig={wipeConfig}
+      />
+
+      {/* 2. Main Workspace — Full Dashboard Grid */}
+      <div className="workspace-grid">
+
+        {/* ── LEFT COLUMN: Zone 1 (Tab list) + Zone 3 (File Explorer) + Zone 6 (New project btn) ── */}
+        <div className="col-left">
+          {/* Zone 1: Tab List */}
+          <div className="zone zone-1" style={{ flex: '1 1 50%', borderBottom: '1px solid var(--border-primary)' }}>
+            <TabList
+              filteredProjects={filteredProjects}
+              activeProjectId={activeProjectId}
+              setActiveProjectId={setActiveProjectId}
+              projectStates={projectStates}
+              resourceHistory={resourceHistory}
+              setAutoScroll={setAutoScroll}
+              handleStartProject={handleStartProject}
+              handleStopProject={handleStopProject}
+              handleDeleteProject={handleDeleteProject}
+            />
           </div>
-          <button
-            className="btn btn-secondary"
-            style={{ padding: "6px 8px" }}
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            title="Toggle theme"
-          >
-            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
-        </header>
 
-        {/* Dynamic Project/Tab Picker List */}
-        <div className="project-list-container">
-          {projects.length === 0 ? (
-            <div style={{ color: "var(--text-muted)", fontSize: "12px", textAlign: "center", marginTop: "20px" }}>
-              No active project tabs. Create one below to begin.
-            </div>
-          ) : (
-            projects.map((p) => {
-              const state = projectStates[p.id] || { type: "Stopped" };
-              const isActive = p.id === activeProjectId;
-              return (
-                <div
-                  key={p.id}
-                  className={`project-item ${isActive ? "active" : ""}`}
-                  onClick={() => {
-                    setActiveProjectId(p.id);
-                    setAutoScroll(true);
-                  }}
-                >
-                  <div className="project-info">
-                    <span className="project-name">{p.name}</span>
-                    <span className="project-command">
-                      $ {p.command} {p.args.join(" ")}
-                    </span>
-                  </div>
-
-                  {/* Dynamic Status Badge */}
-                  <div className={`status-badge status-${state.type.toLowerCase()}`}>
-                    <span className="status-dot"></span>
-                    <span style={{ fontSize: "9px" }}>{state.type}</span>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Sidebar Controls Footer */}
-        <footer className="sidebar-footer">
-          <button className="btn btn-primary" onClick={() => {
-            setPrevProjectId(activeProjectId);
-            setActiveProjectId("__create_project__");
-          }}>
-            <Plus size={16} />
-            <span>Add Project Tab</span>
-          </button>
-        </footer>
-      </aside>
-
-      {/* Main Panel Viewport */}
-      <main className="main-content">
-        {activeProjectId === "__create_project__" ? (
-          <div className="config-dashboard">
-            <header className="config-header">
-              <h1 className="config-title">Configure Native Tab Process</h1>
-              <p className="config-subtitle">Establish a new isolated runtime script and register active resource watchdog limits.</p>
-            </header>
-
-            <div className="config-container">
-              {/* Left Column: Command & Paths */}
-              <div className="config-card">
-                <h3 className="config-card-title">
-                  <TerminalIcon size={16} />
-                  <span>Execution Command Configuration</span>
-                </h3>
-
-                <div className="form-group">
-                  <label className="form-label">Tab / Project Identifier</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. NextJS Backend, API Service"
-                    value={newProjName}
-                    onChange={(e) => setNewProjName(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                  <div className="form-group">
-                    <label className="form-label">Primary Executor</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. npm, node, ping"
-                      value={newProjCmd}
-                      onChange={(e) => setNewProjCmd(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Command Arguments</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. run dev, 127.0.0.1"
-                      value={newProjArgs}
-                      onChange={(e) => setNewProjArgs(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Custom Working Directory (Optional)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. d:\alouette-server"
-                    value={newProjCwd}
-                    onChange={(e) => setNewProjCwd(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                  <div className="form-group">
-                    <label className="form-label">Pre-Start Setup Command</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. npm"
-                      value={newProjSetup}
-                      onChange={(e) => setNewProjSetup(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Pre-Start Arguments</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. install"
-                      value={newProjSetupArgs}
-                      onChange={(e) => setNewProjSetupArgs(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Environment & Limits */}
-              <div className="config-card">
-                <h3 className="config-card-title">
-                  <Settings size={16} />
-                  <span>Environment & Watchdog Settings</span>
-                </h3>
-
-                {/* Env Var section */}
-                <div className="env-manager-grid">
-                  <label className="form-label">Environment Variables</label>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="KEY (e.g. PORT)"
-                      style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: "12px" }}
-                      value={envKeyInput}
-                      onChange={(e) => setEnvKeyInput(e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="VALUE (e.g. 5000)"
-                      style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: "12px" }}
-                      value={envValInput}
-                      onChange={(e) => setEnvValInput(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ padding: "10px 16px" }}
-                      onClick={() => {
-                        if (envKeyInput.trim()) {
-                          setNewProjEnv([...newProjEnv, { key: envKeyInput.trim().toUpperCase(), value: envValInput }]);
-                          setEnvKeyInput("");
-                          setEnvValInput("");
-                        }
-                      }}
-                    >
-                      Add
-                    </button>
-                  </div>
-                  
-                  {newProjEnv.length > 0 && (
-                    <div className="env-list-container">
-                      {newProjEnv.map((item, idx) => (
-                        <div key={idx} className="env-list-item">
-                          <span className="env-list-item-key">{item.key}</span>
-                          <span className="env-list-item-val">{item.value}</span>
-                          <button
-                            type="button"
-                            className="env-remove-btn"
-                            onClick={() => setNewProjEnv(newProjEnv.filter((_, i) => i !== idx))}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Threshold limits grid */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-                  <div className="form-group">
-                    <label className="form-label">Port Scanner</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      placeholder="e.g. 3000"
-                      value={newProjPort}
-                      onChange={(e) => setNewProjPort(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Max CPU (%)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      placeholder="No limit"
-                      value={newProjCpu}
-                      onChange={(e) => setNewProjCpu(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Max RAM (MB)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      placeholder="No limit"
-                      value={newProjRam}
-                      onChange={(e) => setNewProjRam(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ flexDirection: "row", gap: "10px", alignItems: "center", marginTop: "10px" }}>
-                  <input
-                    type="checkbox"
-                    id="auto_restart"
-                    style={{ width: "16px", height: "16px", cursor: "pointer" }}
-                    checked={newProjRestart}
-                    onChange={(e) => setNewProjRestart(e.target.checked)}
-                  />
-                  <label htmlFor="auto_restart" className="form-label" style={{ cursor: "pointer", userSelect: "none" }}>
-                    Enable automatic crash-loop recovery (exponential backoff)
-                  </label>
-                </div>
-              </div>
-
-              {/* Actions Row */}
-              <div className="config-actions-row">
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={() => {
-                    // Clear inputs
-                    setNewProjName("");
-                    setNewProjCmd("");
-                    setNewProjArgs("");
-                    setNewProjCwd("");
-                    setNewProjSetup("");
-                    setNewProjSetupArgs("");
-                    setNewProjRestart(true);
-                    setNewProjEnv([]);
-                    setNewProjCpu("");
-                    setNewProjRam("");
-                    setNewProjPort("");
-                    setEnvKeyInput("");
-                    setEnvValInput("");
-                    // Navigate back
-                    setActiveProjectId(prevProjectId);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button className="btn btn-primary" onClick={handleAddProject}>
-                  Save Project Tab
-                </button>
-              </div>
-            </div>
+          {/* Zone 3: Project File Explorer */}
+          <div className="zone zone-file-explorer" style={{ flex: '1 1 50%', overflow: 'hidden' }}>
+            <FileExplorer activeCwd={activeProject?.cwd} />
           </div>
-        ) : activeProject ? (
-          <>
-            {/* Top Control Bar */}
-            <header className="control-bar">
-              <div className="control-info">
-                <div className="control-title-group">
-                  <h1 className="control-title">{activeProject.name}</h1>
-                  <p style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "11px" }}>
-                    CWD: {activeProject.cwd || "System Root"} | Cmd: {activeProject.command} {activeProject.args.join(" ")}
-                  </p>
-                </div>
-              </div>
 
-              {/* Action Buttons */}
-              <div className="control-actions">
-                {activeState.type === "Running" || activeState.type === "Setup" ? (
-                  <button className="btn btn-danger" onClick={handleStop}>
-                    <Square size={14} fill="currentColor" />
-                    <span>Stop Process</span>
-                  </button>
-                ) : (
-                  <button className="btn btn-primary" onClick={() => handleStart()}>
-                    <Play size={14} fill="currentColor" fillRule="evenodd" />
-                    <span>Start Process</span>
-                  </button>
-                )}
-                
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => handleDeleteProject(activeProject.id)}
-                  title="Remove Project Tab"
-                >
-                  <Trash2 size={14} />
-                  <span>Delete Tab</span>
-                </button>
-              </div>
-            </header>
-
-            {/* Split Grid: Metrics (Top) & Terminal (Bottom) */}
-            <div className="dashboard-grid">
-              {/* Aggregate metrics panel */}
-              <section className="metrics-panel">
-                {/* CPU usage aggregate */}
-                <div className="chart-card">
-                  <div className="card-title">
-                    <span>CPU LOAD</span>
-                    <Cpu size={14} />
-                  </div>
-                  <div className="card-value">
-                    {activeState.type === "Running" ? `${activeCpuVal.toFixed(1)}%` : "0.0%"}
-                  </div>
-                  {activeProject.max_cpu_percent && (
-                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "-6px" }}>
-                      Watchdog Limit: {activeProject.max_cpu_percent}%
-                    </div>
-                  )}
-                  <div className="canvas-container">
-                    <canvas ref={cpuCanvasRef} />
-                  </div>
-                </div>
-
-                {/* RAM RSS aggregate */}
-                <div className="chart-card">
-                  <div className="card-title">
-                    <span>RAM RSS FOOTPRINT</span>
-                    <Database size={14} />
-                  </div>
-                  <div className="card-value">
-                    {activeState.type === "Running" ? `${activeRamVal.toFixed(1)} MB` : "0.0 MB"}
-                  </div>
-                  {activeProject.max_ram_mb && (
-                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "-6px" }}>
-                      Watchdog Limit: {activeProject.max_ram_mb} MB
-                    </div>
-                  )}
-                  <div className="canvas-container">
-                    <canvas ref={ramCanvasRef} />
-                  </div>
-                </div>
-
-                {/* Process state and PID tracking */}
-                <div className="chart-card">
-                  <div className="card-title">
-                    <span>PROCESS HEALTH STATE</span>
-                    <Info size={14} />
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "2px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
-                      <span style={{ color: "var(--text-secondary)" }}>Process State:</span>
-                      <span style={{ fontWeight: 600, color: "var(--color-accent)" }}>{activeState.type}</span>
-                    </div>
-
-                    {activeState.type === "Running" && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
-                        <span style={{ color: "var(--text-secondary)" }}>Parent PID:</span>
-                        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>{activeState.data}</span>
-                      </div>
-                    )}
-
-                    {activeProject.port && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
-                        <span style={{ color: "var(--text-secondary)" }}>Port Binding:</span>
-                        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--color-success)" }}>{activeProject.port}</span>
-                      </div>
-                    )}
-
-                    {activeState.type === "Fatal" && (
-                      <div style={{ fontSize: "11px", color: "var(--color-danger)", lineHeight: "1.4" }}>
-                        Error: {activeState.data || "Unknown fatal error encountered."}
-                      </div>
-                    )}
-
-                    {activeState.type === "Crashing" && (
-                      <div style={{ fontSize: "11px", color: "var(--color-warning)", lineHeight: "1.4" }}>
-                        Immediate Crash Loop. Retrying backoff in {activeState.data?.backoff_seconds || 2}s (Count: {activeState.data?.retry_count}/5).
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* Terminal Panel */}
-              <section className="terminal-panel">
-                <header className="terminal-header">
-                  <div className="terminal-title">
-                    <TerminalIcon size={12} />
-                    <span>LOG STREAM PIPELINE</span>
-                  </div>
-                  <div className="terminal-actions">
-                    <button
-                      className="terminal-action-btn"
-                      onClick={() => setProjectLogs((prev) => ({ ...prev, [activeProjectId]: [] }))}
-                    >
-                      <Trash2 size={12} />
-                      <span>Clear log console</span>
-                    </button>
-                  </div>
-                </header>
-
-                {/* Virtual Viewport container */}
-                <div
-                  ref={terminalRef}
-                  className="terminal-viewport"
-                  onScroll={handleTerminalScroll}
-                >
-                  {activeLogs.length === 0 ? (
-                    <div style={{ color: "var(--text-muted)", fontStyle: "italic", fontSize: "11px" }}>
-                      --- Ready. Click "Start Process" to pipe logs dynamically ---
-                    </div>
-                  ) : (
-                    activeLogs.map((log, index) => (
-                      <div
-                        key={index}
-                        className={`terminal-line ${log.stream}`}
-                      >
-                        {log.text}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-            </div>
-          </>
-        ) : (
-          /* Empty / Welcome Viewport */
-          <div className="empty-state">
-            <Monitor size={48} className="empty-icon" />
-            <h2 className="empty-title">Native Process Controller Shell</h2>
-            <p className="empty-description">
-              Welcome to Alouette Runner. Manage multiple isolated developer process tabs, track nested Windows PID trees, and stream real-time resource allocations within a high-density, low-latency slate interface.
-            </p>
-            <button className="btn btn-primary" onClick={() => {
-              setPrevProjectId(activeProjectId);
-              setActiveProjectId("__create_project__");
-            }}>
-              <Plus size={16} />
-              <span>Create your first tab</span>
+          {/* Zone 6: New Project Button */}
+          <div className="zone zone-6">
+            <button
+              className="btn-new-project"
+              onClick={handleResetSetupForm}
+            >
+              <Plus size={14} />
+              <span>New Project</span>
             </button>
           </div>
-        )}
-      </main>
+        </div>
+
+        {/* ── CENTER COLUMN: Zone 2 (Monitor) + Zone 4 (Terminal) ── */}
+        <div className="col-center">
+          {/* Zone 2: Resource Monitor */}
+          <div className="zone zone-2">
+            <ProcessMonitor
+              activeProject={activeProject}
+              activeState={activeState}
+              activeCpuVal={activeCpuVal}
+              activeRamVal={activeRamVal}
+              cpuCanvasRef={cpuCanvasRef}
+              ramCanvasRef={ramCanvasRef}
+              handleStart={handleStart}
+              handleStop={handleStop}
+            />
+          </div>
+
+          {/* Zone 4: Terminal */}
+          <div className="zone zone-4">
+            <TerminalPanel
+              activeProject={activeProject}
+              activeProjectId={activeProjectId}
+              filteredLogs={filteredLogs}
+              logFilter={logFilter}
+              setLogFilter={setLogFilter}
+              logSearchQuery={logSearchQuery}
+              setLogSearchQuery={setLogSearchQuery}
+              clearLogs={(id) => setProjectLogs((prev) => ({ ...prev, [id]: [] }))}
+              terminalRef={terminalRef}
+              handleTerminalScroll={handleTerminalScroll}
+              projects={projects}
+              projectStates={projectStates}
+              setActiveProjectId={setActiveProjectId}
+            />
+          </div>
+        </div>
+
+        {/* ── RIGHT COLUMN: Zone 3 (Config) + Zone 5 (Process Manager) ── */}
+        <div className="col-right">
+          {/* Zone 3: Configuration & Watchdog Setup */}
+          <div className="zone zone-3">
+            <ConfigSetup
+              newProjName={newProjName}
+              setNewProjName={setNewProjName}
+              newProjRestart={newProjRestart}
+              setNewProjRestart={setNewProjRestart}
+              newProjCmd={newProjCmd}
+              setNewProjCmd={setNewProjCmd}
+              newProjArgs={newProjArgs}
+              setNewProjArgs={setNewProjArgs}
+              newProjCwd={newProjCwd}
+              setNewProjCwd={setNewProjCwd}
+              newProjPort={newProjPort}
+              setNewProjPort={setNewProjPort}
+              newProjCpu={newProjCpu}
+              setNewProjCpu={setNewProjCpu}
+              newProjRam={newProjRam}
+              setNewProjRam={setNewProjRam}
+              handleResetSetupForm={handleResetSetupForm}
+              handleAddProject={handleAddProject}
+            />
+          </div>
+
+          {/* Zone 5: Running Processes / Diagnostics — with tab switcher */}
+          <div className="zone zone-5">
+            <div className="zone5-tab-bar">
+              <button
+                className={`zone5-tab-btn ${rightBottomTab === "manager" ? "active" : ""}`}
+                onClick={() => setRightBottomTab("manager")}
+              >
+                <Activity size={11} />
+                <span>Manager</span>
+              </button>
+              <button
+                className={`zone5-tab-btn ${rightBottomTab === "user" ? "active" : ""}`}
+                onClick={() => setRightBottomTab("user")}
+              >
+                <User size={11} />
+                <span>Diagnostics</span>
+              </button>
+            </div>
+            <div className="zone5-content">
+              {rightBottomTab === "manager" && (
+                <ProcessManager
+                  projects={projects}
+                  activeProjectId={activeProjectId}
+                  setActiveProjectId={setActiveProjectId}
+                  projectStates={projectStates}
+                  resourceHistory={resourceHistory}
+                  handleStartProject={handleStartProject}
+                  handleStopProject={handleStopProject}
+                  forceKillProcess={forceKillProcess}
+                />
+              )}
+              {rightBottomTab === "user" && (
+                <DiagnosticsPanel uptimeSeconds={uptimeSeconds} />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Bottom Navigation Bar */}
+      <footer className="global-footer-navbar">
+        <div className="navbar-nav-tabs">
+          <button
+            className={`nav-tab-btn ${!activeProjectId || activeProjectId === "__create_project__" ? "" : "active"}`}
+            onClick={() => {
+              // Switch to first project if any
+              if (filteredProjects.length > 0) {
+                setActiveProjectId(filteredProjects[0].id);
+              }
+            }}
+          >
+            <Layers size={13} />
+            <span>Tab</span>
+          </button>
+
+          <button
+            className={`nav-tab-btn`}
+            onClick={() => {
+              // Open terminal: scroll to bottom and set active
+              setAutoScroll(true);
+              if (terminalRef.current) {
+                terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+              }
+            }}
+          >
+            <TerminalIcon size={13} />
+            <span>Terminal</span>
+          </button>
+
+          <button
+            className={`nav-tab-btn ${rightBottomTab === "manager" ? "active" : ""}`}
+            onClick={() => setRightBottomTab("manager")}
+          >
+            <Activity size={13} />
+            <span>Manager</span>
+          </button>
+
+          <button
+            className={`nav-tab-btn ${rightBottomTab === "user" ? "active" : ""}`}
+            onClick={() => setRightBottomTab("user")}
+          >
+            <User size={13} />
+            <span>User</span>
+          </button>
+        </div>
+      </footer>
 
       {/* Port Conflict Resolver Modal */}
       {portConflict && (
         <div className="modal-overlay" style={{ zIndex: 110 }}>
           <div className="modal-content" style={{ borderColor: "var(--color-danger)" }}>
             <header className="modal-header" style={{ borderBottomColor: "rgba(239, 68, 68, 0.2)" }}>
-              <h3 className="modal-title" style={{ color: "var(--color-danger)", display: "flex", alignItems: "center", gap: "8px" }}>
+              <h3
+                className="modal-title"
+                style={{
+                  color: "var(--color-danger)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
                 <span>⚠️ Port Conflict Detected</span>
               </h3>
               <button
@@ -923,28 +803,38 @@ export default function App() {
 
             <div className="modal-body">
               <p style={{ lineHeight: "1.6", color: "var(--text-primary)" }}>
-                The configured port <strong style={{ color: "var(--color-accent)", fontSize: "15px" }}>{portConflict.port}</strong> is currently being occupied by another process on your system:
+                The configured port{" "}
+                <strong style={{ color: "var(--color-accent)", fontSize: "15px" }}>
+                  {portConflict.port}
+                </strong>{" "}
+                is currently being occupied by another process on your system:
               </p>
-              <div style={{
-                backgroundColor: "rgba(239, 68, 68, 0.05)",
-                border: "1px solid rgba(239, 68, 68, 0.2)",
-                borderRadius: "var(--radius-md)",
-                padding: "12px 16px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginTop: "4px"
-              }}>
+              <div
+                style={{
+                  backgroundColor: "rgba(239, 68, 68, 0.05)",
+                  border: "1px solid rgba(239, 68, 68, 0.2)",
+                  padding: "12px 16px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginTop: "4px"
+                }}
+              >
                 <div>
-                  <span style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block" }}>Process Identifier</span>
-                  <strong style={{ fontFamily: "var(--font-mono)", fontSize: "16px" }}>PID {portConflict.pid}</strong>
+                  <span style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block" }}>
+                    Process Identifier
+                  </span>
+                  <strong style={{ fontFamily: "var(--font-mono)", fontSize: "16px" }}>
+                    PID {portConflict.pid}
+                  </strong>
                 </div>
                 <div style={{ fontSize: "12px", color: "var(--color-danger)", fontWeight: 600 }}>
                   SOCKET BLOCKED
                 </div>
               </div>
               <p style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
-                Would you like to forcefully terminate the occupying PID {portConflict.pid} to reclaim the port and launch this tab process?
+                Would you like to forcefully terminate the occupying PID {portConflict.pid} to reclaim the
+                port and launch this tab process?
               </p>
             </div>
 
@@ -962,5 +852,3 @@ export default function App() {
     </div>
   );
 }
-
-// Trigger hot reload to clear any cached transform errors in the active dev server.
