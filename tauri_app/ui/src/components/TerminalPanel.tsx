@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Terminal as TerminalIcon, Search, Trash2, Cpu, Hammer, CheckCircle2, XCircle } from "lucide-react";
+import { Terminal as TerminalIcon, Search, Trash2, Cpu, Hammer, CheckCircle2, XCircle, Plus } from "lucide-react";
 
 interface Project {
   id: string;
@@ -33,6 +33,7 @@ interface TerminalPanelProps {
   projects: Project[];
   projectStates: { [id: string]: ProcessState };
   setActiveProjectId: (id: string) => void;
+  handleResetSetupForm: () => void;
 }
 
 export default function TerminalPanel({
@@ -48,7 +49,8 @@ export default function TerminalPanel({
   handleTerminalScroll,
   projects,
   projectStates,
-  setActiveProjectId
+  setActiveProjectId,
+  handleResetSetupForm
 }: TerminalPanelProps) {
   // Mock build statistics that represent a high-end compiler/process builder
   const [buildStats] = useState({
@@ -134,10 +136,22 @@ export default function TerminalPanel({
         <aside className="terminal-split-sidebar">
           {/* Section 1: Active Terminal Switcher */}
           <div className="terminal-split-sidebar-1">
-            <h4 className="split-sidebar-title">
-              <TerminalIcon size={11} />
-              <span>Active Terminals (1)</span>
-            </h4>
+            <div className="split-sidebar-action-header">
+              <button 
+                className="terminal-action-btn" 
+                onClick={handleResetSetupForm}
+                title="Add new terminal"
+              >
+                <Plus size={13} />
+              </button>
+              <button 
+                className="terminal-action-btn trash" 
+                onClick={() => clearLogs(activeProjectId)}
+                title="Clear active terminal logs"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
             <div className="active-terminals-list">
               {projects.map((p) => {
                 const state = projectStates[p.id] || { type: "Stopped" };

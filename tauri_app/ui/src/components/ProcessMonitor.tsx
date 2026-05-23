@@ -42,10 +42,6 @@ export default function ProcessMonitor({
           <div className="active-process-meta">
             <div className="name-and-status">
               <h3>{activeProject.name}</h3>
-              <div className={`status-badge status-${activeState.type.toLowerCase()}`}>
-                <span className="status-dot"></span>
-                <span>{activeState.type}</span>
-              </div>
             </div>
             <p className="process-command-text">
               $ {activeProject.command} {activeProject.args.join(" ")}

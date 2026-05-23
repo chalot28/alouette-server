@@ -604,11 +604,11 @@ body {
 }
 
 .chart-header strong.value-cpu {
-  color: var(--color-accent);
+  color: #ffffff;
 }
 
 .chart-header strong.value-ram {
-  color: var(--color-success);
+  color: #ffffff;
 }
 
 .mini-canvas-wrapper {
@@ -1696,11 +1696,11 @@ body {
 }
 
 .build-stat-value.success {
-  color: var(--color-success);
+  color: #ffffff;
 }
 
 .build-stat-value.fail {
-  color: var(--color-danger);
+  color: #ffffff;
 }
 
 .build-stat-value.total {
@@ -1720,4 +1720,65 @@ body {
   height: 100%;
   background-color: var(--color-success);
   width: 75%; /* Mock 75% success rate visual progress */
+}
+
+/* SLEEK INTERACTIVE RESIZER HANDLES */
+.resizer-v {
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  z-index: 100;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition: background-color var(--transition-fast);
+}
+
+.resizer-v:hover, .resizer-v.dragging {
+  background-color: var(--color-accent);
+}
+
+.resizer-h {
+  height: 4px;
+  cursor: row-resize;
+  background-color: transparent;
+  z-index: 100;
+  width: 100%;
+  transition: background-color var(--transition-fast);
+}
+
+.resizer-h:hover, .resizer-h.dragging {
+  background-color: var(--color-accent);
+}
+
+/* TERMINAL SIDEBAR ACTION HEADER & BUTTONS */
+.split-sidebar-action-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+  height: 18px;
+}
+
+.terminal-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  transition: all var(--transition-fast);
+}
+
+.terminal-action-btn:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+}
+
+.terminal-action-btn.trash:hover {
+  color: var(--color-danger);
 }

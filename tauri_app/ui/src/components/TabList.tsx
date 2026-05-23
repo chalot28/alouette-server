@@ -12,22 +12,13 @@ interface ProcessState {
   data?: any;
 }
 
-interface ResourceHistory {
-  [projectId: string]: {
-    cpu: number[];
-    ram: number[];
-  };
-}
 
 interface TabListProps {
   filteredProjects: Project[];
   activeProjectId: string;
   setActiveProjectId: (id: string) => void;
   projectStates: { [id: string]: ProcessState };
-  resourceHistory: ResourceHistory;
   setAutoScroll: (b: boolean) => void;
-  handleStopProject: (id: string) => void;
-  handleStartProject: (id: string) => void;
   handleDeleteProject: (id: string) => void;
 }
 
@@ -36,10 +27,7 @@ export default function TabList({
   activeProjectId,
   setActiveProjectId,
   projectStates,
-  resourceHistory,
   setAutoScroll,
-  handleStopProject,
-  handleStartProject,
   handleDeleteProject
 }: TabListProps) {
   return (

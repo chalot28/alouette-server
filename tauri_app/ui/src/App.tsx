@@ -93,6 +93,116 @@ export default function App() {
   const cpuCanvasRef = useRef<HTMLCanvasElement>(null);
   const ramCanvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Resizable Panel States
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(220);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(320);
+  const [tabListHeight, setTabListHeight] = useState(250);
+  const [monitorHeight, setMonitorHeight] = useState(250);
+  const [configHeight, setConfigHeight] = useState(300);
+
+  // Refs for dragging math
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const monitorRef = useRef<HTMLDivElement>(null);
+  const configRef = useRef<HTMLDivElement>(null);
+
+  // Drag state trackers for class highlights
+  const [isDraggingLeft, setIsDraggingLeft] = useState(false);
+  const [isDraggingRight, setIsDraggingRight] = useState(false);
+  const [isDraggingTabList, setIsDraggingTabList] = useState(false);
+  const [isDraggingMonitor, setIsDraggingMonitor] = useState(false);
+  const [isDraggingConfig, setIsDraggingConfig] = useState(false);
+
+  // 1. Left Sidebar Width Resize Handler
+  const handleLeftResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingLeft(true);
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = Math.max(160, Math.min(450, moveEvent.clientX));
+      setLeftSidebarWidth(newWidth);
+    };
+    const handleMouseUp = () => {
+      setIsDraggingLeft(false);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  // 2. Right Sidebar Width Resize Handler
+  const handleRightResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingRight(true);
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = Math.max(200, Math.min(500, window.innerWidth - moveEvent.clientX));
+      setRightSidebarWidth(newWidth);
+    };
+    const handleMouseUp = () => {
+      setIsDraggingRight(false);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  // 3. Tab List Horizontal Height Resize Handler
+  const handleTabListResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!tabListRef.current) return;
+    setIsDraggingTabList(true);
+    const tabListRect = tabListRef.current.getBoundingClientRect();
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newHeight = Math.max(80, Math.min(400, moveEvent.clientY - tabListRect.top));
+      setTabListHeight(newHeight);
+    };
+    const handleMouseUp = () => {
+      setIsDraggingTabList(false);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  // 4. Resource Monitor Horizontal Height Resize Handler
+  const handleMonitorResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!monitorRef.current) return;
+    setIsDraggingMonitor(true);
+    const monitorRect = monitorRef.current.getBoundingClientRect();
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newHeight = Math.max(100, Math.min(500, moveEvent.clientY - monitorRect.top));
+      setMonitorHeight(newHeight);
+    };
+    const handleMouseUp = () => {
+      setIsDraggingMonitor(false);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  // 5. Config Setup Horizontal Height Resize Handler
+  const handleConfigResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!configRef.current) return;
+    setIsDraggingConfig(true);
+    const configRect = configRef.current.getBoundingClientRect();
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newHeight = Math.max(120, Math.min(450, moveEvent.clientY - configRect.top));
+      setConfigHeight(newHeight);
+    };
+    const handleMouseUp = () => {
+      setIsDraggingConfig(false);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
   // 1. Initial State Hydration & App Lifecycle Listeners
   useEffect(() => {
     // Set theme class on document element
@@ -389,12 +499,17 @@ export default function App() {
       await invoke("register_project", { config: newConfig });
       await loadProjects();
       alert("Configuration saved successfully!");
+      setActiveProjectId(newConfig.id);
     } catch (e: any) {
       alert(`Failed to save project: ${e}`);
     }
   };
 
   const handleDeleteProject = async (id: string) => {
+    if (id === "__create_project__") {
+      setActiveProjectId("");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this tab/project?")) return;
     try {
       await invoke("deregister_project", { projectId: id });
@@ -591,27 +706,56 @@ export default function App() {
       />
 
       {/* 2. Main Workspace — Full Dashboard Grid */}
-      <div className="workspace-grid">
+      <div 
+        className="workspace-grid"
+        style={{ 
+          gridTemplateColumns: `${leftSidebarWidth}px 1fr ${rightSidebarWidth}px`, 
+          position: "relative" 
+        }}
+      >
 
         {/* ── LEFT COLUMN: Zone 1 (Tab list) + Zone 3 (File Explorer) + Zone 6 (New project btn) ── */}
-        <div className="col-left">
+        <div className="col-left" style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
           {/* Zone 1: Tab List */}
-          <div className="zone zone-1" style={{ flex: '1 1 50%', borderBottom: '1px solid var(--border-primary)' }}>
+          <div 
+            ref={tabListRef} 
+            className="zone zone-1" 
+            style={{ 
+              flex: `0 0 ${tabListHeight}px`, 
+              borderBottom: '1px solid var(--border-primary)',
+              position: 'relative' 
+            }}
+          >
             <TabList
-              filteredProjects={filteredProjects}
+              filteredProjects={
+                activeProjectId === "__create_project__"
+                  ? [
+                      ...filteredProjects,
+                      {
+                        id: "__create_project__",
+                        name: "New Project",
+                        command: "",
+                        args: []
+                      }
+                    ]
+                  : filteredProjects
+              }
               activeProjectId={activeProjectId}
               setActiveProjectId={setActiveProjectId}
               projectStates={projectStates}
-              resourceHistory={resourceHistory}
               setAutoScroll={setAutoScroll}
-              handleStartProject={handleStartProject}
-              handleStopProject={handleStopProject}
               handleDeleteProject={handleDeleteProject}
+            />
+            {/* Horizontal splitter handle between TabList and FileExplorer */}
+            <div 
+              className={`resizer-h ${isDraggingTabList ? "dragging" : ""}`}
+              style={{ position: "absolute", bottom: "-2px", left: 0 }}
+              onMouseDown={handleTabListResizeStart}
             />
           </div>
 
           {/* Zone 3: Project File Explorer */}
-          <div className="zone zone-file-explorer" style={{ flex: '1 1 50%', overflow: 'hidden' }}>
+          <div className="zone zone-file-explorer" style={{ flex: 1, overflow: 'hidden' }}>
             <FileExplorer activeCwd={activeProject?.cwd} />
           </div>
 
@@ -625,72 +769,150 @@ export default function App() {
               <span>New Project</span>
             </button>
           </div>
+
+          {/* Vertical splitter handle for Left Sidebar */}
+          <div 
+            className={`resizer-v ${isDraggingLeft ? "dragging" : ""}`}
+            style={{ right: "-2px" }}
+            onMouseDown={handleLeftResizeStart}
+          />
         </div>
 
         {/* ── CENTER COLUMN: Zone 2 (Monitor) + Zone 4 (Terminal) ── */}
-        <div className="col-center">
-          {/* Zone 2: Resource Monitor */}
-          <div className="zone zone-2">
-            <ProcessMonitor
-              activeProject={activeProject}
-              activeState={activeState}
-              activeCpuVal={activeCpuVal}
-              activeRamVal={activeRamVal}
-              cpuCanvasRef={cpuCanvasRef}
-              ramCanvasRef={ramCanvasRef}
-              handleStart={handleStart}
-              handleStop={handleStop}
-            />
-          </div>
+        <div className="col-center" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+          {activeProjectId === "__create_project__" ? (
+            <div className="zone zone-center-config" style={{ flex: 1, padding: "24px", overflowY: "auto" }}>
+              <div style={{ maxWidth: "800px", margin: "0 auto" }}>
+                <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Plus size={18} style={{ color: "var(--color-accent)" }} />
+                  <span>Configure New Project Tab</span>
+                </h2>
+                <ConfigSetup
+                  newProjName={newProjName}
+                  setNewProjName={setNewProjName}
+                  newProjRestart={newProjRestart}
+                  setNewProjRestart={setNewProjRestart}
+                  newProjCmd={newProjCmd}
+                  setNewProjCmd={setNewProjCmd}
+                  newProjArgs={newProjArgs}
+                  setNewProjArgs={setNewProjArgs}
+                  newProjCwd={newProjCwd}
+                  setNewProjCwd={setNewProjCwd}
+                  newProjPort={newProjPort}
+                  setNewProjPort={setNewProjPort}
+                  newProjCpu={newProjCpu}
+                  setNewProjCpu={setNewProjCpu}
+                  newProjRam={newProjRam}
+                  setNewProjRam={setNewProjRam}
+                  handleResetSetupForm={handleResetSetupForm}
+                  handleAddProject={handleAddProject}
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Zone 2: Resource Monitor */}
+              <div 
+                ref={monitorRef} 
+                className="zone zone-2" 
+                style={{ 
+                  flex: `0 0 ${monitorHeight}px`,
+                  borderBottom: '1px solid var(--border-primary)',
+                  position: 'relative'
+                }}
+              >
+                <ProcessMonitor
+                  activeProject={activeProject}
+                  activeState={activeState}
+                  activeCpuVal={activeCpuVal}
+                  activeRamVal={activeRamVal}
+                  cpuCanvasRef={cpuCanvasRef}
+                  ramCanvasRef={ramCanvasRef}
+                  handleStart={handleStart}
+                  handleStop={handleStop}
+                />
+                {/* Horizontal splitter handle between ProcessMonitor and TerminalPanel */}
+                <div 
+                  className={`resizer-h ${isDraggingMonitor ? "dragging" : ""}`}
+                  style={{ position: "absolute", bottom: "-2px", left: 0 }}
+                  onMouseDown={handleMonitorResizeStart}
+                />
+              </div>
 
-          {/* Zone 4: Terminal */}
-          <div className="zone zone-4">
-            <TerminalPanel
-              activeProject={activeProject}
-              activeProjectId={activeProjectId}
-              filteredLogs={filteredLogs}
-              logFilter={logFilter}
-              setLogFilter={setLogFilter}
-              logSearchQuery={logSearchQuery}
-              setLogSearchQuery={setLogSearchQuery}
-              clearLogs={(id) => setProjectLogs((prev) => ({ ...prev, [id]: [] }))}
-              terminalRef={terminalRef}
-              handleTerminalScroll={handleTerminalScroll}
-              projects={projects}
-              projectStates={projectStates}
-              setActiveProjectId={setActiveProjectId}
-            />
-          </div>
+              {/* Zone 4: Terminal */}
+              <div className="zone zone-4" style={{ flex: 1 }}>
+                <TerminalPanel
+                  activeProject={activeProject}
+                  activeProjectId={activeProjectId}
+                  filteredLogs={filteredLogs}
+                  logFilter={logFilter}
+                  setLogFilter={setLogFilter}
+                  logSearchQuery={logSearchQuery}
+                  setLogSearchQuery={setLogSearchQuery}
+                  clearLogs={(id) => setProjectLogs((prev) => ({ ...prev, [id]: [] }))}
+                  terminalRef={terminalRef}
+                  handleTerminalScroll={handleTerminalScroll}
+                  projects={projects}
+                  projectStates={projectStates}
+                  setActiveProjectId={setActiveProjectId}
+                  handleResetSetupForm={handleResetSetupForm}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── RIGHT COLUMN: Zone 3 (Config) + Zone 5 (Process Manager) ── */}
-        <div className="col-right">
+        <div className="col-right" style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
+          {/* Vertical splitter handle for Right Sidebar */}
+          <div 
+            className={`resizer-v ${isDraggingRight ? "dragging" : ""}`}
+            style={{ left: "-2px" }}
+            onMouseDown={handleRightResizeStart}
+          />
+
           {/* Zone 3: Configuration & Watchdog Setup */}
-          <div className="zone zone-3">
-            <ConfigSetup
-              newProjName={newProjName}
-              setNewProjName={setNewProjName}
-              newProjRestart={newProjRestart}
-              setNewProjRestart={setNewProjRestart}
-              newProjCmd={newProjCmd}
-              setNewProjCmd={setNewProjCmd}
-              newProjArgs={newProjArgs}
-              setNewProjArgs={setNewProjArgs}
-              newProjCwd={newProjCwd}
-              setNewProjCwd={setNewProjCwd}
-              newProjPort={newProjPort}
-              setNewProjPort={setNewProjPort}
-              newProjCpu={newProjCpu}
-              setNewProjCpu={setNewProjCpu}
-              newProjRam={newProjRam}
-              setNewProjRam={setNewProjRam}
-              handleResetSetupForm={handleResetSetupForm}
-              handleAddProject={handleAddProject}
-            />
-          </div>
+          {activeProjectId && activeProjectId !== "__create_project__" && (
+            <div 
+              ref={configRef} 
+              className="zone zone-3"
+              style={{ 
+                flex: `0 0 ${configHeight}px`, 
+                borderBottom: '1px solid var(--border-primary)',
+                position: 'relative' 
+              }}
+            >
+              <ConfigSetup
+                newProjName={newProjName}
+                setNewProjName={setNewProjName}
+                newProjRestart={newProjRestart}
+                setNewProjRestart={setNewProjRestart}
+                newProjCmd={newProjCmd}
+                setNewProjCmd={setNewProjCmd}
+                newProjArgs={newProjArgs}
+                setNewProjArgs={setNewProjArgs}
+                newProjCwd={newProjCwd}
+                setNewProjCwd={setNewProjCwd}
+                newProjPort={newProjPort}
+                setNewProjPort={setNewProjPort}
+                newProjCpu={newProjCpu}
+                setNewProjCpu={setNewProjCpu}
+                newProjRam={newProjRam}
+                setNewProjRam={setNewProjRam}
+                handleResetSetupForm={handleResetSetupForm}
+                handleAddProject={handleAddProject}
+              />
+              {/* Horizontal splitter handle between ConfigSetup and Manager/Diagnostics */}
+              <div 
+                className={`resizer-h ${isDraggingConfig ? "dragging" : ""}`}
+                style={{ position: "absolute", bottom: "-2px", left: 0 }}
+                onMouseDown={handleConfigResizeStart}
+              />
+            </div>
+          )}
 
           {/* Zone 5: Running Processes / Diagnostics — with tab switcher */}
-          <div className="zone zone-5">
+          <div className="zone zone-5" style={{ flex: 1 }}>
             <div className="zone5-tab-bar">
               <button
                 className={`zone5-tab-btn ${rightBottomTab === "manager" ? "active" : ""}`}
@@ -775,6 +997,8 @@ export default function App() {
           </button>
         </div>
       </footer>
+
+
 
       {/* Port Conflict Resolver Modal */}
       {portConflict && (
