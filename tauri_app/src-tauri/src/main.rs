@@ -1,4 +1,4 @@
-// Prevents additional console window on Windows in release
+// Prevents additional console window on Windows in release (Trigger recompile: 2026-05-24 11:02)
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use core_engine::{ProcessManager, ProcessState, ProjectConfig, ResourceMonitor};

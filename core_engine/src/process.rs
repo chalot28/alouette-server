@@ -40,6 +40,8 @@ pub struct TerminalOutput {
 pub struct TerminalSession {
     pub stdin_sender: mpsc::Sender<String>,
     pub pid: u32,
+    pub workspace_root: PathBuf,
+    pub current_dir: std::sync::Mutex<PathBuf>,
 }
 
 pub struct ProjectInstance {
@@ -599,68 +601,12 @@ impl ProcessManager {
 
         spoofed_envs.push(("WORKSPACE_ROOT".to_string(), clean_workspace_root.clone()));
 
-        #[cfg(target_os = "windows")]
-        let cd_restrict_path = {
-            let app_data_dir = std::env::current_dir().unwrap_or_default().join("app_data");
-            let bin_dir = app_data_dir.join("bin");
-            let _ = std::fs::create_dir_all(&bin_dir);
-            let p = bin_dir.join("cd_restrict.bat");
-            let batch_content = r#"@echo off
-
-doskey cd="%~f0" $*
-doskey chdir="%~f0" $*
-
-if "%~1" == "" (
-    chdir
-    goto :eof
-)
-
-pushd "%~1" 2>nul
-if errorlevel 1 (
-    echo Path not found: %~1
-    goto :eof
-)
-set "RESOLVED_DIR=%CD%"
-popd
-
-set "CHECK_PATH=%RESOLVED_DIR%"
-set "ROOT_PATH=%WORKSPACE_ROOT%"
-
-if not "%ROOT_PATH:~-1%"=="\" set "ROOT_PATH=%ROOT_PATH%\"
-if not "%CHECK_PATH:~-1%"=="\" set "CHECK_PATH=%CHECK_PATH%\"
-
-call set "TEST_STR=%%CHECK_PATH:%ROOT_PATH%=%%"
-if "%TEST_STR%" == "%CHECK_PATH%" (
-    echo [Restricted Shell] Access denied: Cannot navigate outside the workspace root (%WORKSPACE_ROOT%)
-    goto :eof
-)
-
-chdir /d "%RESOLVED_DIR%"
-
-call set "REL_PATH=%%RESOLVED_DIR:%WORKSPACE_ROOT%=%%"
-if "%REL_PATH:~0,1%" == "\" set "REL_PATH=%REL_PATH:~1%"
-
-if "%REL_PATH%" == "" (
-    prompt $$ 
-) else (
-    prompt %REL_PATH%$$ 
-)
-"#;
-            let _ = std::fs::write(&p, batch_content);
-            p
-        };
-
         let shell_cmd = if cfg!(target_os = "windows") { "cmd.exe" } else { "sh" };
         let mut cmd = Command::new(shell_cmd);
         
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
-            cmd.raw_arg(format!(
-                "/K \"\"{}\" \"{}\"\"",
-                cd_restrict_path.to_string_lossy(),
-                clean_workspace_root
-            ));
+            cmd.arg("/K").arg("@prompt ~$$: ");
         }
 
         if let Some(dir) = cwd {
@@ -688,6 +634,13 @@ if "%REL_PATH%" == "" (
                 let _ = stdin.flush().await;
             }
         });
+
+        // Silently push initial premium aliases to the Windows command shell
+        #[cfg(target_os = "windows")]
+        {
+            let _ = stdin_sender.send("@doskey ls=dir $*\r\n".to_string()).await;
+            let _ = stdin_sender.send("@doskey clear=cls\r\n".to_string()).await;
+        }
 
         let terminal_sender = self.terminal_sender.clone();
         let session_id_str = session_id.to_string();
@@ -742,6 +695,8 @@ if "%REL_PATH%" == "" (
         self.terminal_sessions.insert(session_id_str, TerminalSession {
             stdin_sender,
             pid,
+            workspace_root: std::path::PathBuf::from(clean_workspace_root.clone()),
+            current_dir: std::sync::Mutex::new(std::path::PathBuf::from(clean_workspace_root)),
         });
 
         Ok(())
@@ -752,9 +707,112 @@ if "%REL_PATH%" == "" (
         if let Some(session) = self.terminal_sessions.get(session_id) {
             #[cfg(target_os = "windows")]
             {
-                if text.ends_with('\n') && !text.ends_with("\r\n") {
-                    text.pop();
-                    text.push_str("\r\n");
+                let trimmed = text.trim();
+                let is_cd = trimmed == "cd" || trimmed.starts_with("cd ") || trimmed == "chdir" || trimmed.starts_with("chdir ");
+                
+                if is_cd {
+                    let args = if trimmed.starts_with("cd ") {
+                        trimmed[3..].trim()
+                    } else if trimmed.starts_with("chdir ") {
+                        trimmed[6..].trim()
+                    } else {
+                        ""
+                    };
+
+                    if !args.is_empty() {
+                        let mut target_str = args;
+                        if target_str.starts_with('"') && target_str.ends_with('"') && target_str.len() >= 2 {
+                            target_str = &target_str[1..target_str.len()-1];
+                        }
+
+                        let mut target_clean = target_str.trim();
+                        if target_clean.to_lowercase().starts_with("/d ") {
+                            target_clean = target_clean[3..].trim();
+                        } else if target_clean.to_lowercase().starts_with("/d") {
+                            target_clean = target_clean[2..].trim();
+                        }
+
+                        let current_dir = session.current_dir.lock().unwrap().clone();
+                        let target_path = if Path::new(target_clean).is_absolute() {
+                            PathBuf::from(target_clean)
+                        } else {
+                            current_dir.join(target_clean)
+                        };
+
+                        let normalized = normalize_path(&target_path);
+
+                        if is_subpath(&normalized, &session.workspace_root) {
+                            // Authorized -> Update active CWD
+                            {
+                                let mut curr = session.current_dir.lock().unwrap();
+                                *curr = normalized.clone();
+                            }
+
+                            let rel_path = get_relative_path(&normalized, &session.workspace_root);
+                            let display_prompt = if rel_path.is_empty() {
+                                "~".to_string()
+                            } else if rel_path.contains('/') {
+                                format!("~/{}", rel_path)
+                            } else {
+                                format!("~{}", rel_path)
+                            };
+
+                            // Echo the original command to stdout so user sees it in their viewport
+                            let echo_text = format!("{}\r\n", trimmed);
+                            let _ = self.terminal_sender.send(TerminalOutput {
+                                session_id: session_id.to_string(),
+                                text: echo_text,
+                            });
+
+                            // Execute silent cd and prompt update
+                            text = format!("@cd /d \"{}\" && @prompt {}$$: \r\n", normalized.to_string_lossy(), display_prompt);
+                        } else {
+                            // Unauthorized -> Block, report, restore prompt
+                            let echo_text = format!("{}\r\n", trimmed);
+                            let _ = self.terminal_sender.send(TerminalOutput {
+                                session_id: session_id.to_string(),
+                                text: echo_text,
+                            });
+
+                            let warning_text = format!(
+                                "[Restricted Shell] Access denied: Cannot navigate outside the workspace root ({})\r\n",
+                                session.workspace_root.to_string_lossy()
+                            );
+                            let _ = self.terminal_sender.send(TerminalOutput {
+                                session_id: session_id.to_string(),
+                                text: warning_text,
+                            });
+
+                            let current_curr = session.current_dir.lock().unwrap().clone();
+                            let rel_path = get_relative_path(&current_curr, &session.workspace_root);
+                            let display_prompt = if rel_path.is_empty() {
+                                "~".to_string()
+                            } else if rel_path.contains('/') {
+                                format!("~/{}", rel_path)
+                            } else {
+                                format!("~{}", rel_path)
+                            };
+
+                            let restore_prompt_text = format!("{}$: ", display_prompt);
+                            let _ = self.terminal_sender.send(TerminalOutput {
+                                session_id: session_id.to_string(),
+                                text: restore_prompt_text,
+                            });
+
+                            return Ok(());
+                        }
+                    } else {
+                        // Empty cd print dir
+                        if text.ends_with('\n') && !text.ends_with("\r\n") {
+                            text.pop();
+                            text.push_str("\r\n");
+                        }
+                    }
+                } else {
+                    if text.ends_with('\n') && !text.ends_with("\r\n") {
+                        text.pop();
+                        text.push_str("\r\n");
+                    }
                 }
             }
             session.stdin_sender.send(text).await
@@ -771,6 +829,62 @@ if "%REL_PATH%" == "" (
             terminate_process_tree(session.pid).await;
         }
         Ok(())
+    }
+}
+
+// ----------------- Shell Navigation Security Helpers -----------------
+fn normalize_path(path: &Path) -> PathBuf {
+    let components = path.components();
+    let mut ret = PathBuf::new();
+    for component in components {
+        match component {
+            std::path::Component::Prefix(..) => {
+                ret.push(component.as_os_str());
+            }
+            std::path::Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                ret.pop();
+            }
+            std::path::Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
+}
+
+fn is_subpath(target: &Path, root: &Path) -> bool {
+    let target_norm = normalize_path(target);
+    let root_norm = normalize_path(root);
+    
+    let target_str = target_norm.to_string_lossy().to_lowercase();
+    let root_str = root_norm.to_string_lossy().to_lowercase();
+    
+    let root_str_with_slash = if root_str.ends_with(std::path::MAIN_SEPARATOR) || root_str.ends_with('/') {
+        root_str.clone()
+    } else {
+        format!("{}{}", root_str, std::path::MAIN_SEPARATOR)
+    };
+    
+    target_str.starts_with(&root_str_with_slash) || target_str == root_str
+}
+
+fn get_relative_path(target: &Path, root: &Path) -> String {
+    let target_norm = normalize_path(target);
+    let root_norm = normalize_path(root);
+    
+    if let Ok(rel) = target_norm.strip_prefix(&root_norm) {
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        if rel_str.starts_with('/') {
+            rel_str[1..].to_string()
+        } else {
+            rel_str
+        }
+    } else {
+        String::new()
     }
 }
 
