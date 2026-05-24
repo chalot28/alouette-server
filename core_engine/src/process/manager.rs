@@ -95,7 +95,11 @@ impl ProcessManager {
                         if let Err(e) = db.insert_log(&log.project_id, &log.stream, &log.text, log.timestamp) {
                             eprintln!("SQLite log insert error: {}", e);
                         }
-                        if let Err(e) = db.prune_logs(&log.project_id, 5000) {
+                        let limit = match db.get_project_max_log_lines(&log.project_id) {
+                            Ok(Some(limit)) if limit > 0 => limit as usize,
+                            _ => 5000,
+                        };
+                        if let Err(e) = db.prune_logs(&log.project_id, limit) {
                             eprintln!("SQLite log pruning error: {}", e);
                         }
                     }).await;
@@ -212,7 +216,11 @@ impl ProcessManager {
                     if let Err(e) = db.insert_log(&log.project_id, &log.stream, &log.text, log.timestamp) {
                         eprintln!("SQLite log insert error: {}", e);
                     }
-                    if let Err(e) = db.prune_logs(&log.project_id, 5000) {
+                    let limit = match db.get_project_max_log_lines(&log.project_id) {
+                        Ok(Some(limit)) if limit > 0 => limit as usize,
+                        _ => 5000,
+                    };
+                    if let Err(e) = db.prune_logs(&log.project_id, limit) {
                         eprintln!("SQLite log pruning error: {}", e);
                     }
                 }).await;
@@ -258,6 +266,7 @@ mod tests {
             toolchain: None,
             toolchain_version: None,
             enable_tunnel: None,
+            max_log_lines: None,
         };
 
         pm.register_project(config.clone()).await.unwrap();

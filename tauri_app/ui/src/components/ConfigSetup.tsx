@@ -27,6 +27,8 @@ interface ConfigSetupProps {
   setNewProjToolchainVersion: (v: string) => void;
   newProjEnableTunnel: boolean;
   setNewProjEnableTunnel: (v: boolean) => void;
+  newProjMaxLogLines: string;
+  setNewProjMaxLogLines: (v: string) => void;
   handleResetSetupForm: () => void;
   handleAddProject: () => void;
 }
@@ -58,6 +60,8 @@ export default function ConfigSetup({
   setNewProjToolchainVersion,
   newProjEnableTunnel,
   setNewProjEnableTunnel,
+  newProjMaxLogLines,
+  setNewProjMaxLogLines,
   handleResetSetupForm,
   handleAddProject
 }: ConfigSetupProps) {
@@ -225,6 +229,16 @@ export default function ConfigSetup({
               placeholder="No limit"
               value={newProjRam}
               onChange={(e) => setNewProjRam(e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Max Log Lines</label>
+            <input
+              type="number"
+              className="form-input-sm"
+              placeholder="Default 5000"
+              value={newProjMaxLogLines}
+              onChange={(e) => setNewProjMaxLogLines(e.target.value)}
             />
           </div>
         </div>

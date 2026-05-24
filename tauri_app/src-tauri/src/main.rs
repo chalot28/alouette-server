@@ -36,6 +36,7 @@ fn main() {
         toolchain: None,
         toolchain_version: None,
         enable_tunnel: None,
+        max_log_lines: None,
     }));
 
     let process_manager = Arc::new(Mutex::new(pm));

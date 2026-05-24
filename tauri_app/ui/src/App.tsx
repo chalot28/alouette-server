@@ -8,6 +8,10 @@ import {
   X,
   FileCode,
   MoreHorizontal,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  HelpCircle
 } from "lucide-react";
 
 // Components
@@ -37,6 +41,30 @@ import { useTerminal } from "./hooks/useTerminal";
 export default function App() {
   // Theme State
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  // Custom Toast & Confirm states
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    message: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+  } | null>(null);
+
+  const triggerToast = (message: string, type: "success" | "error" | "info" = "info") => {
+    setToast({ message, type });
+  };
+
+  const triggerConfirm = (message: string, onConfirm: () => void, onCancel?: () => void) => {
+    setConfirmModal({ message, onConfirm, onCancel });
+  };
+
+  // Auto dismiss toast
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Dynamic UI States
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,6 +134,8 @@ export default function App() {
     setProjectTerminals: (action) => setProjectTerminalsRef.current(action),
     setActiveTerminalIds: (action) => setActiveTerminalIdsRef.current(action),
     setTermOutputs: (action) => setTermOutputsRef.current(action),
+    triggerToast,
+    triggerConfirm,
   });
 
   const {
@@ -162,6 +192,8 @@ export default function App() {
     setNewProjToolchainVersion,
     newProjEnableTunnel,
     setNewProjEnableTunnel,
+    newProjMaxLogLines,
+    setNewProjMaxLogLines,
     portConflict,
     setPortConflict,
     handleStart,
@@ -408,6 +440,8 @@ export default function App() {
         activeState={activeState}
         handleStart={handleStart}
         handleStop={handleStop}
+        triggerConfirm={triggerConfirm}
+        triggerToast={triggerToast}
       />
 
       {/* 2. Main Workspace — Full Dashboard Grid */}
@@ -543,6 +577,8 @@ export default function App() {
                   setNewProjToolchainVersion={setNewProjToolchainVersion}
                   newProjEnableTunnel={newProjEnableTunnel}
                   setNewProjEnableTunnel={setNewProjEnableTunnel}
+                  newProjMaxLogLines={newProjMaxLogLines}
+                  setNewProjMaxLogLines={setNewProjMaxLogLines}
                   handleResetSetupForm={handleResetSetupForm}
                   handleAddProject={handleAddProject}
                 />
@@ -618,7 +654,7 @@ export default function App() {
                   </div>
                 )}
                 {isSqliteFile && openFilePath ? (
-                  <SqliteEditor filePath={openFilePath} />
+                  <SqliteEditor filePath={openFilePath} triggerConfirm={triggerConfirm} triggerToast={triggerToast} />
                 ) : (
                   <CodeEditor
                     theme={theme}
@@ -661,6 +697,7 @@ export default function App() {
                   activeProject={activeProject}
                   activeProjectId={activeProjectId}
                   filteredLogs={filteredLogs}
+                  triggerToast={triggerToast}
                   logFilter={logFilter}
                   setLogFilter={setLogFilter}
                   logSearchQuery={logSearchQuery}
@@ -754,6 +791,8 @@ export default function App() {
                 setNewProjToolchainVersion={setNewProjToolchainVersion}
                 newProjEnableTunnel={newProjEnableTunnel}
                 setNewProjEnableTunnel={setNewProjEnableTunnel}
+                newProjMaxLogLines={newProjMaxLogLines}
+                setNewProjMaxLogLines={setNewProjMaxLogLines}
                 handleResetSetupForm={handleResetSetupForm}
                 handleAddProject={handleAddProject}
               />
@@ -794,6 +833,8 @@ export default function App() {
                   handleStartProject={handleStartProject}
                   handleStopProject={handleStopProject}
                   forceKillProcess={forceKillProcess}
+                  triggerConfirm={triggerConfirm}
+                  triggerToast={triggerToast}
                 />
               )}
               {rightBottomTab === "user" && (
@@ -957,6 +998,52 @@ export default function App() {
                 onClick={handleForceKillAndStart}
               >
                 Force Kill & Start
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+      {/* Custom Toast Notification System */}
+      {toast && (
+        <div className="app-toast-container">
+          <div className={`app-toast ${toast.type}`}>
+            <span className={`app-toast-icon ${toast.type}`}>
+              {toast.type === "success" && <CheckCircle2 size={16} />}
+              {toast.type === "error" && <AlertTriangle size={16} />}
+              {toast.type === "info" && <Info size={16} />}
+            </span>
+            <div className="app-toast-message">{toast.message}</div>
+            <button className="app-toast-close" onClick={() => setToast(null)}>
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirm Modal Dialog */}
+      {confirmModal && (
+        <div className="app-confirm-overlay" onClick={() => {
+          if (confirmModal.onCancel) confirmModal.onCancel();
+          setConfirmModal(null);
+        }}>
+          <div className="app-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <header className="app-confirm-header">
+              <HelpCircle size={18} style={{ color: "var(--color-warning)" }} />
+              <span className="app-confirm-title">Confirm Action</span>
+            </header>
+            <div className="app-confirm-body">{confirmModal.message}</div>
+            <footer className="app-confirm-actions">
+              <button className="btn-confirm-cancel" onClick={() => {
+                if (confirmModal.onCancel) confirmModal.onCancel();
+                setConfirmModal(null);
+              }}>
+                Cancel
+              </button>
+              <button className="btn-confirm-accept" onClick={() => {
+                confirmModal.onConfirm();
+                setConfirmModal(null);
+              }}>
+                Confirm
               </button>
             </footer>
           </div>

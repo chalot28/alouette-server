@@ -28,6 +28,8 @@ interface ProcessManagerProps {
   handleStartProject: (id: string) => void;
   handleStopProject: (id: string) => void;
   forceKillProcess: (pid: number) => Promise<void>;
+  triggerConfirm: (message: string, onConfirm: () => void) => void;
+  triggerToast: (message: string, type: "success" | "error" | "info") => void;
 }
 
 export default function ProcessManager({
@@ -38,7 +40,9 @@ export default function ProcessManager({
   resourceHistory,
   handleStartProject,
   handleStopProject,
-  forceKillProcess
+  forceKillProcess,
+  triggerConfirm,
+  triggerToast
 }: ProcessManagerProps) {
   return (
     <div className="lower-panel-manager" style={{ padding: '8px', gap: '6px' }}>
@@ -78,7 +82,11 @@ export default function ProcessManager({
                       {state.type}
                     </span>
                   </td>
-                  <td className="mono">{state.type === "Running" ? state.data : "-"}</td>
+                  <td className="mono">
+                    {state.type === "Running"
+                      ? (typeof state.data === "object" ? state.data?.pid : state.data)
+                      : "-"}
+                  </td>
                   <td className="cwd-cell">{p.cwd || "System Root"}</td>
                   <td className="mono font-bold">
                     {state.type === "Running" ? `${cpu.toFixed(1)}%` : "0.0%"}
@@ -112,10 +120,16 @@ export default function ProcessManager({
                       {state.type === "Running" && state.data && (
                         <button
                           className="btn btn-secondary btn-xs"
-                          onClick={async () => {
-                            if (confirm(`Force kill PID ${state.data}?`)) {
-                              await forceKillProcess(state.data);
-                            }
+                          onClick={() => {
+                            const pid = typeof state.data === "object" ? state.data?.pid : state.data;
+                            triggerConfirm(`Are you sure you want to force kill PID ${pid}?`, async () => {
+                              try {
+                                await forceKillProcess(pid);
+                                triggerToast(`Process ${pid} force killed.`, "success");
+                              } catch (e: any) {
+                                triggerToast(`Failed to kill process: ${e}`, "error");
+                              }
+                            });
                           }}
                         >
                           Force Kill

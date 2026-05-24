@@ -193,6 +193,45 @@ impl ProtoManager {
             bin_dir,
         ];
 
+        // Automatically scan tools directory and add their bin folders to isolated PATH
+        let tools_dir = self.proto_home.join("tools");
+        if let Ok(entries) = std::fs::read_dir(&tools_dir) {
+            for entry in entries.flatten() {
+                let tool_path = entry.path();
+                if tool_path.is_dir() {
+                    let tool_name = tool_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    if let Ok(ver_entries) = std::fs::read_dir(&tool_path) {
+                        for ver_entry in ver_entries.flatten() {
+                            let ver_path = ver_entry.path();
+                            if ver_path.is_dir() {
+                                match tool_name.as_str() {
+                                    "node" => {
+                                        #[cfg(target_os = "windows")]
+                                        paths.push(ver_path.clone());
+                                        #[cfg(not(target_os = "windows"))]
+                                        paths.push(ver_path.join("bin"));
+                                    }
+                                    "go" => {
+                                        paths.push(ver_path.join("bin"));
+                                    }
+                                    "python" => {
+                                        #[cfg(target_os = "windows")]
+                                        {
+                                            paths.push(ver_path.clone());
+                                            paths.push(ver_path.join("Scripts"));
+                                        }
+                                        #[cfg(not(target_os = "windows"))]
+                                        paths.push(ver_path.join("bin"));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Also add system critical paths so things like basic commands (ls, mkdir, cmd) still work
         if let Ok(system_path) = env::var("PATH") {
             for p in std::env::split_paths(&system_path) {

@@ -1,7 +1,7 @@
 use chrono::Utc;
 use tokio::sync::oneshot;
 
-use super::models::ProcessState;
+use super::models::{ProcessState, ProcessLog};
 use super::manager::ProcessManager;
 use super::logging::{append_log_line, pipe_stream};
 use super::tree::{StateUpdater, terminate_process_tree};
@@ -68,12 +68,25 @@ impl ProcessManager {
             let log_file = log_dir.join(format!("{}.log", config.name));
             let mut stop_rx = stop_receiver;
 
+            macro_rules! log_system {
+                ($msg:expr) => {
+                    let text = $msg.to_string();
+                    let _ = append_log_line(&log_file, &text, max_log_size).await;
+                    let _ = log_sender.send(ProcessLog {
+                        project_id: project_id_str.clone(),
+                        stream: "system".to_string(),
+                        text,
+                        timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                    });
+                };
+            }
+
             state_updater.update(ProcessState::Setup);
 
             // Install toolchain if requested using private proto binary
             if let Some(ref tool) = toolchain {
                 if !tool.is_empty() {
-                    let _ = append_log_line(&log_file, &format!("--- Installing Toolchain {}@{} ---", tool, toolchain_version), max_log_size).await;
+                    log_system!(format!("--- Installing Toolchain {}@{} ---", tool, toolchain_version));
                     let app_data_dir = std::env::current_dir().unwrap_or_default().join("app_data");
                     let proto_bin = app_data_dir.join("bin").join(if cfg!(target_os = "windows") { "proto.exe" } else { "proto" });
 
@@ -85,12 +98,12 @@ impl ProcessManager {
                     if let Ok(st) = status {
                         if !st.success() {
                             let reason = format!("Failed to install toolchain {}@{}", tool, toolchain_version);
-                            let _ = append_log_line(&log_file, &format!("--- ERROR: {} ---", reason), max_log_size).await;
+                            log_system!(format!("--- ERROR: {} ---", reason));
                             state_updater.update(ProcessState::Fatal { reason });
                             return;
                         }
                     } else {
-                         let _ = append_log_line(&log_file, "--- WARNING: Private proto executable not found. Proceeding without strict toolchain installation. ---", max_log_size).await;
+                         log_system!("--- WARNING: Private proto executable not found. Proceeding without strict toolchain installation. ---");
                     }
                 }
             }
@@ -98,8 +111,20 @@ impl ProcessManager {
             // Run Setup Command if defined
             if let Some(ref setup_cmd) = config.setup_command {
                 let setup_args = config.setup_args.clone().unwrap_or_default();
-                let mut cmd = tokio::process::Command::new(setup_cmd);
-                cmd.args(&setup_args);
+                
+                #[cfg(target_os = "windows")]
+                let mut cmd = {
+                    let mut c = tokio::process::Command::new("cmd.exe");
+                    c.arg("/C").arg(setup_cmd).args(&setup_args);
+                    c
+                };
+                #[cfg(not(target_os = "windows"))]
+                let mut cmd = {
+                    let mut c = tokio::process::Command::new(setup_cmd);
+                    c.args(&setup_args);
+                    c
+                };
+
                 if let Some(ref dir) = config.cwd {
                     cmd.current_dir(dir);
                 }
@@ -110,21 +135,21 @@ impl ProcessManager {
                     cmd.envs(envs);
                 }
 
-                let _ = append_log_line(&log_file, "--- Spawning Setup Script ---", max_log_size).await;
+                log_system!("--- Spawning Setup Script ---");
 
                 match cmd.status().await {
                     Ok(status) if status.success() => {
-                        let _ = append_log_line(&log_file, "--- Setup Script Completed Successfully ---", max_log_size).await;
+                        log_system!("--- Setup Script Completed Successfully ---");
                     }
                     Ok(status) => {
                         let reason = format!("Setup failed with exit code: {:?}", status.code());
-                        let _ = append_log_line(&log_file, &format!("--- ERROR: {} ---", reason), max_log_size).await;
+                        log_system!(format!("--- ERROR: {} ---", reason));
                         state_updater.update(ProcessState::Fatal { reason });
                         return;
                     }
                     Err(e) => {
                         let reason = format!("Failed to spawn setup command: {}", e);
-                        let _ = append_log_line(&log_file, &format!("--- ERROR: {} ---", reason), max_log_size).await;
+                        log_system!(format!("--- ERROR: {} ---", reason));
                         state_updater.update(ProcessState::Fatal { reason });
                         return;
                     }
@@ -138,13 +163,24 @@ impl ProcessManager {
             loop {
                 // Check if user has stopped the process in the meantime
                 if stop_rx.try_recv().is_ok() {
-                    let _ = append_log_line(&log_file, "--- Process Cancelled by User ---", max_log_size).await;
+                    log_system!("--- Process Cancelled by User ---");
                     state_updater.update(ProcessState::Stopped);
                     return;
                 }
 
-                let mut cmd = tokio::process::Command::new(&config.command);
-                cmd.args(&config.args);
+                #[cfg(target_os = "windows")]
+                let mut cmd = {
+                    let mut c = tokio::process::Command::new("cmd.exe");
+                    c.arg("/C").arg(&config.command).args(&config.args);
+                    c
+                };
+                #[cfg(not(target_os = "windows"))]
+                let mut cmd = {
+                    let mut c = tokio::process::Command::new(&config.command);
+                    c.args(&config.args);
+                    c
+                };
+
                 if let Some(ref dir) = config.cwd {
                     cmd.current_dir(dir);
                 }
@@ -157,7 +193,7 @@ impl ProcessManager {
                 cmd.stdout(std::process::Stdio::piped());
                 cmd.stderr(std::process::Stdio::piped());
 
-                let _ = append_log_line(&log_file, "--- Spawning Primary Command ---", max_log_size).await;
+                log_system!("--- Spawning Primary Command ---");
                 let last_start_time = Utc::now();
 
                 match cmd.spawn() {
@@ -206,7 +242,7 @@ impl ProcessManager {
                                 }
 
                                 let log_msg = format!("--- Primary Command Exited with Code: {:?} ---", exit_code);
-                                let _ = append_log_line(&log_file, &log_msg, max_log_size).await;
+                                log_system!(log_msg);
 
                                 if exit_code == Some(0) {
                                     state_updater.update(ProcessState::Stopped);
@@ -217,7 +253,7 @@ impl ProcessManager {
                                         retry_count += 1;
                                         let backoff = 1u64 << retry_count; // 2s, 4s, 8s, 16s, 32s
                                         let backoff_msg = format!("--- Process crashed. Retrying in {} seconds (Attempt {}/{}) ---", backoff, retry_count, max_retries);
-                                        let _ = append_log_line(&log_file, &backoff_msg, max_log_size).await;
+                                        log_system!(backoff_msg);
 
                                         state_updater.update(ProcessState::Crashing {
                                             retry_count,
@@ -227,14 +263,14 @@ impl ProcessManager {
                                         tokio::select! {
                                             _ = tokio::time::sleep(tokio::time::Duration::from_secs(backoff)) => {}
                                             _ = &mut stop_rx => {
-                                                let _ = append_log_line(&log_file, "--- Process Terminated During Backoff ---", max_log_size).await;
+                                                log_system!("--- Process Terminated During Backoff ---");
                                                 state_updater.update(ProcessState::Stopped);
                                                 return;
                                             }
                                         }
                                     } else {
                                         let fail_msg = "--- Process exceeded maximum crash retries. Entering FATAL state. ---";
-                                        let _ = append_log_line(&log_file, fail_msg, max_log_size).await;
+                                        log_system!(fail_msg);
                                         state_updater.update(ProcessState::Fatal {
                                             reason: format!("Process exited with code {:?}", exit_code),
                                         });
@@ -244,12 +280,12 @@ impl ProcessManager {
                             }
                             _ = &mut stop_rx => {
                                 // Terminate active process tree recursively
-                                let _ = append_log_line(&log_file, "--- Stopping Process Tree... ---", max_log_size).await;
+                                log_system!("--- Stopping Process Tree... ---");
                                 terminate_process_tree(pid).await;
                                 let _ = child.kill().await;
                                 let _ = stdout_task.await;
                                 let _ = stderr_task.await;
-                                let _ = append_log_line(&log_file, "--- Process Tree Terminated Successfully ---", max_log_size).await;
+                                log_system!("--- Process Tree Terminated Successfully ---");
                                 state_updater.update(ProcessState::Stopped);
                                 return;
                             }
@@ -257,7 +293,7 @@ impl ProcessManager {
                     }
                     Err(e) => {
                         let reason = format!("Failed to spawn process: {}", e);
-                        let _ = append_log_line(&log_file, &format!("--- ERROR: {} ---", reason), max_log_size).await;
+                        log_system!(format!("--- ERROR: {} ---", reason));
                         state_updater.update(ProcessState::Fatal { reason });
                         return;
                     }
@@ -350,6 +386,7 @@ mod tests {
             toolchain: None,
             toolchain_version: None,
             enable_tunnel: None,
+            max_log_lines: None,
         };
 
         pm.register_project(config).await.unwrap();
@@ -422,6 +459,7 @@ mod tests {
             toolchain: None,
             toolchain_version: None,
             enable_tunnel: None,
+            max_log_lines: None,
         };
 
         pm.register_project(config).await.unwrap();
@@ -477,6 +515,7 @@ mod tests {
             toolchain: None,
             toolchain_version: None,
             enable_tunnel: None,
+            max_log_lines: None,
         };
 
         pm.register_project(config).await.unwrap();
@@ -527,6 +566,7 @@ mod tests {
             toolchain: None,
             toolchain_version: None,
             enable_tunnel: None,
+            max_log_lines: None,
         };
 
         pm.register_project(config).await.unwrap();
@@ -585,6 +625,7 @@ mod tests {
             toolchain: None,
             toolchain_version: None,
             enable_tunnel: None,
+            max_log_lines: None,
         };
 
         pm.register_project(config).await.unwrap();

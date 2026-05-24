@@ -53,11 +53,15 @@ impl DbManager {
                 terminal_mode TEXT,
                 toolchain TEXT,
                 toolchain_version TEXT,
-                enable_tunnel INTEGER
+                enable_tunnel INTEGER,
+                max_log_lines INTEGER
             );",
             [],
         )
         .map_err(|e| format!("Failed to create projects table: {}", e))?;
+
+        // Dynamic column migration for backward compatibility
+        let _ = conn.execute("ALTER TABLE projects ADD COLUMN max_log_lines INTEGER;", []);
 
         // 2. Create Process/Server Execution Logs Table
         conn.execute(
@@ -112,8 +116,8 @@ impl DbManager {
             "INSERT OR REPLACE INTO projects (
                 id, name, command, args, cwd, setup_command, setup_args,
                 auto_restart, env, max_cpu_percent, max_ram_mb, port,
-                source, terminal_mode, toolchain, toolchain_version, enable_tunnel
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17);",
+                source, terminal_mode, toolchain, toolchain_version, enable_tunnel, max_log_lines
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18);",
             params![
                 config.id,
                 config.name,
@@ -131,7 +135,8 @@ impl DbManager {
                 config.terminal_mode,
                 config.toolchain,
                 config.toolchain_version,
-                enable_tunnel_int
+                enable_tunnel_int,
+                config.max_log_lines
             ],
         )
         .map_err(|e| format!("Failed to save project config: {}", e))?;
@@ -162,7 +167,7 @@ impl DbManager {
             .prepare(
                 "SELECT id, name, command, args, cwd, setup_command, setup_args,
                         auto_restart, env, max_cpu_percent, max_ram_mb, port,
-                        source, terminal_mode, toolchain, toolchain_version, enable_tunnel
+                        source, terminal_mode, toolchain, toolchain_version, enable_tunnel, max_log_lines
                  FROM projects;",
             )
             .map_err(|e| format!("Failed to prepare select query: {}", e))?;
@@ -186,6 +191,7 @@ impl DbManager {
                 let toolchain: Option<String> = row.get(14)?;
                 let toolchain_version: Option<String> = row.get(15)?;
                 let enable_tunnel_int: Option<i32> = row.get(16)?;
+                let max_log_lines: Option<u32> = row.get(17)?;
 
                 let args: Vec<String> = serde_json::from_str(&args_raw).map_err(|e| {
                     rusqlite::Error::FromSqlConversionFailure(
@@ -238,6 +244,7 @@ impl DbManager {
                     toolchain,
                     toolchain_version,
                     enable_tunnel,
+                    max_log_lines,
                 })
             })
             .map_err(|e| format!("Failed to query projects: {}", e))?;
@@ -268,6 +275,27 @@ impl DbManager {
         .map_err(|e| format!("Failed to insert log: {}", e))?;
 
         Ok(())
+    }
+
+    /// Fetches the configured max log lines retention limit for a project.
+    pub fn get_project_max_log_lines(&self, project_id: &str) -> Result<Option<u32>, String> {
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        let mut stmt = conn
+            .prepare("SELECT max_log_lines FROM projects WHERE id = ?1;")
+            .map_err(|e| format!("Failed to prepare select query: {}", e))?;
+
+        let mut rows = stmt
+            .query(params![project_id])
+            .map_err(|e| format!("Failed to query project max_log_lines: {}", e))?;
+
+        if let Some(row) = rows.next().map_err(|e| format!("Failed to read next row: {}", e))? {
+            let max_lines: Option<u32> = row.get(0).map_err(|e| format!("Failed to convert field: {}", e))?;
+            Ok(max_lines)
+        } else {
+            Ok(None)
+        }
     }
 
     /// Prunes database logs, preserving only the most recent N lines for a specific project.
@@ -371,6 +399,7 @@ mod tests {
             toolchain: None,
             toolchain_version: None,
             enable_tunnel: None,
+            max_log_lines: Some(100),
         };
 
         assert!(db.save_project(&project).is_ok());
@@ -383,6 +412,11 @@ mod tests {
         assert_eq!(loaded[0].args, vec!["hello".to_string(), "world".to_string()]);
         assert_eq!(loaded[0].port, Some(8080));
         assert_eq!(loaded[0].auto_restart, Some(true));
+        assert_eq!(loaded[0].max_log_lines, Some(100));
+
+        // Verify get_project_max_log_lines helper
+        assert_eq!(db.get_project_max_log_lines("test-db-id").unwrap(), Some(100));
+        assert_eq!(db.get_project_max_log_lines("non-existent-id").unwrap(), None);
 
         // Test log insertion & retrieval
         assert!(db.insert_log("test-db-id", "stdout", "log line 1", 1000).is_ok());

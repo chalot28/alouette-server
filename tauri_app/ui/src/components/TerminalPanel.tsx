@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Terminal as TerminalIcon, Search, Trash2, Cpu, Hammer, CheckCircle2, XCircle, Plus, TerminalSquare, RefreshCw, X } from "lucide-react";
+import { Terminal as TerminalIcon, Search, Trash2, Cpu, Hammer, CheckCircle2, XCircle, Plus, TerminalSquare, RefreshCw, X, Copy, Download } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
 interface TerminalSessionItem {
@@ -34,6 +34,7 @@ interface TerminalPanelProps {
   handleTerminalScroll: () => void;
   termOutput: string;
   clearTermOutput: (id: string) => void;
+  triggerToast?: (message: string, type: "success" | "error" | "info") => void;
 
   // Multi-terminal props
   terminals: TerminalSessionItem[];
@@ -64,13 +65,62 @@ export default function TerminalPanel({
   onAddTerminal,
   onDeleteTerminal,
   onDeleteAllTerminals,
-  onRenameTerminal
+  onRenameTerminal,
+  triggerToast
 }: TerminalPanelProps) {
   // Tab selector between Piped Logs (Mode B) and Isolated Interactive Terminal (Mode A)
   const [terminalTab, setTerminalTab] = useState<"logs" | "shell">("shell");
   const [cmdInput, setCmdInput] = useState("");
   const shellViewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleCopyAllLogs = () => {
+    if (filteredLogs.length === 0) {
+      if (triggerToast) triggerToast("No logs to copy", "info");
+      return;
+    }
+    const rawText = filteredLogs
+      .map((log) => `[${new Date(log.timestamp).toLocaleTimeString()}] [${log.stream.toUpperCase()}] ${log.text}`)
+      .join("\n");
+    navigator.clipboard.writeText(rawText)
+      .then(() => {
+        if (triggerToast) triggerToast("Logs copied to clipboard!", "success");
+      })
+      .catch((err) => {
+        console.error("Failed to copy logs:", err);
+        if (triggerToast) triggerToast("Failed to copy logs", "error");
+      });
+  };
+
+  const handleExportLogs = () => {
+    if (filteredLogs.length === 0) {
+      if (triggerToast) triggerToast("No logs to export", "info");
+      return;
+    }
+    const rawText = filteredLogs
+      .map((log) => `[${new Date(log.timestamp).toLocaleTimeString()}] [${log.stream.toUpperCase()}] ${log.text}`)
+      .join("\n");
+
+    const blob = new Blob([rawText], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let randomName = "";
+    for (let i = 0; i < 12; i++) {
+      randomName += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const filename = `${randomName}.log`;
+
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", url);
+    downloadAnchor.setAttribute("download", filename);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    URL.revokeObjectURL(url);
+
+    if (triggerToast) triggerToast(`Logs exported as ${filename}!`, "success");
+  };
 
   // Renaming state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -196,6 +246,24 @@ export default function TerminalPanel({
                   <button onClick={() => setLogSearchQuery("")}>✕</button>
                 )}
               </div>
+
+              <button
+                className="terminal-btn-clear"
+                onClick={handleCopyAllLogs}
+                style={{ borderColor: "rgba(58, 134, 255, 0.2)", color: "var(--color-accent)" }}
+              >
+                <Copy size={11} />
+                <span>Copy All</span>
+              </button>
+
+              <button
+                className="terminal-btn-clear"
+                onClick={handleExportLogs}
+                style={{ borderColor: "rgba(16, 185, 129, 0.2)", color: "var(--color-success)" }}
+              >
+                <Download size={11} />
+                <span>Export Logs</span>
+              </button>
 
               <button
                 className="terminal-btn-clear"

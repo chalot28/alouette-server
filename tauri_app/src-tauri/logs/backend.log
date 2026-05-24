@@ -1,3 +1,154 @@
 [2026-05-24 13:54:36.463] SYSTEM: --- Installing Toolchain node@stable ---
 [2026-05-24 13:54:39.361] SYSTEM: --- Spawning Primary Command ---
 [2026-05-24 13:54:39.369] SYSTEM: --- ERROR: Failed to spawn process: program not found ---
+[2026-05-24 14:04:48.311] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-24 14:04:48.626] SYSTEM: --- Spawning Primary Command ---
+[14:04:55.892] [stdout] 
+[14:04:55.893] [stdout] > server-dvtn@1.0.0 dev
+[14:04:55.896] [stdout] > nodemon src/index.js
+[14:04:55.897] [stdout] 
+[14:04:56.070] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:04:56.070] [stderr] operable program or batch file.
+[2026-05-24 14:04:56.577] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:04:56.579] SYSTEM: --- Process crashed. Retrying in 2 seconds (Attempt 1/5) ---
+[2026-05-24 14:04:58.594] SYSTEM: --- Spawning Primary Command ---
+[14:04:59.786] [stdout] 
+[14:04:59.786] [stdout] > server-dvtn@1.0.0 dev
+[14:04:59.787] [stdout] > nodemon src/index.js
+[14:04:59.787] [stdout] 
+[14:04:59.925] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:04:59.925] [stderr] operable program or batch file.
+[2026-05-24 14:05:00.030] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:05:00.032] SYSTEM: --- Process crashed. Retrying in 4 seconds (Attempt 2/5) ---
+[2026-05-24 14:05:04.039] SYSTEM: --- Spawning Primary Command ---
+[14:05:05.009] [stdout] 
+[14:05:05.009] [stdout] > server-dvtn@1.0.0 dev
+[14:05:05.010] [stdout] > nodemon src/index.js
+[14:05:05.011] [stdout] 
+[14:05:05.153] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:05:05.154] [stderr] operable program or batch file.
+[2026-05-24 14:05:05.218] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:05:05.220] SYSTEM: --- Process crashed. Retrying in 8 seconds (Attempt 3/5) ---
+[2026-05-24 14:05:13.225] SYSTEM: --- Spawning Primary Command ---
+[14:05:14.068] [stdout] 
+[14:05:14.069] [stdout] > server-dvtn@1.0.0 dev
+[14:05:14.069] [stdout] > nodemon src/index.js
+[14:05:14.070] [stdout] 
+[14:05:14.326] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:05:14.326] [stderr] operable program or batch file.
+[2026-05-24 14:05:14.405] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:05:14.406] SYSTEM: --- Process crashed. Retrying in 16 seconds (Attempt 4/5) ---
+[2026-05-24 14:05:30.411] SYSTEM: --- Spawning Primary Command ---
+[14:05:31.349] [stdout] 
+[14:05:31.349] [stdout] > server-dvtn@1.0.0 dev
+[14:05:31.350] [stdout] > nodemon src/index.js
+[14:05:31.351] [stdout] 
+[14:05:31.490] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:05:31.490] [stderr] operable program or batch file.
+[2026-05-24 14:05:31.541] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:05:31.542] SYSTEM: --- Process crashed. Retrying in 32 seconds (Attempt 5/5) ---
+[2026-05-24 14:07:12.447] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-24 14:07:12.750] SYSTEM: --- Spawning Primary Command ---
+[14:07:13.631] [stdout] 
+[14:07:13.631] [stdout] > server-dvtn@1.0.0 dev
+[14:07:13.632] [stdout] > nodemon src/index.js
+[14:07:13.632] [stdout] 
+[14:07:13.816] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:07:13.816] [stderr] operable program or batch file.
+[2026-05-24 14:07:13.873] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:07:13.875] SYSTEM: --- Process crashed. Retrying in 2 seconds (Attempt 1/5) ---
+[2026-05-24 14:07:15.892] SYSTEM: --- Spawning Primary Command ---
+[14:07:16.796] [stdout] 
+[14:07:16.797] [stdout] > server-dvtn@1.0.0 dev
+[14:07:16.798] [stdout] > nodemon src/index.js
+[14:07:16.798] [stdout] 
+[14:07:16.936] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:07:16.936] [stderr] operable program or batch file.
+[2026-05-24 14:07:16.998] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:07:16.999] SYSTEM: --- Process crashed. Retrying in 4 seconds (Attempt 2/5) ---
+[2026-05-24 14:07:21.010] SYSTEM: --- Spawning Primary Command ---
+[14:07:21.917] [stdout] 
+[14:07:21.917] [stdout] > server-dvtn@1.0.0 dev
+[14:07:21.918] [stdout] > nodemon src/index.js
+[14:07:21.919] [stdout] 
+[14:07:22.074] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:07:22.075] [stderr] operable program or batch file.
+[2026-05-24 14:07:22.137] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:07:22.138] SYSTEM: --- Process crashed. Retrying in 8 seconds (Attempt 3/5) ---
+[2026-05-24 14:07:30.163] SYSTEM: --- Spawning Primary Command ---
+[14:07:31.075] [stdout] 
+[14:07:31.076] [stdout] > server-dvtn@1.0.0 dev
+[14:07:31.076] [stdout] > nodemon src/index.js
+[14:07:31.077] [stdout] 
+[14:07:31.231] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:07:31.231] [stderr] operable program or batch file.
+[2026-05-24 14:07:31.286] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:07:31.287] SYSTEM: --- Process crashed. Retrying in 16 seconds (Attempt 4/5) ---
+[2026-05-24 14:07:36.565] SYSTEM: --- Process Terminated During Backoff ---
+[2026-05-24 14:07:36.569] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-24 14:07:36.877] SYSTEM: --- Spawning Primary Command ---
+[14:07:37.768] [stdout] 
+[14:07:37.769] [stdout] > server-dvtn@1.0.0 dev
+[14:07:37.769] [stdout] > nodemon src/index.js
+[14:07:37.770] [stdout] 
+[14:07:37.955] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:07:37.955] [stderr] operable program or batch file.
+[2026-05-24 14:07:38.016] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:07:38.017] SYSTEM: --- Process crashed. Retrying in 2 seconds (Attempt 1/5) ---
+[2026-05-24 14:07:38.185] SYSTEM: --- Process Terminated During Backoff ---
+[2026-05-24 14:07:38.186] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-24 14:07:38.454] SYSTEM: --- Spawning Primary Command ---
+[14:07:39.370] [stdout] 
+[14:07:39.371] [stdout] > server-dvtn@1.0.0 dev
+[14:07:39.372] [stdout] > nodemon src/index.js
+[14:07:39.372] [stdout] 
+[14:07:39.543] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:07:39.543] [stderr] operable program or batch file.
+[2026-05-24 14:07:39.596] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:07:39.597] SYSTEM: --- Process crashed. Retrying in 2 seconds (Attempt 1/5) ---
+[2026-05-24 14:07:41.608] SYSTEM: --- Spawning Primary Command ---
+[14:07:42.491] [stdout] 
+[14:07:42.491] [stdout] > server-dvtn@1.0.0 dev
+[14:07:42.492] [stdout] > nodemon src/index.js
+[14:07:42.493] [stdout] 
+[14:07:42.640] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:07:42.641] [stderr] operable program or batch file.
+[2026-05-24 14:07:42.695] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:07:42.696] SYSTEM: --- Process crashed. Retrying in 4 seconds (Attempt 2/5) ---
+[2026-05-24 14:07:45.423] SYSTEM: --- Process Terminated During Backoff ---
+[2026-05-24 14:13:26.238] SYSTEM: --- Spawning Primary Command ---
+[14:13:27.143] [stdout] 
+[14:13:27.144] [stdout] > server-dvtn@1.0.0 dev
+[14:13:27.144] [stdout] > nodemon src/index.js
+[14:13:27.145] [stdout] 
+[14:13:27.295] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:13:27.295] [stderr] operable program or batch file.
+[2026-05-24 14:13:27.359] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:13:27.361] SYSTEM: --- Process crashed. Retrying in 2 seconds (Attempt 1/5) ---
+[2026-05-24 14:13:29.376] SYSTEM: --- Spawning Primary Command ---
+[14:13:30.222] [stdout] 
+[14:13:30.222] [stdout] > server-dvtn@1.0.0 dev
+[14:13:30.223] [stdout] > nodemon src/index.js
+[14:13:30.223] [stdout] 
+[14:13:30.375] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:13:30.376] [stderr] operable program or batch file.
+[2026-05-24 14:13:30.437] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:13:30.438] SYSTEM: --- Process crashed. Retrying in 4 seconds (Attempt 2/5) ---
+[2026-05-24 14:13:34.442] SYSTEM: --- Spawning Primary Command ---
+[2026-05-24 14:13:34.836] SYSTEM: --- Stopping Process Tree... ---
+[14:13:35.475] [stdout] 
+[14:13:35.475] [stdout] > server-dvtn@1.0.0 dev
+[14:13:35.476] [stdout] > nodemon src/index.js
+[14:13:35.476] [stdout] 
+[14:13:35.642] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:13:35.642] [stderr] operable program or batch file.
+[2026-05-24 14:13:36.016] SYSTEM: --- Process Tree Terminated Successfully ---
+[2026-05-24 14:22:49.755] SYSTEM: --- Spawning Primary Command ---
+[14:22:51.084] [stdout] 
+[14:22:51.084] [stdout] > server-dvtn@1.0.0 dev
+[14:22:51.085] [stdout] > nodemon src/index.js
+[14:22:51.087] [stdout] 
+[14:22:51.313] [stderr] 'nodemon' is not recognized as an internal or external command,
+[14:22:51.314] [stderr] operable program or batch file.
+[2026-05-24 14:22:51.415] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-24 14:22:51.416] SYSTEM: --- Process exceeded maximum crash retries. Entering FATAL state. ---

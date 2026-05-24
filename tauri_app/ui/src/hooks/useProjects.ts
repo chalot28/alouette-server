@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -22,6 +22,8 @@ interface UseProjectsDeps {
   setTermOutputs: React.Dispatch<
     React.SetStateAction<{ [id: string]: string }>
   >;
+  triggerToast: (message: string, type: "success" | "error" | "info") => void;
+  triggerConfirm: (message: string, onConfirm: () => void) => void;
 }
 
 export function useProjects(deps: UseProjectsDeps) {
@@ -31,10 +33,15 @@ export function useProjects(deps: UseProjectsDeps) {
     setProjectTerminals,
     setActiveTerminalIds,
     setTermOutputs,
+    triggerToast,
+    triggerConfirm,
   } = deps;
 
-  // Project Lists & Active Tabs
   const [projects, setProjects] = useState<Project[]>([]);
+  const projectsRef = useRef<Project[]>([]);
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
   const [activeProjectId, setActiveProjectId] = useState<string>("");
   const [projectStates, setProjectStates] = useState<{
     [id: string]: ProcessState;
@@ -78,6 +85,7 @@ export function useProjects(deps: UseProjectsDeps) {
   const [newProjToolchainVersion, setNewProjToolchainVersion] =
     useState("stable");
   const [newProjEnableTunnel, setNewProjEnableTunnel] = useState(false);
+  const [newProjMaxLogLines, setNewProjMaxLogLines] = useState<string>("");
 
   // Port conflict state
   const [portConflict, setPortConflict] = useState<{
@@ -209,6 +217,14 @@ export function useProjects(deps: UseProjectsDeps) {
           activeProj.max_ram_mb ? String(activeProj.max_ram_mb) : "",
         );
         setNewProjPort(activeProj.port ? String(activeProj.port) : "");
+        setNewProjSource(activeProj.source || "");
+        setNewProjTerminalMode(activeProj.terminal_mode || "log");
+        setNewProjToolchain(activeProj.toolchain || "");
+        setNewProjToolchainVersion(activeProj.toolchain_version || "stable");
+        setNewProjEnableTunnel(!!activeProj.enable_tunnel);
+        setNewProjMaxLogLines(
+          activeProj.max_log_lines ? String(activeProj.max_log_lines) : ""
+        );
         if (activeProj.env) {
           setNewProjEnv(
             Object.entries(activeProj.env).map(([key, value]) => ({
@@ -226,9 +242,11 @@ export function useProjects(deps: UseProjectsDeps) {
   // Load SQLite historical logs when activeProjectId changes
   useEffect(() => {
     if (activeProjectId && activeProjectId !== "__create_project__") {
+      const activeProj = projects.find((p) => p.id === activeProjectId);
+      const limitVal = activeProj?.max_log_lines || 1000;
       invoke<LogLine[]>("get_project_logs", {
         projectId: activeProjectId,
-        limit: 1000,
+        limit: limitVal,
       })
         .then((logs) => {
           setProjectLogs((prev) => ({
@@ -240,7 +258,7 @@ export function useProjects(deps: UseProjectsDeps) {
           console.error("Failed to load historical logs from SQLite: ", err);
         });
     }
-  }, [activeProjectId]);
+  }, [activeProjectId, projects]);
 
   // Project source auto-fill name helper
   useEffect(() => {
@@ -293,7 +311,13 @@ export function useProjects(deps: UseProjectsDeps) {
             timestamp: payload.timestamp,
           },
         ];
-        if (newLines.length > MAX_LOG_LINES) newLines.shift();
+        
+        const project = projectsRef.current.find((p) => p.id === payload.project_id);
+        const limitVal = project?.max_log_lines || MAX_LOG_LINES;
+        if (newLines.length > limitVal) {
+          newLines.splice(0, newLines.length - limitVal);
+        }
+        
         return {
           ...prev,
           [payload.project_id]: newLines,
@@ -364,7 +388,7 @@ export function useProjects(deps: UseProjectsDeps) {
       }));
       await invoke("start_project_process", { projectId: activeProjectId });
     } catch (e: any) {
-      alert(`Execution failed: ${e}`);
+      triggerToast(`Execution failed: ${e}`, "error");
     }
   };
 
@@ -388,7 +412,7 @@ export function useProjects(deps: UseProjectsDeps) {
       }));
       await invoke("start_project_process", { projectId: id });
     } catch (e: any) {
-      alert(`Execution failed: ${e}`);
+      triggerToast(`Execution failed: ${e}`, "error");
     }
   };
 
@@ -396,7 +420,7 @@ export function useProjects(deps: UseProjectsDeps) {
     try {
       await invoke("stop_project_process", { projectId: id });
     } catch (e: any) {
-      alert(`Teardown failed: ${e}`);
+      triggerToast(`Teardown failed: ${e}`, "error");
     }
   };
 
@@ -409,7 +433,7 @@ export function useProjects(deps: UseProjectsDeps) {
         await handleStart(true);
       }, 500);
     } catch (e: any) {
-      alert(`Force kill failed: ${e}`);
+      triggerToast(`Force kill failed: ${e}`, "error");
     }
   };
 
@@ -418,13 +442,13 @@ export function useProjects(deps: UseProjectsDeps) {
     try {
       await invoke("stop_project_process", { projectId: activeProjectId });
     } catch (e: any) {
-      alert(`Teardown failed: ${e}`);
+      triggerToast(`Teardown failed: ${e}`, "error");
     }
   };
 
   const handleAddProject = async () => {
     if (!newProjName || !newProjCmd) {
-      alert("Name and command fields are mandatory.");
+      triggerToast("Name and command fields are mandatory.", "error");
       return;
     }
 
@@ -452,6 +476,7 @@ export function useProjects(deps: UseProjectsDeps) {
     const maxCpuVal = newProjCpu ? parseInt(newProjCpu, 10) : undefined;
     const maxRamVal = newProjRam ? parseInt(newProjRam, 10) : undefined;
     const portVal = newProjPort ? parseInt(newProjPort, 10) : undefined;
+    const maxLogLinesVal = newProjMaxLogLines ? parseInt(newProjMaxLogLines, 10) : undefined;
 
     const newConfig: Project = {
       id:
@@ -474,56 +499,58 @@ export function useProjects(deps: UseProjectsDeps) {
       toolchain: newProjToolchain.trim() || undefined,
       toolchain_version: newProjToolchainVersion.trim() || undefined,
       enable_tunnel: newProjEnableTunnel,
+      max_log_lines: maxLogLinesVal,
     };
 
     try {
       await invoke("register_project", { config: newConfig });
       await loadProjects();
-      alert("Configuration saved successfully!");
+      triggerToast("Configuration saved successfully!", "success");
       setActiveProjectId(newConfig.id);
     } catch (e: any) {
-      alert(`Failed to save project: ${e}`);
+      triggerToast(`Failed to save project: ${e}`, "error");
     }
   };
 
-  const handleDeleteProject = async (id: string) => {
+  const handleDeleteProject = (id: string) => {
     if (id === "__create_project__") {
       setActiveProjectId("");
       return;
     }
-    if (!confirm("Are you sure you want to delete this tab/project?")) return;
-    try {
-      const terms = projectTerminals[id] || [];
-      for (const t of terms) {
-        await invoke("kill_terminal_session", { sessionId: t.id }).catch(
-          () => {},
-        );
-        setTermOutputs((prev) => {
+    triggerConfirm("Are you sure you want to delete this tab/project?", async () => {
+      try {
+        const terms = projectTerminals[id] || [];
+        for (const t of terms) {
+          await invoke("kill_terminal_session", { sessionId: t.id }).catch(
+            () => {},
+          );
+          setTermOutputs((prev) => {
+            const copy = { ...prev };
+            delete copy[t.id];
+            return copy;
+          });
+        }
+
+        await invoke("deregister_project", { projectId: id });
+        await loadProjects();
+        if (activeProjectId === id) {
+          setActiveProjectId("");
+        }
+
+        setProjectTerminals((prev) => {
           const copy = { ...prev };
-          delete copy[t.id];
+          delete copy[id];
           return copy;
         });
+        setActiveTerminalIds((prev) => {
+          const copy = { ...prev };
+          delete copy[id];
+          return copy;
+        });
+      } catch (e: any) {
+        triggerToast(`Failed to delete: ${e}`, "error");
       }
-
-      await invoke("deregister_project", { projectId: id });
-      await loadProjects();
-      if (activeProjectId === id) {
-        setActiveProjectId("");
-      }
-
-      setProjectTerminals((prev) => {
-        const copy = { ...prev };
-        delete copy[id];
-        return copy;
-      });
-      setActiveTerminalIds((prev) => {
-        const copy = { ...prev };
-        delete copy[id];
-        return copy;
-      });
-    } catch (e: any) {
-      alert(`Failed to delete: ${e}`);
-    }
+    });
   };
 
   const handleFileOpen = (path: string) => {
@@ -613,6 +640,7 @@ export function useProjects(deps: UseProjectsDeps) {
     setNewProjToolchain("");
     setNewProjToolchainVersion("stable");
     setNewProjEnableTunnel(false);
+    setNewProjMaxLogLines("");
   };
 
   const handleExportConfig = () => {
@@ -633,9 +661,9 @@ export function useProjects(deps: UseProjectsDeps) {
         await invoke("register_project", { config: p });
       }
       await loadProjects();
-      alert("Loaded mock templates successfully!");
+      triggerToast("Loaded mock templates successfully!", "success");
     } catch (e: any) {
-      alert(`Demo import failed: ${e}`);
+      triggerToast(`Demo import failed: ${e}`, "error");
     }
   };
 
@@ -708,6 +736,8 @@ export function useProjects(deps: UseProjectsDeps) {
     setNewProjToolchainVersion,
     newProjEnableTunnel,
     setNewProjEnableTunnel,
+    newProjMaxLogLines,
+    setNewProjMaxLogLines,
     portConflict,
     setPortConflict,
 

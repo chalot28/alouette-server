@@ -22,6 +22,7 @@ pub struct ProjectConfig {
     pub toolchain: Option<String>, // "node", "go", "python"
     pub toolchain_version: Option<String>,
     pub enable_tunnel: Option<bool>,
+    pub max_log_lines: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,6 +87,7 @@ mod tests {
             toolchain: None,
             toolchain_version: None,
             enable_tunnel: None,
+            max_log_lines: None,
         };
 
         let config = ProjectsConfig {
@@ -122,6 +124,7 @@ mod tests {
             toolchain: None,
             toolchain_version: None,
             enable_tunnel: None,
+            max_log_lines: None,
         };
 
         let config = ProjectsConfig {

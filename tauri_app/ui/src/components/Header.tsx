@@ -28,6 +28,8 @@ interface HeaderProps {
   activeState?: any;
   handleStart?: () => void;
   handleStop?: () => void;
+  triggerConfirm: (message: string, onConfirm: () => void) => void;
+  triggerToast: (message: string, type: "success" | "error" | "info") => void;
 }
 
 export default function Header({
@@ -45,7 +47,9 @@ export default function Header({
   activeProject,
   activeState,
   handleStart,
-  handleStop
+  handleStop,
+  triggerConfirm,
+  triggerToast
 }: HeaderProps) {
   const appWindow = getCurrentWindow();
 
@@ -105,9 +109,10 @@ export default function Header({
                 <button
                   className="dropdown-item text-danger"
                   onClick={() => {
-                    if (confirm("Are you sure you want to wipe all configurations?")) {
+                    triggerConfirm("Are you sure you want to wipe all configurations?", () => {
                       wipeConfig();
-                    }
+                      triggerToast("All configurations wiped.", "info");
+                    });
                   }}
                 >
                   Wipe Configurations
@@ -134,7 +139,7 @@ export default function Header({
                 <button
                   className="dropdown-item"
                   onClick={() => {
-                    alert("Log buffer capped at 2000 lines.");
+                    triggerToast("Log buffer capped at 2000 lines.", "info");
                     setSettingMenuOpen(false);
                   }}
                 >
@@ -185,7 +190,9 @@ export default function Header({
             <div className="header-meta-capsule">
               <span className="label">PID</span>
               <span className="value mono">
-                {activeState?.type === "Running" ? activeState.data : "N/A"}
+                {activeState?.type === "Running"
+                  ? (typeof activeState.data === "object" ? activeState.data?.pid : activeState.data)
+                  : "N/A"}
               </span>
             </div>
             {activeProject.port && (

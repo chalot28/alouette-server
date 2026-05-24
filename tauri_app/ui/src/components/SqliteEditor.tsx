@@ -27,9 +27,11 @@ interface SqliteTableData {
 
 interface SqliteEditorProps {
   filePath: string;
+  triggerConfirm?: (message: string, onConfirm: () => void) => void;
+  triggerToast?: (message: string, type: "success" | "error" | "info") => void;
 }
 
-export default function SqliteEditor({ filePath }: SqliteEditorProps) {
+export default function SqliteEditor({ filePath, triggerConfirm, triggerToast }: SqliteEditorProps) {
   const [tables, setTables] = useState<string[]>([]);
   const [activeTable, setActiveTable] = useState<string | null>(null);
   const [data, setData] = useState<SqliteTableData | null>(null);
@@ -192,21 +194,30 @@ export default function SqliteEditor({ filePath }: SqliteEditorProps) {
     const row = data.rows[rowIndex];
     const pkValue = row[pkIndex];
 
-    if (!confirm(`Are you sure you want to delete this row (ID: ${pkValue})?`)) return;
+    const performDelete = async () => {
+      triggerStatus("saving", "Deleting row...");
+      try {
+        await invoke("delete_sqlite_row", {
+          path: filePath,
+          table: activeTable,
+          pkColumn: pkColumn.name,
+          pkValue: pkValue
+        });
+        triggerStatus("success", "Row deleted!");
+        if (triggerToast) triggerToast("Row deleted successfully!", "success");
+        loadTableData(activeTable);
+      } catch (err: any) {
+        console.error("Failed to delete row:", err);
+        triggerStatus("error", `Failed to delete row: ${err.toString()}`);
+        if (triggerToast) triggerToast(`Failed to delete row: ${err}`, "error");
+      }
+    };
 
-    triggerStatus("saving", "Deleting row...");
-    try {
-      await invoke("delete_sqlite_row", {
-        path: filePath,
-        table: activeTable,
-        pkColumn: pkColumn.name,
-        pkValue: pkValue
-      });
-      triggerStatus("success", "Row deleted!");
-      loadTableData(activeTable);
-    } catch (err: any) {
-      console.error("Failed to delete row:", err);
-      triggerStatus("error", `Failed to delete row: ${err.toString()}`);
+    if (triggerConfirm) {
+      triggerConfirm(`Are you sure you want to delete this row (ID: ${pkValue})?`, performDelete);
+    } else {
+      if (!confirm(`Are you sure you want to delete this row (ID: ${pkValue})?`)) return;
+      await performDelete();
     }
   };
 

@@ -16,6 +16,7 @@ export interface Project {
   toolchain?: string;
   toolchain_version?: string;
   enable_tunnel?: boolean;
+  max_log_lines?: number;
 }
 
 export interface TerminalSessionItem {

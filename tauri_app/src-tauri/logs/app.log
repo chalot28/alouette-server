@@ -296,3 +296,34 @@
 [2026-05-24 20:50:39.390] Reading file: D:/server_dvtn/.env
 [2026-05-24 20:54:36.458] Tauri command received: start_project_process for project_id: backend
 [2026-05-24 20:54:36.461] Process successfully started for project_id: backend
+[2026-05-24 21:04:36.442] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 21:04:36.445] Proto CLI verified and active.
+[2026-05-24 21:04:36.575] Toolchains checked / verified stable.
+[2026-05-24 21:04:44.052] Cloudflared binary verified / updated successfully.
+[2026-05-24 21:04:44.055] Isolated environment initialized successfully!
+[2026-05-24 21:04:48.303] Tauri command received: start_project_process for project_id: backend
+[2026-05-24 21:04:48.310] Process successfully started for project_id: backend
+[2026-05-24 21:05:55.517] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 21:05:55.520] Proto CLI verified and active.
+[2026-05-24 21:05:55.562] Toolchains checked / verified stable.
+[2026-05-24 21:06:03.063] Cloudflared binary verified / updated successfully.
+[2026-05-24 21:06:03.064] Isolated environment initialized successfully!
+[2026-05-24 21:07:12.437] Tauri command received: start_project_process for project_id: backend
+[2026-05-24 21:07:12.445] Process successfully started for project_id: backend
+[2026-05-24 21:07:36.559] Tauri command received: start_project_process for project_id: backend
+[2026-05-24 21:07:36.565] Process successfully started for project_id: backend
+[2026-05-24 21:07:38.180] Tauri command received: start_project_process for project_id: backend
+[2026-05-24 21:07:38.185] Process successfully started for project_id: backend
+[2026-05-24 21:13:08.911] Tauri command received: start_project_process for project_id: sys-ping
+[2026-05-24 21:13:08.918] Process successfully started for project_id: sys-ping
+[2026-05-24 21:13:17.325] Tauri command received: stop_project_process for project_id: sys-ping
+[2026-05-24 21:13:17.326] Process successfully stopped for project_id: sys-ping
+[2026-05-24 21:13:26.228] Tauri command received: start_project_process for project_id: backend
+[2026-05-24 21:13:26.235] Process successfully started for project_id: backend
+[2026-05-24 21:22:19.104] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 21:22:19.107] Proto CLI verified and active.
+[2026-05-24 21:22:19.113] Toolchains checked / verified stable.
+[2026-05-24 21:22:40.601] Cloudflared binary verified / updated successfully.
+[2026-05-24 21:22:40.607] Isolated environment initialized successfully!
+[2026-05-24 21:22:49.747] Tauri command received: start_project_process for project_id: backend
+[2026-05-24 21:22:49.752] Process successfully started for project_id: backend
