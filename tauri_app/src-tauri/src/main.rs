@@ -96,6 +96,8 @@ fn main() {
             commands::files::write_file_content,
             commands::network::check_port_status,
             commands::network::force_kill_process,
+            commands::network::open_ping_window,
+            commands::network::send_http_request,
             commands::sqlite::get_sqlite_tables,
             commands::sqlite::get_sqlite_table_data,
             commands::sqlite::update_sqlite_cell,

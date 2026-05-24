@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Layers,
   Activity,
@@ -31,6 +32,8 @@ import ProcessManager from "./components/ProcessManager";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
 import FileExplorer from "./components/FileExplorer";
 import SqliteEditor from "./components/SqliteEditor";
+import MiniPostman from "./components/MiniPostman";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // Types
 import {
@@ -48,6 +51,18 @@ import { useTerminal } from "./hooks/useTerminal";
 export default function App() {
   // Theme State
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  // Window label state to detect multi-window views (e.g. Mini Postman ping window)
+  const [windowLabel, setWindowLabel] = useState<string>("main");
+
+  useEffect(() => {
+    try {
+      const win = getCurrentWindow();
+      setWindowLabel(win.label);
+    } catch (e) {
+      console.error("Failed to get current window label:", e);
+    }
+  }, []);
 
   // Custom Toast & Confirm states
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
@@ -67,10 +82,9 @@ export default function App() {
 
   // Auto dismiss toast
   useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
   }, [toast]);
 
   // Dynamic UI States
@@ -427,6 +441,10 @@ export default function App() {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
   };
+
+  if (windowLabel === "ping_window") {
+    return <MiniPostman />;
+  }
 
   // ── Render ──
   return (
@@ -905,7 +923,18 @@ export default function App() {
           <button className="tool-btn tool-ai" title="2. AI">
             <Sparkles size={14} />
           </button>
-          <button className="tool-btn tool-ping" title="3. Ping">
+          <button
+            className="tool-btn tool-ping"
+            title="3. Ping"
+            onClick={async () => {
+              try {
+                await invoke("open_ping_window");
+              } catch (e) {
+                console.error("Failed to open ping window:", e);
+                triggerToast("Failed to open Ping window.", "error");
+              }
+            }}
+          >
             <Wifi size={14} />
           </button>
           <button className="tool-btn tool-chrome" title="4. Chrome">

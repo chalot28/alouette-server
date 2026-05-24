@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Default capabilities for the app",
   "windows": [
-    "main"
+    "main",
+    "ping_window"
   ],
   "permissions": [
     "core:default",
