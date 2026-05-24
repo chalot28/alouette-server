@@ -1,0 +1,3 @@
+[2026-05-24 13:54:36.463] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-24 13:54:39.361] SYSTEM: --- Spawning Primary Command ---
+[2026-05-24 13:54:39.369] SYSTEM: --- ERROR: Failed to spawn process: program not found ---

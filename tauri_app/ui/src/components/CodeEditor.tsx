@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { Save, FileCode, Check, AlertCircle, RefreshCw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import Editor from "@monaco-editor/react";
 
 interface CodeEditorProps {
+  theme?: "dark" | "light";
   filePath: string | null;
   content: string | null;
   isLoading: boolean;
@@ -14,7 +16,65 @@ interface CodeEditorProps {
   cursorPositionsRef: React.MutableRefObject<{ [path: string]: { start: number; end: number } }>;
 }
 
+const getLanguageFromPath = (path: string | null): string => {
+  if (!path) return "plaintext";
+  const fileName = path.split(/[\\/]/).pop()?.toLowerCase() || "";
+  
+  if (fileName.startsWith(".env")) {
+    return "ini";
+  }
+  
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case "js":
+    case "jsx":
+      return "javascript";
+    case "ts":
+    case "tsx":
+      return "typescript";
+    case "html":
+      return "html";
+    case "css":
+      return "css";
+    case "json":
+      return "json";
+    case "md":
+      return "markdown";
+    case "rs":
+      return "rust";
+    case "toml":
+      return "toml";
+    case "yaml":
+    case "yml":
+      return "yaml";
+    case "py":
+      return "python";
+    case "go":
+      return "go";
+    case "sh":
+    case "bash":
+    case "zsh":
+      return "shell";
+    case "sql":
+      return "sql";
+    case "xml":
+      return "xml";
+    case "c":
+    case "cpp":
+    case "h":
+    case "hpp":
+      return "cpp";
+    case "java":
+      return "java";
+    case "cs":
+      return "csharp";
+    default:
+      return "plaintext";
+  }
+};
+
 export default function CodeEditor({
+  theme = "dark",
   filePath,
   content: initialContent,
   isLoading,
@@ -28,19 +88,25 @@ export default function CodeEditor({
   const [content, setContent] = useState<string>("");
   const [originalContent, setOriginalContent] = useState<string>("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<any>(null);
   const lastPathRef = useRef<string | null>(null);
 
   // Save position on unmount or file path change
   useEffect(() => {
     return () => {
-      if (filePath && textareaRef.current) {
-        scrollPositionsRef.current[filePath] = textareaRef.current.scrollTop;
-        cursorPositionsRef.current[filePath] = {
-          start: textareaRef.current.selectionStart,
-          end: textareaRef.current.selectionEnd
-        };
+      if (filePath && editorRef.current) {
+        const editor = editorRef.current;
+        const model = editor.getModel();
+        if (model) {
+          scrollPositionsRef.current[filePath] = editor.getScrollTop();
+          const selection = editor.getSelection();
+          if (selection) {
+            cursorPositionsRef.current[filePath] = {
+              start: model.getOffsetAt({ lineNumber: selection.startLineNumber, column: selection.startColumn }),
+              end: model.getOffsetAt({ lineNumber: selection.endLineNumber, column: selection.endColumn })
+            };
+          }
+        }
       }
     };
   }, [filePath, scrollPositionsRef, cursorPositionsRef]);
@@ -54,22 +120,27 @@ export default function CodeEditor({
         lastPathRef.current = filePath;
 
         // Restore scroll and cursor for the new file path using setTimeout
-        if (filePath && textareaRef.current) {
-          const savedScroll = scrollPositionsRef.current[filePath] || 0;
-          const savedCursor = cursorPositionsRef.current[filePath];
+        if (filePath && editorRef.current) {
+          const editor = editorRef.current;
+          const model = editor.getModel();
+          if (model) {
+            const savedScroll = scrollPositionsRef.current[filePath] || 0;
+            const savedCursor = cursorPositionsRef.current[filePath];
 
-          setTimeout(() => {
-            if (textareaRef.current) {
+            setTimeout(() => {
               if (savedCursor) {
-                textareaRef.current.selectionStart = savedCursor.start;
-                textareaRef.current.selectionEnd = savedCursor.end;
+                const startPos = model.getPositionAt(savedCursor.start);
+                const endPos = model.getPositionAt(savedCursor.end);
+                editor.setSelection({
+                  startLineNumber: startPos.lineNumber,
+                  startColumn: startPos.column,
+                  endLineNumber: endPos.lineNumber,
+                  endColumn: endPos.column,
+                });
               }
-              textareaRef.current.scrollTop = savedScroll;
-              if (lineNumbersRef.current) {
-                lineNumbersRef.current.scrollTop = savedScroll;
-              }
-            }
-          }, 0);
+              editor.setScrollTop(savedScroll);
+            }, 0);
+          }
         }
       } else {
         setContent("");
@@ -80,24 +151,28 @@ export default function CodeEditor({
     setSaveStatus("idle");
   }, [initialContent, filePath]);
 
-  // Sync scroll between textarea and line numbers, and record scroll position
-  const handleScroll = () => {
-    if (textareaRef.current && lineNumbersRef.current) {
-      const scrollPos = textareaRef.current.scrollTop;
-      lineNumbersRef.current.scrollTop = scrollPos;
-      if (filePath) {
-        scrollPositionsRef.current[filePath] = scrollPos;
-      }
-    }
-  };
+  const handleEditorDidMount = (editor: any, monaco: any) => {
+    editorRef.current = editor;
 
-  // Record cursor selection positions on interactions
-  const handleSelect = () => {
-    if (textareaRef.current && filePath) {
-      cursorPositionsRef.current[filePath] = {
-        start: textareaRef.current.selectionStart,
-        end: textareaRef.current.selectionEnd
-      };
+    // Restore scroll and cursor for the active file path
+    if (filePath) {
+      const model = editor.getModel();
+      if (model) {
+        const savedScroll = scrollPositionsRef.current[filePath] || 0;
+        const savedCursor = cursorPositionsRef.current[filePath];
+
+        if (savedCursor) {
+          const startPos = model.getPositionAt(savedCursor.start);
+          const endPos = model.getPositionAt(savedCursor.end);
+          editor.setSelection({
+            startLineNumber: startPos.lineNumber,
+            startColumn: startPos.column,
+            endLineNumber: endPos.lineNumber,
+            endColumn: endPos.column,
+          });
+        }
+        editor.setScrollTop(savedScroll);
+      }
     }
   };
 
@@ -105,11 +180,13 @@ export default function CodeEditor({
     if (!filePath || saveStatus === "saving") return;
     setSaveStatus("saving");
     try {
-      await invoke("write_file_content", { path: filePath, content });
-      setOriginalContent(content);
+      // Get latest content from editor if available, to make sure it is 100% in sync
+      const latestContent = editorRef.current ? editorRef.current.getValue() : content;
+      await invoke("write_file_content", { path: filePath, content: latestContent });
+      setOriginalContent(latestContent);
       setSaveStatus("success");
       if (onFileSaved) onFileSaved();
-      if (onSave) onSave(content);
+      if (onSave) onSave(latestContent);
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch (err: any) {
       console.error("Error writing file:", err);
@@ -132,10 +209,6 @@ export default function CodeEditor({
 
   const isDirty = content !== originalContent;
   const fileName = filePath ? filePath.split(/[\\/]/).pop() : "";
-
-  // Split lines to generate line numbers
-  const lines = content.split("\n");
-  const lineNumbers = Array.from({ length: lines.length }, (_, i) => i + 1);
 
   if (!filePath) {
     return (
@@ -190,28 +263,38 @@ export default function CodeEditor({
           <span>{error}</span>
         </div>
       ) : (
-        <div className="editor-body">
-          <div className="line-numbers" ref={lineNumbersRef}>
-            {lineNumbers.map((num) => (
-              <div key={num} className="line-number-item">
-                {num}
-              </div>
-            ))}
-          </div>
-          <textarea
-            ref={textareaRef}
-            className="editor-textarea"
+        <div className="editor-body" style={{ minHeight: 0, flex: 1 }}>
+          <Editor
+            height="100%"
+            width="100%"
+            language={getLanguageFromPath(filePath)}
+            theme={theme === "light" ? "light" : "vs-dark"}
             value={content}
-            onChange={(e) => {
-              setContent(e.target.value);
-              if (onChange) onChange(e.target.value);
+            onChange={(val) => {
+              const newVal = val || "";
+              setContent(newVal);
+              if (onChange) onChange(newVal);
             }}
-            onScroll={handleScroll}
-            onSelect={handleSelect}
-            onKeyUp={handleSelect}
-            onMouseUp={handleSelect}
-            spellCheck={false}
-            placeholder="Type code here..."
+            onMount={handleEditorDidMount}
+            options={{
+              fontSize: 12,
+              fontFamily: "var(--font-mono)",
+              minimap: { enabled: false },
+              automaticLayout: true,
+              scrollBeyondLastLine: false,
+              cursorBlinking: "smooth",
+              lineNumbersMinChars: 3,
+              tabSize: 4,
+              insertSpaces: true,
+              wordWrap: "on",
+              renderLineHighlight: "all",
+              scrollbar: {
+                vertical: "visible",
+                horizontal: "visible",
+                verticalScrollbarSize: 10,
+                horizontalScrollbarSize: 10,
+              }
+            }}
           />
         </div>
       )}

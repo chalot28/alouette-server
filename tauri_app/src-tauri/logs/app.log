@@ -256,3 +256,43 @@
 [2026-05-24 15:47:18.078] Reading file: D:/server_dvtn/README.md
 [2026-05-24 15:51:39.094] Reading file: D:/server_dvtn/jest.config.js
 [2026-05-24 15:52:59.833] Reading file: D:/server_dvtn/nul
+[2026-05-24 15:57:59.879] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 15:57:59.882] Proto CLI verified and active.
+[2026-05-24 15:57:59.959] Toolchains checked / verified stable.
+[2026-05-24 15:58:14.838] Cloudflared binary verified / updated successfully.
+[2026-05-24 15:58:14.840] Isolated environment initialized successfully!
+[2026-05-24 16:00:34.755] Reading file: D:/server_dvtn/.env
+[2026-05-24 16:00:48.153] Reading file: D:/server_dvtn/.gitignore
+[2026-05-24 16:01:43.913] Reading file: D:/server_dvtn/src/config/chatbot-prompt.json
+[2026-05-24 16:01:44.715] Reading file: D:/server_dvtn/src/config/index.js
+[2026-05-24 16:01:52.132] Reading file: D:/server_dvtn/tunnel_cf/cloudflared.exe
+[2026-05-24 16:01:55.170] Reading file: D:/server_dvtn/upload_1/images/.gitkeep
+[2026-05-24 16:01:56.405] Reading file: D:/server_dvtn/upload_1/images/02bf763e-73b9-4c30-8f23-2277dbd9d03a.png
+[2026-05-24 16:02:07.914] Reading file: D:/server_dvtn/tunnel_cf/cloudflared.exe
+[2026-05-24 16:02:18.261] Reading file: D:/server_dvtn/README.md
+[2026-05-24 16:17:41.290] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 16:17:41.295] Proto CLI verified and active.
+[2026-05-24 16:17:41.323] Toolchains checked / verified stable.
+[2026-05-24 16:17:48.927] Cloudflared binary verified / updated successfully.
+[2026-05-24 16:17:48.929] Isolated environment initialized successfully!
+[2026-05-24 16:18:49.060] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 16:18:49.064] Proto CLI verified and active.
+[2026-05-24 16:18:49.083] Toolchains checked / verified stable.
+[2026-05-24 16:18:57.840] Cloudflared binary verified / updated successfully.
+[2026-05-24 16:18:57.841] Isolated environment initialized successfully!
+[2026-05-24 16:39:43.726] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 16:39:43.730] Proto CLI verified and active.
+[2026-05-24 16:39:43.768] Toolchains checked / verified stable.
+[2026-05-24 16:39:50.500] Cloudflared binary verified / updated successfully.
+[2026-05-24 16:39:50.520] Isolated environment initialized successfully!
+[2026-05-24 17:11:52.974] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 17:11:52.980] Proto CLI verified and active.
+[2026-05-24 17:11:53.096] Toolchains checked / verified stable.
+[2026-05-24 17:12:03.122] Cloudflared binary verified / updated successfully.
+[2026-05-24 17:12:03.123] Isolated environment initialized successfully!
+[2026-05-24 17:12:26.719] Reading file: D:/server_dvtn/server.log
+[2026-05-24 17:12:32.182] Reading file: D:/server_dvtn/.prettierrc
+[2026-05-24 17:12:37.244] Reading file: D:/server_dvtn/.env
+[2026-05-24 20:50:39.390] Reading file: D:/server_dvtn/.env
+[2026-05-24 20:54:36.458] Tauri command received: start_project_process for project_id: backend
+[2026-05-24 20:54:36.461] Process successfully started for project_id: backend

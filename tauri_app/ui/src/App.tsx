@@ -1,7 +1,14 @@
 import { useEffect, useState, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { Layers, Activity, User, Terminal as TerminalIcon, Plus, X, FileCode, MoreHorizontal } from "lucide-react";
+import {
+  Layers,
+  Activity,
+  User,
+  Terminal as TerminalIcon,
+  Plus,
+  X,
+  FileCode,
+  MoreHorizontal,
+} from "lucide-react";
 
 // Components
 import Header from "./components/Header";
@@ -14,117 +21,33 @@ import DiagnosticsPanel from "./components/DiagnosticsPanel";
 import FileExplorer from "./components/FileExplorer";
 import SqliteEditor from "./components/SqliteEditor";
 
+// Types
+import {
+  ResourceHistory,
+  TerminalSessionItem,
+  ProcessState,
+  LogLine,
+} from "./types";
 
-// Interfaces
-interface Project {
-  id: string;
-  name: string;
-  command: string;
-  args: string[];
-  cwd?: string;
-  setup_command?: string;
-  setup_args?: string[];
-  auto_restart?: boolean;
-  env?: { [key: string]: string };
-  max_cpu_percent?: number;
-  max_ram_mb?: number;
-  port?: number;
-  source?: string;
-  terminal_mode?: string;
-  toolchain?: string;
-  toolchain_version?: string;
-  enable_tunnel?: boolean;
-}
-
-interface TerminalSessionItem {
-  id: string;
-  name: string;
-}
-
-interface ProcessState {
-  type: "Stopped" | "Setup" | "Running" | "Crashing" | "Terminated" | "Fatal";
-  data?: any; // PID or error reasons
-}
-
-interface LogLine {
-  text: string;
-  stream: "stdout" | "stderr" | "system";
-  timestamp: number;
-}
-
-interface ResourceHistory {
-  [projectId: string]: {
-    cpu: number[];
-    ram: number[];
-  };
-}
+// Hooks
+import { useProjects } from "./hooks/useProjects";
+import { useResources } from "./hooks/useResources";
+import { useTerminal } from "./hooks/useTerminal";
 
 export default function App() {
   // Theme State
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
-  // Project Lists & Active Tabs
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string>("");
-  const [projectStates, setProjectStates] = useState<{ [id: string]: ProcessState }>({});
-  const [projectLogs, setProjectLogs] = useState<{ [id: string]: LogLine[] }>({});
-  const [resourceHistory, setResourceHistory] = useState<ResourceHistory>({});
-  const [termOutputs, setTermOutputs] = useState<{ [id: string]: string }>({});
-
-  // State to store terminals per project
-  const [projectTerminals, setProjectTerminals] = useState<{ [projectId: string]: TerminalSessionItem[] }>({});
-  const [activeTerminalIds, setActiveTerminalIds] = useState<{ [projectId: string]: string }>({});
-
-  // Bottom nav tab (for right-bottom panel between manager / user)
-  const [rightBottomTab, setRightBottomTab] = useState<"manager" | "user">("manager");
-
   // Dynamic UI States
   const [searchQuery, setSearchQuery] = useState("");
-  const [logFilter, setLogFilter] = useState<"all" | "stdout" | "stderr" | "system">("all");
-  const [logSearchQuery, setLogSearchQuery] = useState("");
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [settingMenuOpen, setSettingMenuOpen] = useState(false);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
-  const [openFilePath, setOpenFilePath] = useState<string | null>(null);
-  const [openFiles, setOpenFiles] = useState<string[]>([]);
-  const [openFileContent, setOpenFileContent] = useState<string | null>(null);
-  const [isFileLoading, setIsFileLoading] = useState(false);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [isSqliteFile, setIsSqliteFile] = useState(false);
-  const [filesContent, setFilesContent] = useState<{ [path: string]: string }>({});
-  const [filesOriginalContent, setFilesOriginalContent] = useState<{ [path: string]: string }>({});
-  const [showTabsMenu, setShowTabsMenu] = useState(false);
 
-  useEffect(() => {
-    // Chỉ reset các trạng thái chuyển đổi nhanh, không giải phóng openFiles hoặc filesContent
-    setFileError(null);
-    setShowTabsMenu(false);
-  }, [activeProjectId]);
-
-  // Form State
-  const [newProjName, setNewProjName] = useState("");
-  const [newProjCmd, setNewProjCmd] = useState("");
-  const [newProjArgs, setNewProjArgs] = useState("");
-  const [newProjCwd, setNewProjCwd] = useState("");
-  const [newProjSetup, setNewProjSetup] = useState("");
-  const [newProjSetupArgs, setNewProjSetupArgs] = useState("");
-  const [newProjRestart, setNewProjRestart] = useState(true);
-  const [newProjEnv, setNewProjEnv] = useState<{ key: string; value: string }[]>([]);
-  const [newProjCpu, setNewProjCpu] = useState<string>("");
-  const [newProjRam, setNewProjRam] = useState<string>("");
-  const [newProjPort, setNewProjPort] = useState<string>("");
-  const [newProjSource, setNewProjSource] = useState("");
-  const [newProjTerminalMode, setNewProjTerminalMode] = useState("log");
-  const [newProjToolchain, setNewProjToolchain] = useState("");
-  const [newProjToolchainVersion, setNewProjToolchainVersion] = useState("stable");
-  const [newProjEnableTunnel, setNewProjEnableTunnel] = useState(false);
-
-  // Port conflict state
-  const [portConflict, setPortConflict] = useState<{ port: number; pid: number } | null>(null);
-
-  // Terminal Auto Scroll Refs
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
+  // Bottom nav tab (for right-bottom panel between manager / user)
+  const [rightBottomTab, setRightBottomTab] = useState<"manager" | "user">(
+    "manager",
+  );
 
   // Canvas Refs for CPU/RAM Charts
   const cpuCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -132,7 +55,9 @@ export default function App() {
 
   // Persistent refs for scroll and cursor positions of files in CodeEditor
   const editorScrollPositionsRef = useRef<{ [path: string]: number }>({});
-  const editorCursorPositionsRef = useRef<{ [path: string]: { start: number; end: number } }>({});
+  const editorCursorPositionsRef = useRef<{
+    [path: string]: { start: number; end: number };
+  }>({});
 
   // Resizable Panel States
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(220);
@@ -153,92 +78,213 @@ export default function App() {
   const [isDraggingMonitor, setIsDraggingMonitor] = useState(false);
   const [isDraggingConfig, setIsDraggingConfig] = useState(false);
 
-  // Effect to load file content when a file path is selected
+  // ── Cross-hook dependency holders (useRef pattern to break circular deps) ──
+  const setResourceHistoryRef = useRef<
+    React.Dispatch<React.SetStateAction<ResourceHistory>>
+  >(() => {});
+  const projectTerminalsRef = useRef<{
+    [projectId: string]: TerminalSessionItem[];
+  }>({});
+  const setProjectTerminalsRef = useRef<
+    React.Dispatch<
+      React.SetStateAction<{ [projectId: string]: TerminalSessionItem[] }>
+    >
+  >(() => {});
+  const setActiveTerminalIdsRef = useRef<
+    React.Dispatch<React.SetStateAction<{ [projectId: string]: string }>>
+  >(() => {});
+  const setTermOutputsRef = useRef<
+    React.Dispatch<React.SetStateAction<{ [id: string]: string }>>
+  >(() => {});
+
+  // ── Hooks ──
+
+  // 1. Project management
+  const projectHook = useProjects({
+    setResourceHistory: (action) => setResourceHistoryRef.current(action),
+    projectTerminals: projectTerminalsRef.current,
+    setProjectTerminals: (action) => setProjectTerminalsRef.current(action),
+    setActiveTerminalIds: (action) => setActiveTerminalIdsRef.current(action),
+    setTermOutputs: (action) => setTermOutputsRef.current(action),
+  });
+
+  const {
+    projects,
+    activeProjectId,
+    setActiveProjectId,
+    projectStates,
+    projectLogs,
+    setProjectLogs,
+    activeProject,
+    openFilePath,
+    setOpenFilePath,
+    openFiles,
+    setOpenFiles,
+    openFileContent,
+    isFileLoading,
+    fileError,
+    isSqliteFile,
+    filesContent,
+    setFilesContent,
+    filesOriginalContent,
+    setFilesOriginalContent,
+    showTabsMenu,
+    setShowTabsMenu,
+    newProjName,
+    setNewProjName,
+    newProjCmd,
+    setNewProjCmd,
+    newProjArgs,
+    setNewProjArgs,
+    newProjCwd,
+    setNewProjCwd,
+    newProjSetup,
+    setNewProjSetup,
+    newProjSetupArgs,
+    setNewProjSetupArgs,
+    newProjRestart,
+    setNewProjRestart,
+    newProjEnv,
+    setNewProjEnv,
+    newProjCpu,
+    setNewProjCpu,
+    newProjRam,
+    setNewProjRam,
+    newProjPort,
+    setNewProjPort,
+    newProjSource,
+    setNewProjSource,
+    newProjTerminalMode,
+    setNewProjTerminalMode,
+    newProjToolchain,
+    setNewProjToolchain,
+    newProjToolchainVersion,
+    setNewProjToolchainVersion,
+    newProjEnableTunnel,
+    setNewProjEnableTunnel,
+    portConflict,
+    setPortConflict,
+    handleStart,
+    handleStartProject,
+    handleStopProject,
+    handleStop,
+    handleAddProject,
+    handleDeleteProject,
+    handleExportConfig,
+    handleImportMockConfig,
+    wipeConfig,
+    handleResetSetupForm,
+    handleForceKillAndStart,
+    handleFileOpen,
+    handleFileClose,
+    handleCloseAllTabs,
+    handleSaveAndCloseAllTabs,
+  } = projectHook;
+
+  // 2. Resource monitoring
+  const resourceHook = useResources(
+    activeProjectId,
+    theme,
+    cpuCanvasRef,
+    ramCanvasRef,
+  );
+  const { resourceHistory, forceKillProcess } = resourceHook;
+
+  // Update cross-hook refs after useResources is called
+  setResourceHistoryRef.current = resourceHook.setResourceHistory;
+
+  // 3. Terminal management
+  const terminalHook = useTerminal(activeProjectId, activeProject, projects);
+  const {
+    termOutputs,
+    setTermOutputs,
+    projectTerminals,
+    setProjectTerminals,
+    activeTerminalIds,
+    setActiveTerminalIds,
+    logFilter,
+    setLogFilter,
+    logSearchQuery,
+    setLogSearchQuery,
+    autoScroll,
+    setAutoScroll,
+    terminalRef,
+    handleAddTerminal,
+    handleDeleteTerminal,
+    handleDeleteAllTerminals,
+    handleRenameTerminal,
+    handleTerminalScroll,
+  } = terminalHook;
+
+  // Update cross-hook refs after useTerminal is called
+  projectTerminalsRef.current = projectTerminals;
+  setProjectTerminalsRef.current = setProjectTerminals;
+  setActiveTerminalIdsRef.current = setActiveTerminalIds;
+  setTermOutputsRef.current = setTermOutputs;
+
+  // ── Theme effect ──
   useEffect(() => {
-    if (openFilePath) {
-      const lowerPath = openFilePath.toLowerCase();
-      const isSql = lowerPath.endsWith(".db") || lowerPath.endsWith(".sqlite") || lowerPath.endsWith(".sqlite3");
-      setIsSqliteFile(isSql);
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
-      if (isSql) {
-        setIsFileLoading(false);
-        setFileError(null);
-        return;
-      }
+  // ── System Uptime Counter ──
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setUptimeSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-      // If already loaded in memory, do not re-fetch from disk (preserves unsaved session edits!)
-      if (filesContent[openFilePath] !== undefined) {
-        setIsFileLoading(false);
-        setFileError(null);
-        return;
-      }
+  // ── Window click listener to close dropdowns ──
+  useEffect(() => {
+    const handleWindowClick = () => {
+      setFileMenuOpen(false);
+      setSettingMenuOpen(false);
+      setShowTabsMenu(false);
+    };
+    window.addEventListener("click", handleWindowClick);
+    return () => window.removeEventListener("click", handleWindowClick);
+  }, []);
 
-      const loadFileContent = async (path: string) => {
-        setIsFileLoading(true);
-        setFileError(null);
-        try {
-          // Nhận dữ liệu dưới dạng chuỗi Base64 (rất nhanh, không treo UI)
-          const base64Data = await invoke<string>("read_file_content", { path });
+  // ── Derived state ──
+  const activeState: ProcessState = projectStates[activeProjectId] || {
+    type: "Stopped",
+  };
+  const activeLogs: LogLine[] = projectLogs[activeProjectId] || [];
+  const activeHistory = resourceHistory[activeProjectId] || {
+    cpu: [],
+    ram: [],
+  };
+  const activeCpuVal = activeHistory.cpu[activeHistory.cpu.length - 1] || 0.0;
+  const activeRamVal = activeHistory.ram[activeHistory.ram.length - 1] || 0.0;
 
-          // Chuyển Base64 ngược lại thành mảng bytes
-          const binaryString = window.atob(base64Data);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
+  // Filter project lists based on Search input
+  const filteredProjects = projects.filter((p) => {
+    const q = searchQuery.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.command.toLowerCase().includes(q) ||
+      p.args.join(" ").toLowerCase().includes(q)
+    );
+  });
 
-          // Kiểm tra Byte Order Mark (BOM) để tự động nhận dạng mã hóa chính xác
-          let decodedText = "";
-          if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
-            // UTF-16 Little Endian (BOM: FF FE)
-            const decoder = new TextDecoder('utf-16le');
-            decodedText = decoder.decode(bytes.slice(2)); // Cắt bỏ BOM
-          } else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
-            // UTF-16 Big Endian (BOM: FE FF)
-            const decoder = new TextDecoder('utf-16be');
-            decodedText = decoder.decode(bytes.slice(2)); // Cắt bỏ BOM
-          } else if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
-            // UTF-8 with BOM (BOM: EF BB BF)
-            const decoder = new TextDecoder('utf-8');
-            decodedText = decoder.decode(bytes.slice(3)); // Cắt bỏ BOM
-          } else {
-            // Không có BOM. Thử giải mã bằng UTF-8 trước
-            try {
-              const decoder = new TextDecoder('utf-8', { fatal: true });
-              decodedText = decoder.decode(bytes);
-            } catch (e) {
-              // Nếu lỗi UTF-8, kiểm tra xem có dấu hiệu UTF-16 không có BOM không (nhiều byte null)
-              let nullCount = 0;
-              for (let i = 0; i < Math.min(bytes.length, 100); i++) {
-                if (bytes[i] === 0) nullCount++;
-              }
-              if (nullCount > 10) {
-                const decoder = new TextDecoder('utf-16le');
-                decodedText = decoder.decode(bytes);
-              } else {
-                // Thử giải mã bằng Windows-1258 (Bảng mã tiếng Việt chuẩn của Windows)
-                console.warn("UTF-8 fail, falling back to Windows-1258 (Vietnamese)");
-                const fallbackDecoder = new TextDecoder('windows-1258');
-                decodedText = fallbackDecoder.decode(bytes);
-              }
-            }
-          }
-
-          setFilesContent((prev) => ({ ...prev, [path]: decodedText }));
-          setFilesOriginalContent((prev) => ({ ...prev, [path]: decodedText }));
-        } catch (err: any) {
-          setFileError(`Failed to read file: ${err.message || err}`);
-        } finally {
-          setIsFileLoading(false);
-        }
-      };
-      loadFileContent(openFilePath);
-    } else {
-      setFileError(null);
-      setIsFileLoading(false);
+  // Filter logs inside Terminal
+  const filteredLogs = activeLogs.filter((log) => {
+    if (logFilter !== "all" && log.stream !== logFilter) return false;
+    if (logSearchQuery.trim()) {
+      return log.text.toLowerCase().includes(logSearchQuery.toLowerCase());
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openFilePath]);
+    return true;
+  });
+
+  // ── Auto-scroll terminal ──
+  useEffect(() => {
+    if (autoScroll && terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [activeLogs, autoScroll]);
+
+  // ── Resize Handlers ──
 
   // 1. Left Sidebar Width Resize Handler
   const handleLeftResizeStart = (e: React.MouseEvent) => {
@@ -262,7 +308,10 @@ export default function App() {
     e.preventDefault();
     setIsDraggingRight(true);
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const newWidth = Math.max(200, Math.min(500, window.innerWidth - moveEvent.clientX));
+      const newWidth = Math.max(
+        200,
+        Math.min(500, window.innerWidth - moveEvent.clientX),
+      );
       setRightSidebarWidth(newWidth);
     };
     const handleMouseUp = () => {
@@ -281,7 +330,10 @@ export default function App() {
     setIsDraggingTabList(true);
     const tabListRect = tabListRef.current.getBoundingClientRect();
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const newHeight = Math.max(80, Math.min(400, moveEvent.clientY - tabListRect.top));
+      const newHeight = Math.max(
+        80,
+        Math.min(400, moveEvent.clientY - tabListRect.top),
+      );
       setTabListHeight(newHeight);
     };
     const handleMouseUp = () => {
@@ -300,7 +352,10 @@ export default function App() {
     setIsDraggingMonitor(true);
     const monitorRect = monitorRef.current.getBoundingClientRect();
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const newHeight = Math.max(100, Math.min(500, moveEvent.clientY - monitorRect.top));
+      const newHeight = Math.max(
+        100,
+        Math.min(500, moveEvent.clientY - monitorRect.top),
+      );
       setMonitorHeight(newHeight);
     };
     const handleMouseUp = () => {
@@ -319,7 +374,10 @@ export default function App() {
     setIsDraggingConfig(true);
     const configRect = configRef.current.getBoundingClientRect();
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const newHeight = Math.max(120, Math.min(450, moveEvent.clientY - configRect.top));
+      const newHeight = Math.max(
+        120,
+        Math.min(450, moveEvent.clientY - configRect.top),
+      );
       setConfigHeight(newHeight);
     };
     const handleMouseUp = () => {
@@ -331,820 +389,7 @@ export default function App() {
     window.addEventListener("mouseup", handleMouseUp);
   };
 
-  // 1. Initial State Hydration & App Lifecycle Listeners
-  useEffect(() => {
-    // Set theme class on document element
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
-
-  // System Uptime Counter
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setUptimeSeconds((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Window click listener to automatically close dropdowns
-  useEffect(() => {
-    const handleWindowClick = () => {
-      setFileMenuOpen(false);
-      setSettingMenuOpen(false);
-      setShowTabsMenu(false);
-    };
-    window.addEventListener("click", handleWindowClick);
-    return () => window.removeEventListener("click", handleWindowClick);
-  }, []);
-
-  useEffect(() => {
-    // Load initial project list config from backend
-    loadProjects();
-
-    // Listen to incoming piped stdout/stderr log events
-    const logListener = listen<any>("process-log", (event) => {
-      const payload = event.payload; // { project_id, stream, text, timestamp }
-      setProjectLogs((prev) => {
-        const lines = prev[payload.project_id] || [];
-        const newLines = [
-          ...lines,
-          {
-            text: payload.text,
-            stream: payload.stream,
-            timestamp: payload.timestamp
-          }
-        ];
-        // Capped at 2000 lines
-        if (newLines.length > 2000) newLines.shift();
-        return {
-          ...prev,
-          [payload.project_id]: newLines
-        };
-      });
-    });
-
-    // Listen to process state transitions
-    const statusListener = listen<any>("process-status", (event) => {
-      const payload = event.payload; // { project_id, state }
-      setProjectStates((prev) => ({
-        ...prev,
-        [payload.project_id]: payload.state
-      }));
-    });
-
-    // Listen to real-time process tree resource updates
-    const resourceListener = listen<any>("resource-update", (event) => {
-      const payload = event.payload; // { project_id, cpu_percentage, ram_bytes }
-      const ramMb = payload.ram_bytes / (1024 * 1024);
-
-      setResourceHistory((prev) => {
-        const pHistory = prev[payload.project_id] || { cpu: [], ram: [] };
-        const newCpu = [...pHistory.cpu, payload.cpu_percentage].slice(-30);
-        const newRam = [...pHistory.ram, ramMb].slice(-30);
-        return {
-          ...prev,
-          [payload.project_id]: {
-            cpu: newCpu,
-            ram: newRam
-          }
-        };
-      });
-    });
-
-    // Listen to interactive terminal output events
-    const termListener = listen<any>("terminal-output", (event) => {
-      const payload = event.payload; // { session_id, text }
-      setTermOutputs((prev) => {
-        const prevText = prev[payload.session_id] || "";
-        let newText = prevText + payload.text;
-        if (newText.length > 100000) {
-          newText = newText.slice(newText.length - 100000);
-        }
-        return {
-          ...prev,
-          [payload.session_id]: newText,
-        };
-      });
-    });
-
-    return () => {
-      logListener.then((unlisten) => unlisten());
-      statusListener.then((unlisten) => unlisten());
-      resourceListener.then((unlisten) => unlisten());
-      termListener.then((unlisten) => unlisten());
-    };
-  }, []);
-
-  // Sync state parameters when clicking around tabs
-  const activeProject = projects.find((p) => p.id === activeProjectId);
-  const activeState = projectStates[activeProjectId] || { type: "Stopped" };
-  const activeLogs = projectLogs[activeProjectId] || [];
-  const activeHistory = resourceHistory[activeProjectId] || { cpu: [], ram: [] };
-  const activeCpuVal = activeHistory.cpu[activeHistory.cpu.length - 1] || 0.0;
-  const activeRamVal = activeHistory.ram[activeHistory.ram.length - 1] || 0.0;
-
-  // Populate configuration fields when active project changes
-  useEffect(() => {
-    if (activeProjectId && activeProjectId !== "__create_project__") {
-      const activeProj = projects.find((p) => p.id === activeProjectId);
-      if (activeProj) {
-        setNewProjName(activeProj.name);
-        setNewProjCmd(activeProj.command);
-        setNewProjArgs(activeProj.args.join(" "));
-        setNewProjCwd(activeProj.cwd || "");
-        setNewProjSetup(activeProj.setup_command || "");
-        setNewProjSetupArgs(activeProj.setup_args ? activeProj.setup_args.join(" ") : "");
-        setNewProjRestart(activeProj.auto_restart !== false);
-        setNewProjCpu(activeProj.max_cpu_percent ? String(activeProj.max_cpu_percent) : "");
-        setNewProjRam(activeProj.max_ram_mb ? String(activeProj.max_ram_mb) : "");
-        setNewProjPort(activeProj.port ? String(activeProj.port) : "");
-        if (activeProj.env) {
-          setNewProjEnv(Object.entries(activeProj.env).map(([key, value]) => ({ key, value })));
-        } else {
-          setNewProjEnv([]);
-        }
-      }
-    }
-  }, [activeProjectId, projects]);
-
-  // 1.5. Interactive Sandboxed Terminal Auto-spawner
-  useEffect(() => {
-    if (activeProjectId && activeProjectId !== "__create_project__" && activeProject) {
-      setProjectTerminals((prev) => {
-        const currentTerms = prev[activeProjectId] || [];
-        if (currentTerms.length === 0) {
-          const defaultTermId = `${activeProjectId}-term-default`;
-          const defaultTerm: TerminalSessionItem = { id: defaultTermId, name: "Terminal 1" };
-
-          setActiveTerminalIds((activePrev) => ({
-            ...activePrev,
-            [activeProjectId]: defaultTermId
-          }));
-
-          invoke("spawn_terminal_session", {
-            sessionId: defaultTermId,
-            cwd: activeProject.cwd || null,
-          }).catch((err) => {
-            console.error("Failed to spawn default terminal session for " + activeProjectId, err);
-          });
-
-          return {
-            ...prev,
-            [activeProjectId]: [defaultTerm]
-          };
-        }
-        return prev;
-      });
-    }
-  }, [activeProjectId, activeProject?.cwd]);
-
-  // 1.6. Load SQLite historical logs when activeProjectId changes
-  useEffect(() => {
-    if (activeProjectId && activeProjectId !== "__create_project__") {
-      invoke<LogLine[]>("get_project_logs", { projectId: activeProjectId, limit: 1000 })
-        .then((logs) => {
-          setProjectLogs((prev) => ({
-            ...prev,
-            [activeProjectId]: logs
-          }));
-        })
-        .catch((err) => {
-          console.error("Failed to load historical logs from SQLite: ", err);
-        });
-    }
-  }, [activeProjectId]);
-
-
-  // 1.7. Project source auto-fill name helper
-  useEffect(() => {
-    if (!newProjSource.trim()) return;
-
-    // Auto-fill project identifier (name) if empty
-    if (!newProjName) {
-      let extractedName = "";
-      const source = newProjSource.trim();
-      if (source.startsWith("http://") || source.startsWith("https://") || source.startsWith("git@")) {
-        const parts = source.split("/");
-        let lastPart = parts[parts.length - 1];
-        if (lastPart.endsWith(".git")) {
-          lastPart = lastPart.slice(0, -4);
-        }
-        extractedName = lastPart;
-      } else {
-        const parts = source.split(/[\\/]/);
-        extractedName = parts[parts.length - 1] || "my-project";
-      }
-      if (extractedName) {
-        setNewProjName(extractedName);
-      }
-    }
-  }, [newProjSource]);
-
-  // 1.8. Toolchain auto-fill executor helper
-  useEffect(() => {
-    if (newProjToolchain === "node") {
-      if (!newProjCmd) setNewProjCmd("npm");
-      if (!newProjArgs) setNewProjArgs("run dev");
-    } else if (newProjToolchain === "go") {
-      if (!newProjCmd) setNewProjCmd("go");
-      if (!newProjArgs) setNewProjArgs("run main.go");
-    } else if (newProjToolchain === "python") {
-      if (!newProjCmd) setNewProjCmd("python");
-      if (!newProjArgs) setNewProjArgs("main.py");
-    }
-  }, [newProjToolchain]);
-
-
-  // 2. Render CPU & RAM charts dynamically onto Canvas viewports
-  useEffect(() => {
-    drawCanvasChart(
-      cpuCanvasRef.current,
-      activeHistory.cpu,
-      theme === "dark" ? "rgba(58, 134, 255, 1)" : "rgba(0, 86, 224, 1)",
-      true
-    );
-  }, [activeHistory.cpu, theme]);
-
-  useEffect(() => {
-    drawCanvasChart(
-      ramCanvasRef.current,
-      activeHistory.ram,
-      "rgba(16, 185, 129, 1)",
-      false
-    );
-  }, [activeHistory.ram, theme]);
-
-  // Scroll terminal automatically
-  useEffect(() => {
-    if (autoScroll && terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-    }
-  }, [activeLogs, autoScroll]);
-
-  // Load project config helper
-  const loadProjects = async () => {
-    try {
-      const list = await invoke<Project[]>("get_projects");
-      setProjects(list);
-
-      // Hydrate state for each loaded project
-      for (const p of list) {
-        const state = await invoke<ProcessState>("get_project_state", { projectId: p.id });
-        if (state) {
-          setProjectStates((prev) => ({ ...prev, [p.id]: state }));
-        }
-      }
-
-      if (list.length > 0 && !activeProjectId) {
-        setActiveProjectId(list[0].id);
-      }
-    } catch (e) {
-      console.error("Failed to load projects:", e);
-    }
-  };
-
-  // 3. Command API Invocation Hooks
-  const handleStart = async (forceStart = false) => {
-    if (!activeProjectId || !activeProject) return;
-    try {
-      if (!forceStart && activeProject.port) {
-        const occupiedPid = await invoke<number | null>("check_port_status", { port: activeProject.port });
-        if (occupiedPid) {
-          setPortConflict({ port: activeProject.port, pid: occupiedPid });
-          return;
-        }
-      }
-
-      // Clear logs before launching
-      setProjectLogs((prev) => ({ ...prev, [activeProjectId]: [] }));
-      setResourceHistory((prev) => ({
-        ...prev,
-        [activeProjectId]: { cpu: [], ram: [] }
-      }));
-      await invoke("start_project_process", { projectId: activeProjectId });
-    } catch (e: any) {
-      alert(`Execution failed: ${e}`);
-    }
-  };
-
-  const handleStartProject = async (id: string) => {
-    try {
-      const proj = projects.find((p) => p.id === id);
-      if (!proj) return;
-
-      const occupiedPid = proj.port ? await invoke<number | null>("check_port_status", { port: proj.port }) : null;
-      if (occupiedPid) {
-        setPortConflict({ port: proj.port!, pid: occupiedPid });
-        return;
-      }
-
-      setProjectLogs((prev) => ({ ...prev, [id]: [] }));
-      setResourceHistory((prev) => ({
-        ...prev,
-        [id]: { cpu: [], ram: [] }
-      }));
-      await invoke("start_project_process", { projectId: id });
-    } catch (e: any) {
-      alert(`Execution failed: ${e}`);
-    }
-  };
-
-  const handleStopProject = async (id: string) => {
-    try {
-      await invoke("stop_project_process", { projectId: id });
-    } catch (e: any) {
-      alert(`Teardown failed: ${e}`);
-    }
-  };
-
-  const forceKillProcess = async (pid: number) => {
-    try {
-      await invoke("force_kill_process", { pid });
-    } catch (e: any) {
-      alert(`Force kill failed: ${e}`);
-    }
-  };
-
-  const handleForceKillAndStart = async () => {
-    if (!portConflict || !activeProjectId) return;
-    try {
-      await invoke("force_kill_process", { pid: portConflict.pid });
-      setPortConflict(null);
-      setTimeout(async () => {
-        await handleStart(true);
-      }, 500);
-    } catch (e: any) {
-      alert(`Force kill failed: ${e}`);
-    }
-  };
-
-  const handleStop = async () => {
-    if (!activeProjectId) return;
-    try {
-      await invoke("stop_project_process", { projectId: activeProjectId });
-    } catch (e: any) {
-      alert(`Teardown failed: ${e}`);
-    }
-  };
-
-  const handleAddProject = async () => {
-    if (!newProjName || !newProjCmd) {
-      alert("Name and command fields are mandatory.");
-      return;
-    }
-
-    const id = newProjName.toLowerCase().replace(/[^a-z0-9]/g, "-");
-    const argsArray = newProjArgs
-      .split(" ")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    const setupCommand = newProjSetup.trim() || undefined;
-    const setupArgs = newProjSetupArgs.trim()
-      ? newProjSetupArgs.split(" ").map((s) => s.trim()).filter((s) => s.length > 0)
-      : undefined;
-
-    const envObj: { [key: string]: string } = {};
-    newProjEnv.forEach((item) => {
-      if (item.key.trim()) {
-        envObj[item.key.trim()] = item.value;
-      }
-    });
-
-    const maxCpuVal = newProjCpu ? parseInt(newProjCpu, 10) : undefined;
-    const maxRamVal = newProjRam ? parseInt(newProjRam, 10) : undefined;
-    const portVal = newProjPort ? parseInt(newProjPort, 10) : undefined;
-
-    const newConfig: Project = {
-      id: activeProjectId && activeProjectId !== "__create_project__" ? activeProjectId : id,
-      name: newProjName,
-      command: newProjCmd,
-      args: argsArray,
-      cwd: newProjCwd.trim() || undefined,
-      setup_command: setupCommand,
-      setup_args: setupArgs,
-      auto_restart: newProjRestart,
-      env: Object.keys(envObj).length > 0 ? envObj : undefined,
-      max_cpu_percent: maxCpuVal,
-      max_ram_mb: maxRamVal,
-      port: portVal,
-      source: newProjSource.trim() || undefined,
-      terminal_mode: newProjTerminalMode,
-      toolchain: newProjToolchain.trim() || undefined,
-      toolchain_version: newProjToolchainVersion.trim() || undefined,
-      enable_tunnel: newProjEnableTunnel
-    };
-
-    try {
-      await invoke("register_project", { config: newConfig });
-      await loadProjects();
-      alert("Configuration saved successfully!");
-      setActiveProjectId(newConfig.id);
-    } catch (e: any) {
-      alert(`Failed to save project: ${e}`);
-    }
-  };
-
-  const handleAddTerminal = (projectId: string) => {
-    const proj = projects.find((p) => p.id === projectId);
-    const cwd = proj?.cwd || null;
-
-    setProjectTerminals((prev) => {
-      const currentTerms = prev[projectId] || [];
-      const nextIndex = currentTerms.length + 1;
-      const newTermId = `${projectId}-term-${Date.now()}`;
-      const newTerm: TerminalSessionItem = {
-        id: newTermId,
-        name: `Terminal ${nextIndex}`
-      };
-
-      setActiveTerminalIds((activePrev) => ({
-        ...activePrev,
-        [projectId]: newTermId
-      }));
-
-      invoke("spawn_terminal_session", {
-        sessionId: newTermId,
-        cwd
-      }).catch((err) => {
-        console.error("Failed to spawn terminal session:", err);
-      });
-
-      return {
-        ...prev,
-        [projectId]: [...currentTerms, newTerm]
-      };
-    });
-  };
-
-  const handleDeleteTerminal = async (projectId: string, terminalId: string) => {
-    try {
-      await invoke("kill_terminal_session", { sessionId: terminalId });
-    } catch (err) {
-      console.error("Failed to kill terminal session:", err);
-    }
-
-    setTermOutputs((prev) => {
-      const copy = { ...prev };
-      delete copy[terminalId];
-      return copy;
-    });
-
-    setProjectTerminals((prev) => {
-      const currentTerms = prev[projectId] || [];
-      const remainingTerms = currentTerms.filter((t) => t.id !== terminalId);
-
-      setActiveTerminalIds((activePrev) => {
-        const currentActive = activePrev[projectId];
-        if (currentActive === terminalId) {
-          return {
-            ...activePrev,
-            [projectId]: remainingTerms.length > 0 ? remainingTerms[0].id : ""
-          };
-        }
-        return activePrev;
-      });
-
-      return {
-        ...prev,
-        [projectId]: remainingTerms
-      };
-    });
-  };
-
-  const handleDeleteAllTerminals = async (projectId: string) => {
-    const currentTerms = projectTerminals[projectId] || [];
-
-    for (const term of currentTerms) {
-      try {
-        await invoke("kill_terminal_session", { sessionId: term.id });
-      } catch (err) {
-        console.error("Failed to kill terminal session:", err);
-      }
-
-      setTermOutputs((prev) => {
-        const copy = { ...prev };
-        delete copy[term.id];
-        return copy;
-      });
-    }
-
-    // Reset with a default terminal
-    const defaultTermId = `${projectId}-term-default-${Date.now()}`;
-    const defaultTerm: TerminalSessionItem = { id: defaultTermId, name: "Terminal 1" };
-    const proj = projects.find((p) => p.id === projectId);
-
-    setProjectTerminals((prev) => ({
-      ...prev,
-      [projectId]: [defaultTerm]
-    }));
-
-    setActiveTerminalIds((prev) => ({
-      ...prev,
-      [projectId]: defaultTermId
-    }));
-
-    try {
-      await invoke("spawn_terminal_session", {
-        sessionId: defaultTermId,
-        cwd: proj?.cwd || null
-      });
-    } catch (err) {
-      console.error("Failed to spawn terminal session after trash:", err);
-    }
-  };
-
-  const handleRenameTerminal = (projectId: string, terminalId: string, newName: string) => {
-    if (!newName.trim()) return;
-    setProjectTerminals((prev) => {
-      const current = prev[projectId] || [];
-      const updated = current.map((t) => {
-        if (t.id === terminalId) {
-          return { ...t, name: newName };
-        }
-        return t;
-      });
-      return {
-        ...prev,
-        [projectId]: updated
-      };
-    });
-  };
-
-  const handleDeleteProject = async (id: string) => {
-    if (id === "__create_project__") {
-      setActiveProjectId("");
-      return;
-    }
-    if (!confirm("Are you sure you want to delete this tab/project?")) return;
-    try {
-      const terms = projectTerminals[id] || [];
-      for (const t of terms) {
-        await invoke("kill_terminal_session", { sessionId: t.id }).catch(() => { });
-        setTermOutputs((prev) => {
-          const copy = { ...prev };
-          delete copy[t.id];
-          return copy;
-        });
-      }
-
-      await invoke("deregister_project", { projectId: id });
-      await loadProjects();
-      if (activeProjectId === id) {
-        setActiveProjectId("");
-      }
-
-      setProjectTerminals((prev) => {
-        const copy = { ...prev };
-        delete copy[id];
-        return copy;
-      });
-      setActiveTerminalIds((prev) => {
-        const copy = { ...prev };
-        delete copy[id];
-        return copy;
-      });
-    } catch (e: any) {
-      alert(`Failed to delete: ${e}`);
-    }
-  };
-
-  const handleTerminalScroll = () => {
-    if (!terminalRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = terminalRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 30;
-    setAutoScroll(isAtBottom);
-  };
-
-  const handleFileOpen = (path: string) => {
-    // Normalize path to avoid UTF-8 stream errors with mixed slashes
-    const normalizedPath = path.replace(/\\/g, '/');
-
-    if (!openFiles.includes(normalizedPath)) {
-      setOpenFiles((prev) => [...prev, normalizedPath]);
-    }
-    setOpenFilePath(normalizedPath);
-  };
-
-  const handleFileClose = (path: string) => {
-    const normalizedPath = path.replace(/\\/g, '/');
-    const newOpenFiles = openFiles.filter((f) => f !== normalizedPath);
-    setOpenFiles(newOpenFiles);
-    
-    // Release content state from memory
-    setFilesContent((prev) => {
-      const copy = { ...prev };
-      delete copy[normalizedPath];
-      return copy;
-    });
-    setFilesOriginalContent((prev) => {
-      const copy = { ...prev };
-      delete copy[normalizedPath];
-      return copy;
-    });
-
-    if (openFilePath === normalizedPath) {
-      setOpenFilePath(newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null);
-    }
-  };
-
-  const handleCloseAllTabs = () => {
-    setOpenFiles([]);
-    setOpenFilePath(null);
-    setFilesContent({});
-    setFilesOriginalContent({});
-    setIsSqliteFile(false);
-    setShowTabsMenu(false);
-  };
-
-  const handleSaveAndCloseAllTabs = async () => {
-    setShowTabsMenu(false);
-    
-    // Save all dirty files
-    const savePromises = Object.entries(filesContent).map(async ([path, content]) => {
-      const original = filesOriginalContent[path] || "";
-      if (content !== original) {
-        try {
-          await invoke("write_file_content", { path, content });
-        } catch (err) {
-          console.error("Failed to auto-save file during close all: " + path, err);
-        }
-      }
-    });
-    
-    await Promise.all(savePromises);
-    
-    // Clear tabs
-    setOpenFiles([]);
-    setOpenFilePath(null);
-    setFilesContent({});
-    setFilesOriginalContent({});
-    setIsSqliteFile(false);
-  };
-
-  const handleResetSetupForm = () => {
-    setActiveProjectId("__create_project__");
-    setNewProjName("");
-    setNewProjCmd("");
-    setNewProjArgs("");
-    setNewProjCwd("");
-    setNewProjSetup("");
-    setNewProjSetupArgs("");
-    setNewProjRestart(true);
-    setNewProjEnv([]);
-    setNewProjCpu("");
-    setNewProjRam("");
-    setNewProjPort("");
-    setNewProjSource("");
-    setNewProjTerminalMode("log");
-    setNewProjToolchain("");
-    setNewProjToolchainVersion("stable");
-    setNewProjEnableTunnel(false);
-  };
-
-  // Export / Import Mock Helpers
-  const handleExportConfig = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projects, null, 2));
-    const downloadAnchor = document.createElement("a");
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", "alouette_configurations.json");
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-    setFileMenuOpen(false);
-  };
-
-  const handleImportMockConfig = async () => {
-    const mockProjects: Project[] = [
-      {
-        id: "ping-diagnostics",
-        name: "Local Connection diagnostics",
-        command: "ping",
-        args: ["127.0.0.1", "-n", "20"],
-        auto_restart: false
-      },
-      {
-        id: "mock-backend",
-        name: "Node API Server",
-        command: "node",
-        args: ["server.js"],
-        auto_restart: true,
-        port: 8080,
-        max_cpu_percent: 50,
-        max_ram_mb: 256
-      }
-    ];
-
-    try {
-      for (const p of mockProjects) {
-        await invoke("register_project", { config: p });
-      }
-      await loadProjects();
-      alert("Loaded mock templates successfully!");
-    } catch (e: any) {
-      alert(`Demo import failed: ${e}`);
-    }
-    setFileMenuOpen(false);
-  };
-
-  // 4. Drawing high-density Canvas Graph Engine
-  const drawCanvasChart = (
-    canvas: HTMLCanvasElement | null,
-    data: number[],
-    strokeColor: string,
-    isPercent: boolean
-  ) => {
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-
-    const w = rect.width;
-    const h = rect.height;
-
-    ctx.clearRect(0, 0, w, h);
-
-    const gridStyle =
-      document.documentElement.getAttribute("data-theme") === "light"
-        ? "rgba(0, 0, 0, 0.05)"
-        : "rgba(255, 255, 255, 0.05)";
-    ctx.strokeStyle = gridStyle;
-    ctx.lineWidth = 1;
-
-    for (let i = 0; i <= 3; i++) {
-      const y = (h * i) / 3;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
-
-    if (data.length === 0) return;
-
-    const maxVal = isPercent ? 100 : Math.max(16, ...data) * 1.1;
-
-    ctx.beginPath();
-    data.forEach((val, idx) => {
-      const x = (w * idx) / 29;
-      const y = h - (h * val) / maxVal;
-      if (idx === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-
-    const fillCtx = ctx;
-    fillCtx.lineTo((w * (data.length - 1)) / 29, h);
-    fillCtx.lineTo(0, h);
-    fillCtx.closePath();
-
-    const gradient = ctx.createLinearGradient(0, 0, 0, h);
-    gradient.addColorStop(0, strokeColor.replace("1)", "0.15)"));
-    gradient.addColorStop(1, strokeColor.replace("1)", "0.0)"));
-    ctx.fillStyle = gradient;
-    ctx.fill();
-
-    ctx.beginPath();
-    data.forEach((val, idx) => {
-      const x = (w * idx) / 29;
-      const y = h - (h * val) / maxVal;
-      if (idx === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  };
-
-  const wipeConfig = () => {
-    setProjects([]);
-    setProjectStates({});
-    setProjectLogs({});
-    setResourceHistory({});
-    setActiveProjectId("");
-  };
-
-  // Filter project lists based on Search input
-  const filteredProjects = projects.filter((p) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      p.command.toLowerCase().includes(q) ||
-      p.args.join(" ").toLowerCase().includes(q)
-    );
-  });
-
-  // Filter logs inside Terminal
-  const filteredLogs = activeLogs.filter((log) => {
-    if (logFilter !== "all" && log.stream !== logFilter) return false;
-    if (logSearchQuery.trim()) {
-      return log.text.toLowerCase().includes(logSearchQuery.toLowerCase());
-    }
-    return true;
-  });
-
+  // ── Render ──
   return (
     <div className="app-container">
       <Header
@@ -1170,34 +415,41 @@ export default function App() {
         className="workspace-grid"
         style={{
           gridTemplateColumns: `${leftSidebarWidth}px 1fr ${rightSidebarWidth}px`,
-          position: "relative"
+          position: "relative",
         }}
       >
-
         {/* ── LEFT COLUMN: Zone 1 (Tab list) + Zone 3 (File Explorer) + Zone 6 (New project btn) ── */}
-        <div className="col-left" style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
+        <div
+          className="col-left"
+          style={{
+            position: "relative",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           {/* Zone 1: Tab List */}
           <div
             ref={tabListRef}
             className="zone zone-1"
             style={{
               flex: `0 0 ${tabListHeight}px`,
-              borderBottom: '1px solid var(--border-primary)',
-              position: 'relative'
+              borderBottom: "1px solid var(--border-primary)",
+              position: "relative",
             }}
           >
             <TabList
               filteredProjects={
                 activeProjectId === "__create_project__"
                   ? [
-                    ...filteredProjects,
-                    {
-                      id: "__create_project__",
-                      name: "New Project",
-                      command: "",
-                      args: []
-                    }
-                  ]
+                      ...filteredProjects,
+                      {
+                        id: "__create_project__",
+                        name: "New Project",
+                        command: "",
+                        args: [],
+                      },
+                    ]
                   : filteredProjects
               }
               activeProjectId={activeProjectId}
@@ -1206,7 +458,6 @@ export default function App() {
               setAutoScroll={setAutoScroll}
               handleDeleteProject={handleDeleteProject}
             />
-            {/* Horizontal splitter handle between TabList and FileExplorer */}
             <div
               className={`resizer-h ${isDraggingTabList ? "dragging" : ""}`}
               style={{ position: "absolute", bottom: "-2px", left: 0 }}
@@ -1215,22 +466,24 @@ export default function App() {
           </div>
 
           {/* Zone 3: Project File Explorer */}
-          <div className="zone zone-file-explorer" style={{ flex: 1, overflow: 'hidden' }}>
-            <FileExplorer activeCwd={activeProject?.cwd} onFileSelect={handleFileOpen} />
+          <div
+            className="zone zone-file-explorer"
+            style={{ flex: 1, overflow: "hidden" }}
+          >
+            <FileExplorer
+              activeCwd={activeProject?.cwd}
+              onFileSelect={handleFileOpen}
+            />
           </div>
 
           {/* Zone 6: New Project Button */}
           <div className="zone zone-6">
-            <button
-              className="btn-new-project"
-              onClick={handleResetSetupForm}
-            >
+            <button className="btn-new-project" onClick={handleResetSetupForm}>
               <Plus size={14} />
               <span>New Project</span>
             </button>
           </div>
 
-          {/* Vertical splitter handle for Left Sidebar */}
           <div
             className={`resizer-v ${isDraggingLeft ? "dragging" : ""}`}
             style={{ right: "-2px" }}
@@ -1239,11 +492,27 @@ export default function App() {
         </div>
 
         {/* ── CENTER COLUMN: Zone 2 (Monitor) + Zone 4 (Terminal) ── */}
-        <div className="col-center" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <div
+          className="col-center"
+          style={{ height: "100%", display: "flex", flexDirection: "column" }}
+        >
           {activeProjectId === "__create_project__" ? (
-            <div className="zone zone-center-config" style={{ flex: 1, padding: "24px", overflowY: "auto" }}>
+            <div
+              className="zone zone-center-config"
+              style={{ flex: 1, padding: "24px", overflowY: "auto" }}
+            >
               <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-                <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <h2
+                  style={{
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    marginBottom: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
                   <Plus size={18} style={{ color: "var(--color-accent)" }} />
                   <span>Configure New Project Tab</span>
                 </h2>
@@ -1287,24 +556,24 @@ export default function App() {
                 className="zone zone-2"
                 style={{
                   flex: `0 0 ${monitorHeight}px`,
-                  borderBottom: '1px solid var(--border-primary)',
-                  position: 'relative'
+                  borderBottom: "1px solid var(--border-primary)",
+                  position: "relative",
                 }}
               >
-                {/* VS Code Style Editor Tabs */}
                 {openFiles.length > 0 && (
                   <div className="tabs-header-container">
                     <div className="editor-tabs-bar">
                       {openFiles.map((path) => (
                         <div
-                          // Use encodeURIComponent to ensure the key is a valid UTF-8 string for React
                           key={`tab-${encodeURIComponent(path)}`}
                           className={`editor-tab ${openFilePath === path ? "active" : ""}`}
                           onClick={() => setOpenFilePath(path)}
                           title={path}
                         >
                           <FileCode size={12} className="tab-icon" />
-                          <span className="tab-name">{path.split(/[\\/]/).pop()}</span>
+                          <span className="tab-name">
+                            {path.split(/[\\/]/).pop()}
+                          </span>
                           <button
                             className="tab-close-btn"
                             onClick={(e) => {
@@ -1319,7 +588,7 @@ export default function App() {
                     </div>
 
                     <div className="tabs-actions-container">
-                      <button 
+                      <button
                         className={`btn-tabs-actions ${showTabsMenu ? "active" : ""}`}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1331,10 +600,16 @@ export default function App() {
                       </button>
                       {showTabsMenu && (
                         <div className="tabs-dropdown-menu">
-                          <button className="tabs-dropdown-item" onClick={handleCloseAllTabs}>
+                          <button
+                            className="tabs-dropdown-item"
+                            onClick={handleCloseAllTabs}
+                          >
                             Delete All
                           </button>
-                          <button className="tabs-dropdown-item font-semibold" onClick={handleSaveAndCloseAllTabs}>
+                          <button
+                            className="tabs-dropdown-item font-semibold"
+                            onClick={handleSaveAndCloseAllTabs}
+                          >
                             Save and Delete All
                           </button>
                         </div>
@@ -1346,25 +621,33 @@ export default function App() {
                   <SqliteEditor filePath={openFilePath} />
                 ) : (
                   <CodeEditor
+                    theme={theme}
                     filePath={openFilePath}
-                    content={openFilePath ? (filesContent[openFilePath] ?? null) : null}
+                    content={
+                      openFilePath ? (filesContent[openFilePath] ?? null) : null
+                    }
                     isLoading={isFileLoading}
                     error={fileError}
                     onChange={(newVal) => {
                       if (openFilePath) {
-                        setFilesContent((prev) => ({ ...prev, [openFilePath]: newVal }));
+                        setFilesContent((prev) => ({
+                          ...prev,
+                          [openFilePath]: newVal,
+                        }));
                       }
                     }}
                     onSave={(savedVal) => {
                       if (openFilePath) {
-                        setFilesOriginalContent((prev) => ({ ...prev, [openFilePath]: savedVal }));
+                        setFilesOriginalContent((prev) => ({
+                          ...prev,
+                          [openFilePath]: savedVal,
+                        }));
                       }
                     }}
                     scrollPositionsRef={editorScrollPositionsRef}
                     cursorPositionsRef={editorCursorPositionsRef}
                   />
                 )}
-                {/* Horizontal splitter handle between CodeEditor and TerminalPanel */}
                 <div
                   className={`resizer-h ${isDraggingMonitor ? "dragging" : ""}`}
                   style={{ position: "absolute", bottom: "-2px", left: 0 }}
@@ -1382,18 +665,35 @@ export default function App() {
                   setLogFilter={setLogFilter}
                   logSearchQuery={logSearchQuery}
                   setLogSearchQuery={setLogSearchQuery}
-                  clearLogs={(id) => setProjectLogs((prev) => ({ ...prev, [id]: [] }))}
+                  clearLogs={(id) =>
+                    setProjectLogs((prev) => ({ ...prev, [id]: [] }))
+                  }
                   terminalRef={terminalRef}
                   handleTerminalScroll={handleTerminalScroll}
-                  termOutput={termOutputs[activeTerminalIds[activeProjectId] || ""] || ""}
-                  clearTermOutput={(id) => setTermOutputs((prev) => ({ ...prev, [id]: "" }))}
+                  termOutput={
+                    termOutputs[activeTerminalIds[activeProjectId] || ""] || ""
+                  }
+                  clearTermOutput={(id) =>
+                    setTermOutputs((prev) => ({ ...prev, [id]: "" }))
+                  }
                   terminals={projectTerminals[activeProjectId] || []}
                   activeTerminalId={activeTerminalIds[activeProjectId] || ""}
-                  setActiveTerminalId={(termId) => setActiveTerminalIds((prev) => ({ ...prev, [activeProjectId]: termId }))}
+                  setActiveTerminalId={(termId) =>
+                    setActiveTerminalIds((prev) => ({
+                      ...prev,
+                      [activeProjectId]: termId,
+                    }))
+                  }
                   onAddTerminal={() => handleAddTerminal(activeProjectId)}
-                  onDeleteTerminal={(termId) => handleDeleteTerminal(activeProjectId, termId)}
-                  onDeleteAllTerminals={() => handleDeleteAllTerminals(activeProjectId)}
-                  onRenameTerminal={(termId, name) => handleRenameTerminal(activeProjectId, termId, name)}
+                  onDeleteTerminal={(termId) =>
+                    handleDeleteTerminal(activeProjectId, termId)
+                  }
+                  onDeleteAllTerminals={() =>
+                    handleDeleteAllTerminals(activeProjectId)
+                  }
+                  onRenameTerminal={(termId, name) =>
+                    handleRenameTerminal(activeProjectId, termId, name)
+                  }
                 />
               </div>
             </>
@@ -1401,8 +701,15 @@ export default function App() {
         </div>
 
         {/* ── RIGHT COLUMN: Zone 3 (Config) + Zone 5 (Process Manager) ── */}
-        <div className="col-right" style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
-          {/* Vertical splitter handle for Right Sidebar */}
+        <div
+          className="col-right"
+          style={{
+            position: "relative",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           <div
             className={`resizer-v ${isDraggingRight ? "dragging" : ""}`}
             style={{ left: "-2px" }}
@@ -1416,8 +723,8 @@ export default function App() {
               className="zone zone-3"
               style={{
                 flex: `0 0 ${configHeight}px`,
-                borderBottom: '1px solid var(--border-primary)',
-                position: 'relative'
+                borderBottom: "1px solid var(--border-primary)",
+                position: "relative",
               }}
             >
               <ConfigSetup
@@ -1448,8 +755,8 @@ export default function App() {
                 newProjEnableTunnel={newProjEnableTunnel}
                 setNewProjEnableTunnel={setNewProjEnableTunnel}
                 handleResetSetupForm={handleResetSetupForm}
-                handleAddProject={handleAddProject} />
-              {/* Horizontal splitter handle between ConfigSetup and Manager/Diagnostics */}
+                handleAddProject={handleAddProject}
+              />
               <div
                 className={`resizer-h ${isDraggingConfig ? "dragging" : ""}`}
                 style={{ position: "absolute", bottom: "-2px", left: 0 }}
@@ -1503,7 +810,6 @@ export default function App() {
           <button
             className={`nav-tab-btn ${!activeProjectId || activeProjectId === "__create_project__" ? "" : "active"}`}
             onClick={() => {
-              // Switch to first project if any
               if (filteredProjects.length > 0) {
                 setActiveProjectId(filteredProjects[0].id);
               }
@@ -1516,10 +822,10 @@ export default function App() {
           <button
             className={`nav-tab-btn`}
             onClick={() => {
-              // Open terminal: scroll to bottom and set active
               setAutoScroll(true);
               if (terminalRef.current) {
-                terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+                terminalRef.current.scrollTop =
+                  terminalRef.current.scrollHeight;
               }
             }}
           >
@@ -1545,20 +851,24 @@ export default function App() {
         </div>
       </footer>
 
-
-
       {/* Port Conflict Resolver Modal */}
       {portConflict && (
         <div className="modal-overlay" style={{ zIndex: 110 }}>
-          <div className="modal-content" style={{ borderColor: "var(--color-danger)" }}>
-            <header className="modal-header" style={{ borderBottomColor: "rgba(239, 68, 68, 0.2)" }}>
+          <div
+            className="modal-content"
+            style={{ borderColor: "var(--color-danger)" }}
+          >
+            <header
+              className="modal-header"
+              style={{ borderBottomColor: "rgba(239, 68, 68, 0.2)" }}
+            >
               <h3
                 className="modal-title"
                 style={{
                   color: "var(--color-danger)",
                   display: "flex",
                   alignItems: "center",
-                  gap: "8px"
+                  gap: "8px",
                 }}
               >
                 <span>⚠️ Port Conflict Detected</span>
@@ -1575,7 +885,9 @@ export default function App() {
             <div className="modal-body">
               <p style={{ lineHeight: "1.6", color: "var(--text-primary)" }}>
                 The configured port{" "}
-                <strong style={{ color: "var(--color-accent)", fontSize: "15px" }}>
+                <strong
+                  style={{ color: "var(--color-accent)", fontSize: "15px" }}
+                >
                   {portConflict.port}
                 </strong>{" "}
                 is currently being occupied by another process on your system:
@@ -1588,32 +900,62 @@ export default function App() {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  marginTop: "4px"
+                  marginTop: "4px",
                 }}
               >
                 <div>
-                  <span style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block" }}>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--text-secondary)",
+                      display: "block",
+                    }}
+                  >
                     Process Identifier
                   </span>
-                  <strong style={{ fontFamily: "var(--font-mono)", fontSize: "16px" }}>
+                  <strong
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "16px" }}
+                  >
                     PID {portConflict.pid}
                   </strong>
                 </div>
-                <div style={{ fontSize: "12px", color: "var(--color-danger)", fontWeight: 600 }}>
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--color-danger)",
+                    fontWeight: 600,
+                  }}
+                >
                   SOCKET BLOCKED
                 </div>
               </div>
-              <p style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
-                Would you like to forcefully terminate the occupying PID {portConflict.pid} to reclaim the
-                port and launch this tab process?
+              <p
+                style={{
+                  fontSize: "12px",
+                  color: "var(--text-secondary)",
+                  lineHeight: "1.5",
+                }}
+              >
+                Would you like to forcefully terminate the occupying PID{" "}
+                {portConflict.pid} to reclaim the port and launch this tab
+                process?
               </p>
             </div>
 
-            <footer className="modal-footer" style={{ borderTopColor: "rgba(239, 68, 68, 0.1)" }}>
-              <button className="btn btn-secondary" onClick={() => setPortConflict(null)}>
+            <footer
+              className="modal-footer"
+              style={{ borderTopColor: "rgba(239, 68, 68, 0.1)" }}
+            >
+              <button
+                className="btn btn-secondary"
+                onClick={() => setPortConflict(null)}
+              >
                 Cancel
               </button>
-              <button className="btn btn-danger" onClick={handleForceKillAndStart}>
+              <button
+                className="btn btn-danger"
+                onClick={handleForceKillAndStart}
+              >
                 Force Kill & Start
               </button>
             </footer>
