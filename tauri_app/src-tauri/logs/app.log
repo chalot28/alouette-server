@@ -124,3 +124,79 @@
 [2026-05-24 13:38:53.001] Reading file: D:/server_dvtn/package.json
 [2026-05-24 13:38:54.916] Reading file: D:/server_dvtn/package-lock.json
 [2026-05-24 13:38:57.988] Reading file: D:/server_dvtn/README.md
+[2026-05-24 13:40:02.900] Reading file: D:/server_dvtn/jest.config.js
+[2026-05-24 13:40:05.429] Reading file: D:/server_dvtn/nul
+[2026-05-24 13:40:07.460] Reading file: D:/server_dvtn/README.md
+[2026-05-24 13:40:08.160] Reading file: D:/server_dvtn/server.log
+[2026-05-24 13:40:09.951] Reading file: D:/server_dvtn/README.md
+[2026-05-24 13:40:14.036] Reading file: D:/server_dvtn/db/avt_db.db
+[2026-05-24 13:40:15.312] Reading file: D:/server_dvtn/db/binh_luan.db
+[2026-05-24 13:40:16.323] Reading file: D:/server_dvtn/db/danh_sach_dk.db
+[2026-05-24 13:42:31.757] Reading file: D:/server_dvtn/db/date.db
+[2026-05-24 13:42:33.484] Reading file: D:/server_dvtn/db/danh_sach_dk.db
+[2026-05-24 13:42:34.338] Reading file: D:/server_dvtn/db/date.db
+[2026-05-24 13:42:38.278] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 13:42:39.477] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 13:42:39.978] Reading file: D:/server_dvtn/models.json
+[2026-05-24 13:42:44.408] Reading file: D:/server_dvtn/tunnel_cf/cloudflared.exe
+[2026-05-24 13:42:47.687] Reading file: D:/server_dvtn/models.json
+[2026-05-24 13:42:48.553] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 13:42:49.357] Reading file: D:/server_dvtn/models.json
+[2026-05-24 13:42:50.028] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 13:42:50.955] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 13:42:51.647] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 13:42:53.797] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 13:42:54.650] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 13:43:03.570] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 13:43:05.666] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 13:43:09.001] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 13:43:09.484] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 13:43:14.330] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 13:43:15.139] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 13:43:15.976] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 13:43:16.333] Reading file: D:/server_dvtn/models.json
+[2026-05-24 13:43:16.999] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 13:47:48.815] Reading file: D:/server_dvtn/README.md
+[2026-05-24 13:48:12.824] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 13:48:12.828] Proto CLI verified and active.
+[2026-05-24 13:48:12.850] Toolchains checked / verified stable.
+[2026-05-24 13:48:19.338] Cloudflared binary verified / updated successfully.
+[2026-05-24 13:48:19.339] Isolated environment initialized successfully!
+[2026-05-24 13:57:36.473] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 13:57:36.476] Proto CLI verified and active.
+[2026-05-24 13:57:36.538] Toolchains checked / verified stable.
+[2026-05-24 13:57:42.814] Cloudflared binary verified / updated successfully.
+[2026-05-24 13:57:42.816] Isolated environment initialized successfully!
+[2026-05-24 14:00:15.807] Reading file: D:/server_dvtn/README.md
+[2026-05-24 14:00:15.808] Reading file: D:/server_dvtn/README.md
+[2026-05-24 14:09:08.789] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 14:09:08.796] Proto CLI verified and active.
+[2026-05-24 14:09:08.831] Toolchains checked / verified stable.
+[2026-05-24 14:09:15.523] Cloudflared binary verified / updated successfully.
+[2026-05-24 14:09:15.524] Isolated environment initialized successfully!
+[2026-05-24 14:10:21.052] Reading file: D:/server_dvtn/README.md
+[2026-05-24 14:10:21.054] Reading file: D:/server_dvtn/README.md
+[2026-05-24 14:22:15.065] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 14:22:15.068] Proto CLI verified and active.
+[2026-05-24 14:22:15.118] Toolchains checked / verified stable.
+[2026-05-24 14:22:22.511] Cloudflared binary verified / updated successfully.
+[2026-05-24 14:22:22.513] Isolated environment initialized successfully!
+[2026-05-24 14:23:05.670] Reading file: D:/server_dvtn/README.md
+[2026-05-24 14:23:05.671] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:01:12.714] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 15:01:12.719] Proto CLI verified and active.
+[2026-05-24 15:01:12.771] Toolchains checked / verified stable.
+[2026-05-24 15:01:19.909] Cloudflared binary verified / updated successfully.
+[2026-05-24 15:01:19.911] Isolated environment initialized successfully!
+[2026-05-24 15:01:25.713] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:01:25.714] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:01:34.926] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 15:01:34.927] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 15:01:36.826] Reading file: D:/server_dvtn/package.json
+[2026-05-24 15:01:36.828] Reading file: D:/server_dvtn/package.json
+[2026-05-24 15:01:45.552] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:01:45.553] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:03:45.407] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:04:31.329] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:07:48.341] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:12:32.732] Reading file: D:/server_dvtn/jest.config.js

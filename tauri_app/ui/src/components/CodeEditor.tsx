@@ -4,45 +4,37 @@ import { invoke } from "@tauri-apps/api/core";
 
 interface CodeEditorProps {
   filePath: string | null;
+  content: string | null;
+  isLoading: boolean;
+  error: string | null;
   onFileSaved?: () => void;
 }
 
-export default function CodeEditor({ filePath, onFileSaved }: CodeEditorProps) {
+export default function CodeEditor({
+  filePath,
+  content: initialContent,
+  isLoading,
+  error,
+  onFileSaved
+}: CodeEditorProps) {
   const [content, setContent] = useState<string>("");
   const [originalContent, setOriginalContent] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
 
-  // Load file content when filePath changes
+  // Sync internal content with parent's decoded content when it loads or when path changes
   useEffect(() => {
-    if (!filePath) {
+    if (initialContent !== null) {
+      setContent(initialContent);
+      setOriginalContent(initialContent);
+    } else {
       setContent("");
       setOriginalContent("");
-      setError(null);
-      return;
     }
+    setSaveStatus("idle");
+  }, [initialContent, filePath]);
 
-    async function loadFile() {
-      setLoading(true);
-      setError(null);
-      setSaveStatus("idle");
-      try {
-        const text = await invoke<string>("read_file_content", { path: filePath });
-        setContent(text);
-        setOriginalContent(text);
-      } catch (err: any) {
-        console.error("Error reading file:", err);
-        setError(`Failed to read file: ${err.toString()}`);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadFile();
-  }, [filePath]);
 
   // Sync scroll between textarea and line numbers
   const handleScroll = () => {
@@ -128,7 +120,7 @@ export default function CodeEditor({ filePath, onFileSaved }: CodeEditorProps) {
         </div>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div className="editor-loading">
           <RefreshCw size={24} className="spin-animation" />
           <span>Reading file contents...</span>

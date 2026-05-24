@@ -85,10 +85,15 @@ export default function App() {
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
+  const [openFileContent, setOpenFileContent] = useState<string | null>(null);
+  const [isFileLoading, setIsFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   useEffect(() => {
     setOpenFilePath(null);
     setOpenFiles([]);
+    setOpenFileContent(null);
+    setFileError(null);
   }, [activeProjectId]);
 
   // Form State
@@ -138,6 +143,77 @@ export default function App() {
   const [isDraggingTabList, setIsDraggingTabList] = useState(false);
   const [isDraggingMonitor, setIsDraggingMonitor] = useState(false);
   const [isDraggingConfig, setIsDraggingConfig] = useState(false);
+
+  // Effect to load file content when a file path is selected
+  useEffect(() => {
+    if (openFilePath) {
+      const loadFileContent = async (path: string) => {
+        setIsFileLoading(true);
+        setFileError(null);
+        setOpenFileContent(null);
+        try {
+          // Nhận dữ liệu dưới dạng chuỗi Base64 (rất nhanh, không treo UI)
+          const base64Data = await invoke<string>("read_file_content", { path });
+
+          // Chuyển Base64 ngược lại thành mảng bytes
+          const binaryString = window.atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+
+          // Kiểm tra Byte Order Mark (BOM) để tự động nhận dạng mã hóa chính xác
+          let decodedText = "";
+          if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
+            // UTF-16 Little Endian (BOM: FF FE)
+            const decoder = new TextDecoder('utf-16le');
+            decodedText = decoder.decode(bytes.slice(2)); // Cắt bỏ BOM
+          } else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
+            // UTF-16 Big Endian (BOM: FE FF)
+            const decoder = new TextDecoder('utf-16be');
+            decodedText = decoder.decode(bytes.slice(2)); // Cắt bỏ BOM
+          } else if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+            // UTF-8 with BOM (BOM: EF BB BF)
+            const decoder = new TextDecoder('utf-8');
+            decodedText = decoder.decode(bytes.slice(3)); // Cắt bỏ BOM
+          } else {
+            // Không có BOM. Thử giải mã bằng UTF-8 trước
+            try {
+              const decoder = new TextDecoder('utf-8', { fatal: true });
+              decodedText = decoder.decode(bytes);
+            } catch (e) {
+              // Nếu lỗi UTF-8, kiểm tra xem có dấu hiệu UTF-16 không có BOM không (nhiều byte null)
+              let nullCount = 0;
+              for (let i = 0; i < Math.min(bytes.length, 100); i++) {
+                if (bytes[i] === 0) nullCount++;
+              }
+              if (nullCount > 10) {
+                const decoder = new TextDecoder('utf-16le');
+                decodedText = decoder.decode(bytes);
+              } else {
+                // Thử giải mã bằng Windows-1258 (Bảng mã tiếng Việt chuẩn của Windows)
+                console.warn("UTF-8 fail, falling back to Windows-1258 (Vietnamese)");
+                const fallbackDecoder = new TextDecoder('windows-1258');
+                decodedText = fallbackDecoder.decode(bytes);
+              }
+            }
+          }
+
+          setOpenFileContent(decodedText);
+        } catch (err: any) {
+          setFileError(`Failed to read file: ${err.message || err}`);
+        } finally {
+          setIsFileLoading(false);
+        }
+      };
+      loadFileContent(openFilePath);
+    } else {
+      // Clear content when no file is selected
+      setOpenFileContent(null);
+      setFileError(null);
+      setIsFileLoading(false);
+    }
+  }, [openFilePath]);
 
   // 1. Left Sidebar Width Resize Handler
   const handleLeftResizeStart = (e: React.MouseEvent) => {
@@ -1168,7 +1244,12 @@ export default function App() {
                     ))}
                   </div>
                 )}
-                <CodeEditor filePath={openFilePath} />
+                <CodeEditor
+                  filePath={openFilePath}
+                  content={openFileContent}
+                  isLoading={isFileLoading}
+                  error={fileError}
+                />
                 {/* Horizontal splitter handle between CodeEditor and TerminalPanel */}
                 <div
                   className={`resizer-h ${isDraggingMonitor ? "dragging" : ""}`}

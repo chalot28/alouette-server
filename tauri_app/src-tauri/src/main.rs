@@ -7,6 +7,7 @@ use tauri::{Emitter, Manager, State};
 use tokio::sync::Mutex;
 use std::fs;
 use std::path::Path;
+use base64::{Engine as _, engine::general_purpose};
 
 fn log_to_app_file(msg: &str) {
     let log_dir = std::env::current_dir()
@@ -242,7 +243,15 @@ fn get_project_files(dir_path: Option<String>) -> Result<Vec<FileNode>, String> 
 #[tauri::command]
 async fn read_file_content(path: String) -> Result<String, String> {
     log_to_app_file(&format!("Reading file: {}", path));
-    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    
+    // Tăng giới hạn lên 10MB vì Base64 xử lý rất tốt dữ liệu lớn
+    if bytes.len() > 10 * 1024 * 1024 {
+        return Err("File quá lớn để mở trong trình soạn thảo. Vui lòng sử dụng terminal.".to_string());
+    }
+
+    // Chuyển sang Base64 để truyền tải qua IPC cực nhanh và an toàn
+    Ok(general_purpose::STANDARD.encode(bytes))
 }
 
 #[tauri::command]
