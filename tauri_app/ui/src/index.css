@@ -2015,3 +2015,36 @@ body {
   color: var(--text-muted);
   font-style: italic;
 }
+
+/* Multi-terminal Custom Styles */
+.terminal-item-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.active-terminal-item:hover .terminal-item-delete-btn {
+  opacity: 1;
+}
+
+.terminal-item-delete-btn:hover {
+  color: var(--color-danger);
+}
+
+.terminal-rename-input {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-focus);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 2px 4px;
+  width: 100%;
+  outline: none;
+  font-family: var(--font-sans);
+}

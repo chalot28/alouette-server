@@ -34,6 +34,11 @@ interface Project {
   enable_tunnel?: boolean;
 }
 
+interface TerminalSessionItem {
+  id: string;
+  name: string;
+}
+
 interface ProcessState {
   type: "Stopped" | "Setup" | "Running" | "Crashing" | "Terminated" | "Fatal";
   data?: any; // PID or error reasons
@@ -63,6 +68,10 @@ export default function App() {
   const [projectLogs, setProjectLogs] = useState<{ [id: string]: LogLine[] }>({});
   const [resourceHistory, setResourceHistory] = useState<ResourceHistory>({});
   const [termOutputs, setTermOutputs] = useState<{ [id: string]: string }>({});
+
+  // State to store terminals per project
+  const [projectTerminals, setProjectTerminals] = useState<{ [projectId: string]: TerminalSessionItem[] }>({});
+  const [activeTerminalIds, setActiveTerminalIds] = useState<{ [projectId: string]: string }>({});
 
   // Bottom nav tab (for right-bottom panel between manager / user)
   const [rightBottomTab, setRightBottomTab] = useState<"manager" | "user">("manager");
@@ -351,12 +360,30 @@ export default function App() {
   // 1.5. Interactive Sandboxed Terminal Auto-spawner
   useEffect(() => {
     if (activeProjectId && activeProjectId !== "__create_project__" && activeProject) {
-      // Spawn or attach terminal session on backend
-      invoke("spawn_terminal_session", {
-        sessionId: activeProjectId,
-        cwd: activeProject.cwd || null,
-      }).catch((err) => {
-        console.error("Failed to spawn terminal session for " + activeProjectId, err);
+      setProjectTerminals((prev) => {
+        const currentTerms = prev[activeProjectId] || [];
+        if (currentTerms.length === 0) {
+          const defaultTermId = `${activeProjectId}-term-default`;
+          const defaultTerm: TerminalSessionItem = { id: defaultTermId, name: "Terminal 1" };
+          
+          setActiveTerminalIds((activePrev) => ({
+            ...activePrev,
+            [activeProjectId]: defaultTermId
+          }));
+
+          invoke("spawn_terminal_session", {
+            sessionId: defaultTermId,
+            cwd: activeProject.cwd || null,
+          }).catch((err) => {
+            console.error("Failed to spawn default terminal session for " + activeProjectId, err);
+          });
+
+          return {
+            ...prev,
+            [activeProjectId]: [defaultTerm]
+          };
+        }
+        return prev;
       });
     }
   }, [activeProjectId, activeProject?.cwd]);
@@ -608,6 +635,132 @@ export default function App() {
     }
   };
 
+  const handleAddTerminal = (projectId: string) => {
+    const proj = projects.find((p) => p.id === projectId);
+    const cwd = proj?.cwd || null;
+    
+    setProjectTerminals((prev) => {
+      const currentTerms = prev[projectId] || [];
+      const nextIndex = currentTerms.length + 1;
+      const newTermId = `${projectId}-term-${Date.now()}`;
+      const newTerm: TerminalSessionItem = {
+        id: newTermId,
+        name: `Terminal ${nextIndex}`
+      };
+
+      setActiveTerminalIds((activePrev) => ({
+        ...activePrev,
+        [projectId]: newTermId
+      }));
+
+      invoke("spawn_terminal_session", {
+        sessionId: newTermId,
+        cwd
+      }).catch((err) => {
+        console.error("Failed to spawn terminal session:", err);
+      });
+
+      return {
+        ...prev,
+        [projectId]: [...currentTerms, newTerm]
+      };
+    });
+  };
+
+  const handleDeleteTerminal = async (projectId: string, terminalId: string) => {
+    try {
+      await invoke("kill_terminal_session", { sessionId: terminalId });
+    } catch (err) {
+      console.error("Failed to kill terminal session:", err);
+    }
+
+    setTermOutputs((prev) => {
+      const copy = { ...prev };
+      delete copy[terminalId];
+      return copy;
+    });
+
+    setProjectTerminals((prev) => {
+      const currentTerms = prev[projectId] || [];
+      const remainingTerms = currentTerms.filter((t) => t.id !== terminalId);
+
+      setActiveTerminalIds((activePrev) => {
+        const currentActive = activePrev[projectId];
+        if (currentActive === terminalId) {
+          return {
+            ...activePrev,
+            [projectId]: remainingTerms.length > 0 ? remainingTerms[0].id : ""
+          };
+        }
+        return activePrev;
+      });
+
+      return {
+        ...prev,
+        [projectId]: remainingTerms
+      };
+    });
+  };
+
+  const handleDeleteAllTerminals = async (projectId: string) => {
+    const currentTerms = projectTerminals[projectId] || [];
+    
+    for (const term of currentTerms) {
+      try {
+        await invoke("kill_terminal_session", { sessionId: term.id });
+      } catch (err) {
+        console.error("Failed to kill terminal session:", err);
+      }
+      
+      setTermOutputs((prev) => {
+        const copy = { ...prev };
+        delete copy[term.id];
+        return copy;
+      });
+    }
+
+    // Reset with a default terminal
+    const defaultTermId = `${projectId}-term-default-${Date.now()}`;
+    const defaultTerm: TerminalSessionItem = { id: defaultTermId, name: "Terminal 1" };
+    const proj = projects.find((p) => p.id === projectId);
+    
+    setProjectTerminals((prev) => ({
+      ...prev,
+      [projectId]: [defaultTerm]
+    }));
+
+    setActiveTerminalIds((prev) => ({
+      ...prev,
+      [projectId]: defaultTermId
+    }));
+
+    try {
+      await invoke("spawn_terminal_session", {
+        sessionId: defaultTermId,
+        cwd: proj?.cwd || null
+      });
+    } catch (err) {
+      console.error("Failed to spawn terminal session after trash:", err);
+    }
+  };
+
+  const handleRenameTerminal = (projectId: string, terminalId: string, newName: string) => {
+    if (!newName.trim()) return;
+    setProjectTerminals((prev) => {
+      const current = prev[projectId] || [];
+      const updated = current.map((t) => {
+        if (t.id === terminalId) {
+          return { ...t, name: newName };
+        }
+        return t;
+      });
+      return {
+        ...prev,
+        [projectId]: updated
+      };
+    });
+  };
+
   const handleDeleteProject = async (id: string) => {
     if (id === "__create_project__") {
       setActiveProjectId("");
@@ -615,11 +768,32 @@ export default function App() {
     }
     if (!confirm("Are you sure you want to delete this tab/project?")) return;
     try {
+      const terms = projectTerminals[id] || [];
+      for (const t of terms) {
+        await invoke("kill_terminal_session", { sessionId: t.id }).catch(() => {});
+        setTermOutputs((prev) => {
+          const copy = { ...prev };
+          delete copy[t.id];
+          return copy;
+        });
+      }
+
       await invoke("deregister_project", { projectId: id });
       await loadProjects();
       if (activeProjectId === id) {
         setActiveProjectId("");
       }
+
+      setProjectTerminals((prev) => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+      setActiveTerminalIds((prev) => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
     } catch (e: any) {
       alert(`Failed to delete: ${e}`);
     }
@@ -970,12 +1144,15 @@ export default function App() {
                   clearLogs={(id) => setProjectLogs((prev) => ({ ...prev, [id]: [] }))}
                   terminalRef={terminalRef}
                   handleTerminalScroll={handleTerminalScroll}
-                  projects={projects}
-                  projectStates={projectStates}
-                  setActiveProjectId={setActiveProjectId}
-                  handleResetSetupForm={handleResetSetupForm}
-                  termOutput={termOutputs[activeProjectId] || ""}
+                  termOutput={termOutputs[activeTerminalIds[activeProjectId] || ""] || ""}
                   clearTermOutput={(id) => setTermOutputs((prev) => ({ ...prev, [id]: "" }))}
+                  terminals={projectTerminals[activeProjectId] || []}
+                  activeTerminalId={activeTerminalIds[activeProjectId] || ""}
+                  setActiveTerminalId={(termId) => setActiveTerminalIds((prev) => ({ ...prev, [activeProjectId]: termId }))}
+                  onAddTerminal={() => handleAddTerminal(activeProjectId)}
+                  onDeleteTerminal={(termId) => handleDeleteTerminal(activeProjectId, termId)}
+                  onDeleteAllTerminals={() => handleDeleteAllTerminals(activeProjectId)}
+                  onRenameTerminal={(termId, name) => handleRenameTerminal(activeProjectId, termId, name)}
                 />
               </div>
             </>

@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Terminal as TerminalIcon, Search, Trash2, Cpu, Hammer, CheckCircle2, XCircle, Plus, TerminalSquare, RefreshCw } from "lucide-react";
+import { Terminal as TerminalIcon, Search, Trash2, Cpu, Hammer, CheckCircle2, XCircle, Plus, TerminalSquare, RefreshCw, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+
+interface TerminalSessionItem {
+  id: string;
+  name: string;
+}
 
 interface Project {
   id: string;
@@ -8,11 +13,6 @@ interface Project {
   command: string;
   args: string[];
   cwd?: string;
-}
-
-interface ProcessState {
-  type: "Stopped" | "Setup" | "Running" | "Crashing" | "Terminated" | "Fatal";
-  data?: any;
 }
 
 interface LogLine {
@@ -32,12 +32,17 @@ interface TerminalPanelProps {
   clearLogs: (id: string) => void;
   terminalRef: React.RefObject<HTMLDivElement>;
   handleTerminalScroll: () => void;
-  projects: Project[];
-  projectStates: { [id: string]: ProcessState };
-  setActiveProjectId: (id: string) => void;
-  handleResetSetupForm: () => void;
   termOutput: string;
   clearTermOutput: (id: string) => void;
+
+  // Multi-terminal props
+  terminals: TerminalSessionItem[];
+  activeTerminalId: string;
+  setActiveTerminalId: (id: string) => void;
+  onAddTerminal: () => void;
+  onDeleteTerminal: (id: string) => void;
+  onDeleteAllTerminals: () => void;
+  onRenameTerminal: (id: string, name: string) => void;
 }
 
 export default function TerminalPanel({
@@ -51,18 +56,26 @@ export default function TerminalPanel({
   clearLogs,
   terminalRef,
   handleTerminalScroll,
-  projects,
-  projectStates,
-  setActiveProjectId,
-  handleResetSetupForm,
   termOutput,
-  clearTermOutput
+  clearTermOutput,
+  terminals,
+  activeTerminalId,
+  setActiveTerminalId,
+  onAddTerminal,
+  onDeleteTerminal,
+  onDeleteAllTerminals,
+  onRenameTerminal
 }: TerminalPanelProps) {
   // Tab selector between Piped Logs (Mode B) and Isolated Interactive Terminal (Mode A)
   const [terminalTab, setTerminalTab] = useState<"logs" | "shell">("shell");
   const [cmdInput, setCmdInput] = useState("");
   const shellViewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Renaming state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Scroll interactive terminal to the bottom whenever text is appended
   useEffect(() => {
@@ -73,12 +86,12 @@ export default function TerminalPanel({
 
   const handleSendCmd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cmdInput.trim() || !activeProjectId) return;
+    if (!cmdInput.trim() || !activeTerminalId) return;
 
     try {
       // Send key line feed to isolated shell process stdin
       await invoke("write_to_terminal_session", {
-        sessionId: activeProjectId,
+        sessionId: activeTerminalId,
         input: cmdInput + "\n"
       });
       setCmdInput("");
@@ -88,15 +101,39 @@ export default function TerminalPanel({
   };
 
   const handleRespawnTerminal = async () => {
-    if (!activeProjectId) return;
+    if (!activeTerminalId) return;
     try {
       await invoke("spawn_terminal_session", {
-        sessionId: activeProjectId,
+        sessionId: activeTerminalId,
         cwd: activeProject?.cwd || null
       });
-      clearTermOutput(activeProjectId);
+      clearTermOutput(activeTerminalId);
     } catch (err) {
       alert(`Failed to respawn terminal: ${err}`);
+    }
+  };
+
+  const handleStartRename = (id: string, name: string) => {
+    setEditingId(id);
+    setRenameValue(name);
+    setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 50);
+  };
+
+  const handleRenameSubmit = () => {
+    if (editingId && renameValue.trim()) {
+      onRenameTerminal(editingId, renameValue.trim());
+    }
+    setEditingId(null);
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      setEditingId(null);
     }
   };
 
@@ -180,7 +217,11 @@ export default function TerminalPanel({
               </button>
               <button
                 className="terminal-btn-clear"
-                onClick={() => clearTermOutput(activeProjectId)}
+                onClick={() => {
+                  if (activeTerminalId) {
+                    clearTermOutput(activeTerminalId);
+                  }
+                }}
               >
                 <Trash2 size={11} />
                 <span>Clear Screen</span>
@@ -236,7 +277,7 @@ export default function TerminalPanel({
                   value={cmdInput}
                   onChange={(e) => setCmdInput(e.target.value)}
                   placeholder="Execute commands inside the sandboxed workspace folder..."
-                  disabled={!activeProjectId}
+                  disabled={!activeTerminalId}
                 />
               </form>
             </div>
@@ -250,39 +291,58 @@ export default function TerminalPanel({
             <div className="split-sidebar-action-header">
               <button 
                 className="terminal-action-btn" 
-                onClick={handleResetSetupForm}
+                onClick={onAddTerminal}
                 title="Add new terminal"
               >
                 <Plus size={13} />
               </button>
               <button 
                 className="terminal-action-btn trash" 
-                onClick={() => {
-                  if (terminalTab === "logs") {
-                    clearLogs(activeProjectId);
-                  } else {
-                    clearTermOutput(activeProjectId);
-                  }
-                }}
-                title="Clear active terminal logs"
+                onClick={onDeleteAllTerminals}
+                title="Clear all terminals in active project"
               >
                 <Trash2 size={13} />
               </button>
             </div>
             <div className="active-terminals-list">
-              {projects.map((p) => {
-                const state = projectStates[p.id] || { type: "Stopped" };
-                const isRunning = state.type === "Running";
+              {terminals.map((term) => {
+                const isSelected = term.id === activeTerminalId;
                 return (
                   <div
-                    key={p.id}
-                    className={`active-terminal-item ${p.id === activeProjectId ? "active" : ""}`}
-                    onClick={() => setActiveProjectId(p.id)}
+                    key={term.id}
+                    className={`active-terminal-item ${isSelected ? "active" : ""}`}
+                    onClick={() => setActiveTerminalId(term.id)}
+                    onDoubleClick={() => handleStartRename(term.id, term.name)}
                   >
-                    <div className="terminal-item-left">
-                      <span className={`terminal-item-dot ${isRunning ? "running" : "stopped"}`} />
-                      <span className="terminal-item-name">{p.name}</span>
-                    </div>
+                    {editingId === term.id ? (
+                      <input
+                        ref={renameInputRef}
+                        type="text"
+                        className="terminal-rename-input"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={handleRenameSubmit}
+                        onKeyDown={handleRenameKeyDown}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <>
+                        <div className="terminal-item-left">
+                          <span className="terminal-item-dot running" />
+                          <span className="terminal-item-name" title="Double click to rename">{term.name}</span>
+                        </div>
+                        <button
+                          className="terminal-item-delete-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteTerminal(term.id);
+                          }}
+                          title="Delete terminal"
+                        >
+                          <X size={11} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 );
               })}

@@ -4,7 +4,7 @@ This document details the frontend state organization, UI rendering optimization
 
 ## 1. Multi-Tab Isolated State Model
 
-Each project is mapped to an isolated tab state structure in React to ensure independent UI rendering:
+Each project is mapped to an isolated tab state structure in React to ensure independent UI rendering. Interactive terminal shells are isolated on a per-project basis, supporting multiple concurrent active terminal sessions per project:
 
 ```typescript
 interface ProjectTabState {
@@ -19,12 +19,23 @@ interface ProjectTabState {
   terminalLogs: LogLine[];
 }
 
+interface TerminalSessionItem {
+  id: string;   // Unique session ID spawned on backend
+  name: string; // User-customizable terminal display name
+}
+
 interface LogLine {
   text: string;
   stream: 'stdout' | 'stderr';
   timestamp: number;
 }
 ```
+
+### Isolated Terminal Session States
+- **`projectTerminals`**: A React state dictionary mapping `projectId` to an array of its open `TerminalSessionItem`s:
+  `{ [projectId: string]: TerminalSessionItem[] }`
+- **`activeTerminalIds`**: A state dictionary mapping each `projectId` to the `id` of its currently active terminal session:
+  `{ [projectId: string]: string }`
 
 ---
 

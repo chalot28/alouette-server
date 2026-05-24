@@ -6,14 +6,17 @@ This document outlines the design and implementation of sandboxed interactive sh
 
 ## 1. Overview of Interactive Shell Session Architecture
 
-In addition to piped logging pipelines, Alouette Server incorporates an active, real-time command shell session for each workspace. This lets developers execute commands within the isolated sandboxed folder using preloaded toolchains (Node, Go, Python) without polluting their global OS.
+In addition to piped logging pipelines, Alouette Server incorporates active, real-time command shell sessions for each active project. Rather than limiting each project to a single terminal, developers can create **multiple independent, concurrent terminal sessions** inside the project's isolated workspace.
+
+This lets developers run different build tasks, tests, or interactive tools side-by-side inside the sandboxed environment with shadowed paths (Node, Go, Python toolchains) without polluting their global OS.
 
 ```text
   React Front-End UI             Tauri App Wrapper           core_engine Library
  ┌──────────────────┐           ┌─────────────────┐         ┌───────────────────┐
  │ TerminalPanel.tsx│           │    main.rs      │         │    process.rs     │
  │                  │           │                 │         │                   │
- │   User Inputs    ├─(invoke)─►│ write_terminal  ├────────►│  write stdin pipe │
+ │   Inputs to      ├─(invoke)─►│ write_terminal  ├────────►│  write stdin pipe │
+ │   Active Session │           │ (session_id)    │         │ (session_id)      │
  │                  │           │                 │         │         │         │
  │   Render Output  │◄──(emit)──┤ emit stdout/err ◄─(bcast)─┤  read stdout/err  │
  └──────────────────┘           └─────────────────┘         └─────────┬─────────┘
