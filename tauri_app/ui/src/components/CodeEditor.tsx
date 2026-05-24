@@ -8,6 +8,10 @@ interface CodeEditorProps {
   isLoading: boolean;
   error: string | null;
   onFileSaved?: () => void;
+  onChange?: (val: string) => void;
+  onSave?: (val: string) => void;
+  scrollPositionsRef: React.MutableRefObject<{ [path: string]: number }>;
+  cursorPositionsRef: React.MutableRefObject<{ [path: string]: { start: number; end: number } }>;
 }
 
 export default function CodeEditor({
@@ -15,31 +19,85 @@ export default function CodeEditor({
   content: initialContent,
   isLoading,
   error,
-  onFileSaved
+  onFileSaved,
+  onChange,
+  onSave,
+  scrollPositionsRef,
+  cursorPositionsRef
 }: CodeEditorProps) {
   const [content, setContent] = useState<string>("");
   const [originalContent, setOriginalContent] = useState<string>("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const lastPathRef = useRef<string | null>(null);
 
-  // Sync internal content with parent's decoded content when it loads or when path changes
+  // Save position on unmount or file path change
   useEffect(() => {
-    if (initialContent !== null) {
-      setContent(initialContent);
-      setOriginalContent(initialContent);
-    } else {
-      setContent("");
-      setOriginalContent("");
+    return () => {
+      if (filePath && textareaRef.current) {
+        scrollPositionsRef.current[filePath] = textareaRef.current.scrollTop;
+        cursorPositionsRef.current[filePath] = {
+          start: textareaRef.current.selectionStart,
+          end: textareaRef.current.selectionEnd
+        };
+      }
+    };
+  }, [filePath, scrollPositionsRef, cursorPositionsRef]);
+
+  // Sync internal content with parent's decoded content without cursor jumping
+  useEffect(() => {
+    if (filePath !== lastPathRef.current || (initialContent !== null && originalContent === "")) {
+      if (initialContent !== null) {
+        setContent(initialContent);
+        setOriginalContent(initialContent);
+        lastPathRef.current = filePath;
+
+        // Restore scroll and cursor for the new file path using setTimeout
+        if (filePath && textareaRef.current) {
+          const savedScroll = scrollPositionsRef.current[filePath] || 0;
+          const savedCursor = cursorPositionsRef.current[filePath];
+
+          setTimeout(() => {
+            if (textareaRef.current) {
+              if (savedCursor) {
+                textareaRef.current.selectionStart = savedCursor.start;
+                textareaRef.current.selectionEnd = savedCursor.end;
+              }
+              textareaRef.current.scrollTop = savedScroll;
+              if (lineNumbersRef.current) {
+                lineNumbersRef.current.scrollTop = savedScroll;
+              }
+            }
+          }, 0);
+        }
+      } else {
+        setContent("");
+        setOriginalContent("");
+        lastPathRef.current = null;
+      }
     }
     setSaveStatus("idle");
   }, [initialContent, filePath]);
 
-
-  // Sync scroll between textarea and line numbers
+  // Sync scroll between textarea and line numbers, and record scroll position
   const handleScroll = () => {
     if (textareaRef.current && lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+      const scrollPos = textareaRef.current.scrollTop;
+      lineNumbersRef.current.scrollTop = scrollPos;
+      if (filePath) {
+        scrollPositionsRef.current[filePath] = scrollPos;
+      }
+    }
+  };
+
+  // Record cursor selection positions on interactions
+  const handleSelect = () => {
+    if (textareaRef.current && filePath) {
+      cursorPositionsRef.current[filePath] = {
+        start: textareaRef.current.selectionStart,
+        end: textareaRef.current.selectionEnd
+      };
     }
   };
 
@@ -51,6 +109,7 @@ export default function CodeEditor({
       setOriginalContent(content);
       setSaveStatus("success");
       if (onFileSaved) onFileSaved();
+      if (onSave) onSave(content);
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch (err: any) {
       console.error("Error writing file:", err);
@@ -143,8 +202,14 @@ export default function CodeEditor({
             ref={textareaRef}
             className="editor-textarea"
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => {
+              setContent(e.target.value);
+              if (onChange) onChange(e.target.value);
+            }}
             onScroll={handleScroll}
+            onSelect={handleSelect}
+            onKeyUp={handleSelect}
+            onMouseUp={handleSelect}
             spellCheck={false}
             placeholder="Type code here..."
           />

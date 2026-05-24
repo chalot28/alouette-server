@@ -2092,13 +2092,25 @@ body {
 }
 
 /* VS Code Style Editor Tabs Bar */
+.tabs-header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 35px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  position: relative;
+  width: 100%;
+}
+
 .editor-tabs-bar {
+  flex: 1;
   display: flex;
   background-color: var(--bg-secondary);
-  height: 35px;
-  border-bottom: 1px solid var(--border-primary);
+  height: 100%;
   overflow-x: auto;
   overflow-y: hidden;
+  border-bottom: none;
 }
 
 .editor-tabs-bar::-webkit-scrollbar {
@@ -2412,4 +2424,628 @@ body {
 
 .btn-header-stop:hover {
   background-color: #dc2626;
+}
+
+/* ==========================================
+   SQLite Visual Direct-Editing Editor Styles
+   ========================================== */
+.sqlite-editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.sqlite-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: var(--bg-tertiary, #151515);
+  border-bottom: 1px solid var(--border-primary);
+  height: 38px;
+  flex-shrink: 0;
+}
+
+.sqlite-editor-header .db-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sqlite-editor-header .db-icon {
+  color: var(--color-accent, #3a86ff);
+}
+
+.sqlite-editor-header .db-name {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.sqlite-editor-header .db-badge {
+  background-color: rgba(58, 134, 255, 0.15);
+  color: var(--color-accent, #3a86ff);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  border: 1px solid rgba(58, 134, 255, 0.25);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sqlite-editor-header .db-path {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sqlite-editor-header .status-indicator-zone {
+  display: flex;
+  align-items: center;
+}
+
+.sqlite-editor-header .status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-primary);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.sqlite-editor-header .status-badge.text-success {
+  color: var(--color-success, #10b981);
+  background-color: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.sqlite-editor-header .status-badge.text-danger {
+  color: var(--color-danger, #ef4444);
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.sqlite-editor-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left Sidebar - Table List */
+.sqlite-sidebar {
+  width: 200px;
+  border-right: 1px solid var(--border-primary);
+  background-color: var(--bg-tertiary, #151515);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.sqlite-sidebar .sidebar-title {
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  letter-spacing: 0.5px;
+}
+
+.sqlite-sidebar .refresh-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.sqlite-sidebar .refresh-btn:hover {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.sqlite-sidebar .tables-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sqlite-sidebar .table-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+  font-size: 11px;
+}
+
+.sqlite-sidebar .table-list-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.sqlite-sidebar .table-list-item.active {
+  background-color: rgba(58, 134, 255, 0.15);
+  color: var(--color-accent, #3a86ff);
+  font-weight: 600;
+}
+
+.sqlite-sidebar .table-list-item .tbl-icon {
+  flex-shrink: 0;
+}
+
+.sqlite-sidebar .table-list-item .tbl-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Right Grid Panel */
+.sqlite-grid-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg-secondary);
+}
+
+.sqlite-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(239, 68, 68, 0.1);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  padding: 8px 16px;
+  font-size: 11px;
+}
+
+.table-grid-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.grid-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  background-color: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.grid-toolbar .table-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grid-toolbar .table-title {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.grid-toolbar .row-count {
+  font-size: 10px;
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-primary);
+}
+
+.grid-toolbar .toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.grid-toolbar .no-pk-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.btn-toolbar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-toolbar:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.btn-toolbar.btn-primary {
+  background-color: var(--color-accent, #3a86ff);
+  border-color: var(--color-accent, #3a86ff);
+  color: #ffffff;
+}
+
+.btn-toolbar.btn-primary:hover {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+.btn-toolbar.active {
+  background-color: rgba(58, 134, 255, 0.2);
+  border-color: var(--color-accent, #3a86ff);
+  color: var(--color-accent, #3a86ff);
+}
+
+/* Add Column Form */
+.add-column-panel {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 10px 16px;
+  background-color: var(--bg-tertiary, #151515);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.add-column-panel .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.add-column-panel label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.add-column-panel input,
+.add-column-panel select {
+  height: 24px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 0 8px;
+  font-size: 11px;
+  outline: none;
+}
+
+.add-column-panel input:focus,
+.add-column-panel select:focus {
+  border-color: var(--color-accent, #3a86ff);
+}
+
+.add-column-panel .form-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-form {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-form.btn-primary {
+  background-color: var(--color-accent, #3a86ff);
+  color: #ffffff;
+}
+
+.btn-form.btn-primary:hover {
+  background-color: #2563eb;
+}
+
+.btn-form.btn-cancel {
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-primary);
+}
+
+.btn-form.btn-cancel:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+/* Grid Table Viewport */
+.table-viewport {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+.table-viewport table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 11px;
+}
+
+.table-viewport th {
+  position: sticky;
+  top: 0;
+  background-color: var(--bg-tertiary, #151515);
+  padding: 6px 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  z-index: 10;
+  height: 32px;
+}
+
+.table-viewport th.pk-header {
+  border-bottom-color: rgba(58, 134, 255, 0.4);
+}
+
+.table-viewport .header-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+}
+
+.table-viewport .pk-icon {
+  flex-shrink: 0;
+}
+
+.table-viewport .col-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.table-viewport .col-type {
+  font-size: 9px;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.table-viewport td {
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  height: 28px;
+  white-space: nowrap;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.table-viewport tr:hover td {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.grid-cell {
+  cursor: pointer;
+  position: relative;
+  transition: background-color var(--transition-fast);
+}
+
+.grid-cell:hover {
+  background-color: rgba(58, 134, 255, 0.05) !important;
+}
+
+.grid-cell.cell-null .null-tag {
+  font-size: 9px;
+  color: var(--text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.text-right {
+  text-align: right !important;
+}
+
+.cell-input {
+  width: 100%;
+  height: 20px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--color-accent, #3a86ff);
+  color: var(--text-primary);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 11px;
+  outline: none;
+  font-family: inherit;
+}
+
+.actions-header,
+.actions-cell {
+  width: 50px;
+  text-align: center !important;
+  flex-shrink: 0;
+}
+
+.delete-row-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.delete-row-btn:hover {
+  color: var(--color-danger, #ef4444);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+/* Loading & Empty States */
+.grid-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.grid-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+  padding: 40px;
+  text-align: center;
+}
+
+.grid-empty-state .empty-icon {
+  opacity: 0.5;
+}
+
+.grid-empty-state h3 {
+  font-size: 14px;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.grid-empty-state p {
+  font-size: 11px;
+  margin: 0;
+  color: var(--text-muted);
+  max-width: 300px;
+}
+
+.empty-rows {
+  text-align: center !important;
+  padding: 30px !important;
+}
+
+/* Tabs Header Dropdown Actions CSS */
+.tabs-actions-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 8px;
+  border-left: 1px solid var(--border-primary);
+  background-color: var(--bg-secondary);
+  z-index: 50;
+}
+
+.btn-tabs-actions {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.btn-tabs-actions:hover,
+.btn-tabs-actions.active {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.tabs-dropdown-menu {
+  position: absolute;
+  top: 30px;
+  right: 8px;
+  background-color: var(--bg-tertiary, #151515);
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 160px;
+  animation: slideDown 0.15s ease-out;
+  backdrop-filter: blur(10px);
+}
+
+.tabs-dropdown-item {
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 11px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+  color: var(--text-secondary);
+}
+
+.tabs-dropdown-item:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

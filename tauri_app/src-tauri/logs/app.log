@@ -200,3 +200,59 @@
 [2026-05-24 15:04:31.329] Reading file: D:/server_dvtn/README.md
 [2026-05-24 15:07:48.341] Reading file: D:/server_dvtn/README.md
 [2026-05-24 15:12:32.732] Reading file: D:/server_dvtn/jest.config.js
+[2026-05-24 15:22:38.844] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 15:22:38.850] Proto CLI verified and active.
+[2026-05-24 15:22:38.874] Toolchains checked / verified stable.
+[2026-05-24 15:22:47.496] Cloudflared binary verified / updated successfully.
+[2026-05-24 15:22:47.498] Isolated environment initialized successfully!
+[2026-05-24 15:23:18.832] Reading file: D:/server_dvtn/src/database/avt_db.db.js
+[2026-05-24 15:24:21.503] SQLite: get_sqlite_tables for D:/server_dvtn/db/avt_db.db
+[2026-05-24 15:24:21.504] SQLite: get_sqlite_tables for D:/server_dvtn/db/avt_db.db
+[2026-05-24 15:24:21.529] SQLite: get_sqlite_table_data for D:/server_dvtn/db/avt_db.db -> avt_db
+[2026-05-24 15:24:53.229] SQLite: get_sqlite_tables for D:/server_dvtn/db/binh_luan.db
+[2026-05-24 15:24:53.261] SQLite: get_sqlite_table_data for D:/server_dvtn/db/binh_luan.db -> binh_luan
+[2026-05-24 15:24:55.049] SQLite: get_sqlite_tables for D:/server_dvtn/db/danh_sach_dk.db
+[2026-05-24 15:24:55.075] SQLite: get_sqlite_table_data for D:/server_dvtn/db/danh_sach_dk.db -> danh_sach_dk
+[2026-05-24 15:24:56.106] SQLite: get_sqlite_tables for D:/server_dvtn/db/danh_thiep.db
+[2026-05-24 15:24:56.131] SQLite: get_sqlite_table_data for D:/server_dvtn/db/danh_thiep.db -> danh_thiep_dien_tu
+[2026-05-24 15:24:57.892] SQLite: get_sqlite_tables for D:/server_dvtn/db/date.db
+[2026-05-24 15:24:57.913] SQLite: get_sqlite_table_data for D:/server_dvtn/db/date.db -> date
+[2026-05-24 15:24:58.982] SQLite: get_sqlite_tables for D:/server_dvtn/db/diem_danh.db
+[2026-05-24 15:24:59.008] SQLite: get_sqlite_table_data for D:/server_dvtn/db/diem_danh.db -> diem_danh
+[2026-05-24 15:24:59.935] SQLite: get_sqlite_tables for D:/server_dvtn/db/quan_tri_sk.db
+[2026-05-24 15:24:59.955] SQLite: get_sqlite_table_data for D:/server_dvtn/db/quan_tri_sk.db -> quan_tri_sk
+[2026-05-24 15:25:04.340] SQLite: get_sqlite_tables for D:/server_dvtn/db/user.db
+[2026-05-24 15:25:04.380] SQLite: get_sqlite_table_data for D:/server_dvtn/db/user.db -> user
+[2026-05-24 15:25:09.933] SQLite: get_sqlite_tables for D:/server_dvtn/db/thanh_vien.db
+[2026-05-24 15:25:09.961] SQLite: get_sqlite_table_data for D:/server_dvtn/db/thanh_vien.db -> thanh_vien
+[2026-05-24 15:25:23.202] SQLite: get_sqlite_tables for D:/server_dvtn/db/user.db
+[2026-05-24 15:25:23.239] SQLite: get_sqlite_table_data for D:/server_dvtn/db/user.db -> user
+[2026-05-24 15:25:31.524] SQLite: get_sqlite_tables for D:/server_dvtn/db/avt_db.db
+[2026-05-24 15:25:31.569] SQLite: get_sqlite_table_data for D:/server_dvtn/db/avt_db.db -> avt_db
+[2026-05-24 15:25:34.140] SQLite: get_sqlite_tables for D:/server_dvtn/db/binh_luan.db
+[2026-05-24 15:25:34.175] SQLite: get_sqlite_table_data for D:/server_dvtn/db/binh_luan.db -> binh_luan
+[2026-05-24 15:25:35.675] SQLite: get_sqlite_tables for D:/server_dvtn/db/danh_thiep.db
+[2026-05-24 15:25:35.695] SQLite: get_sqlite_table_data for D:/server_dvtn/db/danh_thiep.db -> danh_thiep_dien_tu
+[2026-05-24 15:25:36.735] SQLite: get_sqlite_tables for D:/server_dvtn/db/date.db
+[2026-05-24 15:25:36.756] SQLite: get_sqlite_table_data for D:/server_dvtn/db/date.db -> date
+[2026-05-24 15:25:38.585] SQLite: get_sqlite_tables for D:/server_dvtn/db/diem_danh.db
+[2026-05-24 15:25:38.606] SQLite: get_sqlite_table_data for D:/server_dvtn/db/diem_danh.db -> diem_danh
+[2026-05-24 15:25:41.675] SQLite: get_sqlite_tables for D:/server_dvtn/db/login.db
+[2026-05-24 15:25:41.700] SQLite: get_sqlite_table_data for D:/server_dvtn/db/login.db -> login
+[2026-05-24 15:25:42.084] SQLite: get_sqlite_tables for D:/server_dvtn/db/quan_tri_sk.db
+[2026-05-24 15:25:42.108] SQLite: get_sqlite_table_data for D:/server_dvtn/db/quan_tri_sk.db -> quan_tri_sk
+[2026-05-24 15:25:43.963] SQLite: get_sqlite_tables for D:/server_dvtn/db/so_tay.db
+[2026-05-24 15:25:43.988] SQLite: get_sqlite_table_data for D:/server_dvtn/db/so_tay.db -> so_tay_doan_vien
+[2026-05-24 15:25:45.224] SQLite: get_sqlite_tables for D:/server_dvtn/db/quan_tri_sk.db
+[2026-05-24 15:25:45.245] SQLite: get_sqlite_table_data for D:/server_dvtn/db/quan_tri_sk.db -> quan_tri_sk
+[2026-05-24 15:26:28.107] SQLite: get_sqlite_tables for D:/server_dvtn/db/so_tay.db
+[2026-05-24 15:26:28.128] SQLite: get_sqlite_table_data for D:/server_dvtn/db/so_tay.db -> so_tay_doan_vien
+[2026-05-24 15:42:59.595] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:43:00.906] Reading file: D:/server_dvtn/package.json
+[2026-05-24 15:43:02.070] Reading file: D:/server_dvtn/nul
+[2026-05-24 15:43:41.651] Reading file: D:/server_dvtn/jest.config.js
+[2026-05-24 15:47:14.229] Reading file: D:/server_dvtn/models.json
+[2026-05-24 15:47:15.171] Reading file: D:/server_dvtn/nodemon.json
+[2026-05-24 15:47:18.078] Reading file: D:/server_dvtn/README.md
+[2026-05-24 15:51:39.094] Reading file: D:/server_dvtn/jest.config.js
+[2026-05-24 15:52:59.833] Reading file: D:/server_dvtn/nul

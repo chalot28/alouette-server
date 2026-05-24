@@ -4044,6 +4044,7 @@ dependencies = [
  "base64 0.21.7",
  "chrono",
  "core_engine",
+ "rusqlite",
  "serde",
  "serde_json",
  "tauri",

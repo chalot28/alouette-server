@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Layers, Activity, User, Terminal as TerminalIcon, Plus, X, FileCode } from "lucide-react";
+import { Layers, Activity, User, Terminal as TerminalIcon, Plus, X, FileCode, MoreHorizontal } from "lucide-react";
 
 // Components
 import Header from "./components/Header";
@@ -12,6 +12,8 @@ import TerminalPanel from "./components/TerminalPanel";
 import ProcessManager from "./components/ProcessManager";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
 import FileExplorer from "./components/FileExplorer";
+import SqliteEditor from "./components/SqliteEditor";
+
 
 // Interfaces
 interface Project {
@@ -88,12 +90,15 @@ export default function App() {
   const [openFileContent, setOpenFileContent] = useState<string | null>(null);
   const [isFileLoading, setIsFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [isSqliteFile, setIsSqliteFile] = useState(false);
+  const [filesContent, setFilesContent] = useState<{ [path: string]: string }>({});
+  const [filesOriginalContent, setFilesOriginalContent] = useState<{ [path: string]: string }>({});
+  const [showTabsMenu, setShowTabsMenu] = useState(false);
 
   useEffect(() => {
-    setOpenFilePath(null);
-    setOpenFiles([]);
-    setOpenFileContent(null);
+    // Chỉ reset các trạng thái chuyển đổi nhanh, không giải phóng openFiles hoặc filesContent
     setFileError(null);
+    setShowTabsMenu(false);
   }, [activeProjectId]);
 
   // Form State
@@ -125,6 +130,10 @@ export default function App() {
   const cpuCanvasRef = useRef<HTMLCanvasElement>(null);
   const ramCanvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Persistent refs for scroll and cursor positions of files in CodeEditor
+  const editorScrollPositionsRef = useRef<{ [path: string]: number }>({});
+  const editorCursorPositionsRef = useRef<{ [path: string]: { start: number; end: number } }>({});
+
   // Resizable Panel States
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(220);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(320);
@@ -147,10 +156,26 @@ export default function App() {
   // Effect to load file content when a file path is selected
   useEffect(() => {
     if (openFilePath) {
+      const lowerPath = openFilePath.toLowerCase();
+      const isSql = lowerPath.endsWith(".db") || lowerPath.endsWith(".sqlite") || lowerPath.endsWith(".sqlite3");
+      setIsSqliteFile(isSql);
+
+      if (isSql) {
+        setIsFileLoading(false);
+        setFileError(null);
+        return;
+      }
+
+      // If already loaded in memory, do not re-fetch from disk (preserves unsaved session edits!)
+      if (filesContent[openFilePath] !== undefined) {
+        setIsFileLoading(false);
+        setFileError(null);
+        return;
+      }
+
       const loadFileContent = async (path: string) => {
         setIsFileLoading(true);
         setFileError(null);
-        setOpenFileContent(null);
         try {
           // Nhận dữ liệu dưới dạng chuỗi Base64 (rất nhanh, không treo UI)
           const base64Data = await invoke<string>("read_file_content", { path });
@@ -199,7 +224,8 @@ export default function App() {
             }
           }
 
-          setOpenFileContent(decodedText);
+          setFilesContent((prev) => ({ ...prev, [path]: decodedText }));
+          setFilesOriginalContent((prev) => ({ ...prev, [path]: decodedText }));
         } catch (err: any) {
           setFileError(`Failed to read file: ${err.message || err}`);
         } finally {
@@ -208,11 +234,10 @@ export default function App() {
       };
       loadFileContent(openFilePath);
     } else {
-      // Clear content when no file is selected
-      setOpenFileContent(null);
       setFileError(null);
       setIsFileLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openFilePath]);
 
   // 1. Left Sidebar Width Resize Handler
@@ -325,6 +350,7 @@ export default function App() {
     const handleWindowClick = () => {
       setFileMenuOpen(false);
       setSettingMenuOpen(false);
+      setShowTabsMenu(false);
     };
     window.addEventListener("click", handleWindowClick);
     return () => window.removeEventListener("click", handleWindowClick);
@@ -903,9 +929,56 @@ export default function App() {
     const normalizedPath = path.replace(/\\/g, '/');
     const newOpenFiles = openFiles.filter((f) => f !== normalizedPath);
     setOpenFiles(newOpenFiles);
+    
+    // Release content state from memory
+    setFilesContent((prev) => {
+      const copy = { ...prev };
+      delete copy[normalizedPath];
+      return copy;
+    });
+    setFilesOriginalContent((prev) => {
+      const copy = { ...prev };
+      delete copy[normalizedPath];
+      return copy;
+    });
+
     if (openFilePath === normalizedPath) {
       setOpenFilePath(newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null);
     }
+  };
+
+  const handleCloseAllTabs = () => {
+    setOpenFiles([]);
+    setOpenFilePath(null);
+    setFilesContent({});
+    setFilesOriginalContent({});
+    setIsSqliteFile(false);
+    setShowTabsMenu(false);
+  };
+
+  const handleSaveAndCloseAllTabs = async () => {
+    setShowTabsMenu(false);
+    
+    // Save all dirty files
+    const savePromises = Object.entries(filesContent).map(async ([path, content]) => {
+      const original = filesOriginalContent[path] || "";
+      if (content !== original) {
+        try {
+          await invoke("write_file_content", { path, content });
+        } catch (err) {
+          console.error("Failed to auto-save file during close all: " + path, err);
+        }
+      }
+    });
+    
+    await Promise.all(savePromises);
+    
+    // Clear tabs
+    setOpenFiles([]);
+    setOpenFilePath(null);
+    setFilesContent({});
+    setFilesOriginalContent({});
+    setIsSqliteFile(false);
   };
 
   const handleResetSetupForm = () => {
@@ -1220,36 +1293,77 @@ export default function App() {
               >
                 {/* VS Code Style Editor Tabs */}
                 {openFiles.length > 0 && (
-                  <div className="editor-tabs-bar">
-                    {openFiles.map((path) => (
-                      <div
-                        // Use encodeURIComponent to ensure the key is a valid UTF-8 string for React
-                        key={`tab-${encodeURIComponent(path)}`}
-                        className={`editor-tab ${openFilePath === path ? "active" : ""}`}
-                        onClick={() => setOpenFilePath(path)}
-                        title={path}
-                      >
-                        <FileCode size={12} className="tab-icon" />
-                        <span className="tab-name">{path.split(/[\\/]/).pop()}</span>
-                        <button
-                          className="tab-close-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleFileClose(path);
-                          }}
+                  <div className="tabs-header-container">
+                    <div className="editor-tabs-bar">
+                      {openFiles.map((path) => (
+                        <div
+                          // Use encodeURIComponent to ensure the key is a valid UTF-8 string for React
+                          key={`tab-${encodeURIComponent(path)}`}
+                          className={`editor-tab ${openFilePath === path ? "active" : ""}`}
+                          onClick={() => setOpenFilePath(path)}
+                          title={path}
                         >
-                          <X size={12} />
-                        </button>
-                      </div>
-                    ))}
+                          <FileCode size={12} className="tab-icon" />
+                          <span className="tab-name">{path.split(/[\\/]/).pop()}</span>
+                          <button
+                            className="tab-close-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleFileClose(path);
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="tabs-actions-container">
+                      <button 
+                        className={`btn-tabs-actions ${showTabsMenu ? "active" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowTabsMenu(!showTabsMenu);
+                        }}
+                        title="Tab actions"
+                      >
+                        <MoreHorizontal size={14} />
+                      </button>
+                      {showTabsMenu && (
+                        <div className="tabs-dropdown-menu">
+                          <button className="tabs-dropdown-item" onClick={handleCloseAllTabs}>
+                            Delete All
+                          </button>
+                          <button className="tabs-dropdown-item font-semibold" onClick={handleSaveAndCloseAllTabs}>
+                            Save and Delete All
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
-                <CodeEditor
-                  filePath={openFilePath}
-                  content={openFileContent}
-                  isLoading={isFileLoading}
-                  error={fileError}
-                />
+                {isSqliteFile && openFilePath ? (
+                  <SqliteEditor filePath={openFilePath} />
+                ) : (
+                  <CodeEditor
+                    filePath={openFilePath}
+                    content={openFilePath ? (filesContent[openFilePath] ?? null) : null}
+                    isLoading={isFileLoading}
+                    error={fileError}
+                    onChange={(newVal) => {
+                      if (openFilePath) {
+                        setFilesContent((prev) => ({ ...prev, [openFilePath]: newVal }));
+                      }
+                    }}
+                    onSave={(savedVal) => {
+                      if (openFilePath) {
+                        setFilesOriginalContent((prev) => ({ ...prev, [openFilePath]: savedVal }));
+                      }
+                    }}
+                    scrollPositionsRef={editorScrollPositionsRef}
+                    cursorPositionsRef={editorCursorPositionsRef}
+                  />
+                )}
                 {/* Horizontal splitter handle between CodeEditor and TerminalPanel */}
                 <div
                   className={`resizer-h ${isDraggingMonitor ? "dragging" : ""}`}
