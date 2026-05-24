@@ -16,6 +16,12 @@ pub struct ProjectConfig {
     pub max_cpu_percent: Option<u32>,
     pub max_ram_mb: Option<u64>,
     pub port: Option<u16>,
+    // Enterprise Isolation Fields
+    pub source: Option<String>, // Git URL or local folder path
+    pub terminal_mode: Option<String>, // "pty" or "log"
+    pub toolchain: Option<String>, // "node", "go", "python"
+    pub toolchain_version: Option<String>,
+    pub enable_tunnel: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +81,11 @@ mod tests {
             max_cpu_percent: Some(80),
             max_ram_mb: Some(512),
             port: Some(3000),
+            source: None,
+            terminal_mode: None,
+            toolchain: None,
+            toolchain_version: None,
+            enable_tunnel: None,
         };
 
         let config = ProjectsConfig {
@@ -106,6 +117,11 @@ mod tests {
             max_cpu_percent: None,
             max_ram_mb: None,
             port: None,
+            source: None,
+            terminal_mode: None,
+            toolchain: None,
+            toolchain_version: None,
+            enable_tunnel: None,
         };
 
         let config = ProjectsConfig {

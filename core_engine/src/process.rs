@@ -1,4 +1,7 @@
 use crate::config::ProjectConfig;
+use crate::workspace_manager::WorkspaceManager;
+use crate::proto_manager::ProtoManager;
+use crate::cloudflared_manager::CloudflaredManager;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -6,7 +9,7 @@ use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::{broadcast, oneshot, mpsc};
 use sysinfo::{System, Pid};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -28,6 +31,17 @@ pub struct ProcessLog {
     pub timestamp: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerminalOutput {
+    pub session_id: String,
+    pub text: String,
+}
+
+pub struct TerminalSession {
+    pub stdin_sender: mpsc::Sender<String>,
+    pub pid: u32,
+}
+
 pub struct ProjectInstance {
     pub config: ProjectConfig,
     pub state: ProcessState,
@@ -38,44 +52,165 @@ pub struct ProcessManager {
     pub instances: HashMap<String, ProjectInstance>,
     log_sender: broadcast::Sender<ProcessLog>,
     status_sender: broadcast::Sender<(String, ProcessState)>,
+    pub terminal_sender: broadcast::Sender<TerminalOutput>,
+    pub terminal_sessions: HashMap<String, TerminalSession>,
     log_dir: PathBuf,
     pub max_log_size: Option<u64>,
+    pub workspace_manager: WorkspaceManager,
+    pub proto_manager: ProtoManager,
+    pub cloudflared_manager: CloudflaredManager,
+    pub db_manager: crate::db::DbManager,
 }
 
 impl ProcessManager {
     pub fn new<P: AsRef<Path>>(log_dir: P) -> Self {
         let (log_sender, _) = broadcast::channel(1000);
         let (status_sender, _) = broadcast::channel(100);
+        let (terminal_sender, _) = broadcast::channel(1000);
         
         // Ensure log directory exists
         let log_dir_buf = log_dir.as_ref().to_path_buf();
         let _ = std::fs::create_dir_all(&log_dir_buf);
+        
+        // Initialize managers (in production these paths would be configurable)
+        let is_test = log_dir_buf.to_string_lossy().contains("test");
+        let app_data_dir = if is_test {
+            log_dir_buf.clone()
+        } else {
+            std::env::current_dir().unwrap_or_default().join("app_data")
+        };
+        let _ = std::fs::create_dir_all(&app_data_dir);
+        let db_path = app_data_dir.join("alouette.db");
+
+        // Centralized test cleanup: remove old database files on test start to ensure complete state isolation
+        if is_test {
+            let _ = std::fs::remove_file(&db_path);
+            let _ = std::fs::remove_file(db_path.with_extension("db-journal"));
+            let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+            let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+        }
+
+        let workspaces_dir = app_data_dir.join("workspaces");
+        let proto_home = app_data_dir.join("alouette_toolchains");
+        let cloudflared_exe = app_data_dir.join("bin").join(
+            if cfg!(target_os = "windows") { "cloudflared.exe" } else { "cloudflared" }
+        );
+
+        let db_manager = crate::db::DbManager::new(&db_path);
+        if let Err(e) = db_manager.init() {
+            eprintln!("CRITICAL ERROR: Failed to initialize SQLite database: {}", e);
+        }
+
+        // Hydrate configurations from SQLite database
+        let mut instances = HashMap::new();
+        match db_manager.load_projects() {
+            Ok(projects) => {
+                for config in projects {
+                    instances.insert(
+                        config.id.clone(),
+                        ProjectInstance {
+                            config,
+                            state: ProcessState::Stopped,
+                            stop_sender: None,
+                        },
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("ERROR: Failed to load project configurations from database: {}", e);
+            }
+        }
+
+
+
+        // Spawn async background subscriber task to log process outputs to SQLite if tokio runtime is active (e.g. in tests)
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            let log_rx: broadcast::Receiver<ProcessLog> = log_sender.subscribe();
+            let db_clone = db_manager.clone();
+            handle.spawn(async move {
+                let mut log_rx = log_rx;
+                while let Ok(log) = log_rx.recv().await {
+                    let db = db_clone.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        if let Err(e) = db.insert_log(&log.project_id, &log.stream, &log.text, log.timestamp) {
+                            eprintln!("SQLite log insert error: {}", e);
+                        }
+                        if let Err(e) = db.prune_logs(&log.project_id, 5000) {
+                            eprintln!("SQLite log pruning error: {}", e);
+                        }
+                    }).await;
+                }
+            });
+        }
 
         ProcessManager {
-            instances: HashMap::new(),
+            instances,
             log_sender,
             status_sender,
+            terminal_sender,
+            terminal_sessions: HashMap::new(),
             log_dir: log_dir_buf,
             max_log_size: None,
+            workspace_manager: WorkspaceManager::new(workspaces_dir),
+            proto_manager: ProtoManager::new(proto_home),
+            cloudflared_manager: CloudflaredManager::new(cloudflared_exe),
+            db_manager,
         }
     }
 
-    /// Registers a new project tab instance.
-    pub fn register_project(&mut self, config: ProjectConfig) {
+    /// Performs environment initialization: ensures the private proto binary, fetches stable node/go/python toolchains,
+    /// and checks/updates the latest cloudflared binary in the background.
+    pub async fn initialize_environment(&mut self) -> Result<(), String> {
+        let app_data_dir = std::env::current_dir().unwrap_or_default().join("app_data");
+        let bin_dir = app_data_dir.join("bin");
+
+        // 1. Ensure private proto CLI is ready
+        let proto_bin = self.proto_manager.ensure_proto_cli(&bin_dir).await?;
+        println!("Private proto CLI resides at: {:?}", proto_bin);
+
+        // 2. Ensure stable toolchains are downloaded and installed
+        self.proto_manager.ensure_stable_toolchains(&proto_bin).await?;
+
+        // 3. Ensure latest cloudflared is downloaded
+        let cloudflared_bin = CloudflaredManager::update_tunnel_binary(&bin_dir).await?;
+        self.cloudflared_manager.executable_path = cloudflared_bin;
+        
+        Ok(())
+    }
+
+    /// Registers a new project tab instance, preparing its workspace immediately if source is specified.
+    pub async fn register_project(&mut self, config: ProjectConfig) -> Result<(), String> {
         let id = config.id.clone();
+        let mut updated_config = config;
+
+        // If source is provided, clone/copy it immediately into workspaces
+        if let Some(ref source) = updated_config.source {
+            if !source.trim().is_empty() {
+                // Prepare workspace immediately on registration (saving tab settings)
+                let dest = self.workspace_manager.prepare_workspace(&id, source).await?;
+                updated_config.cwd = Some(dest.to_string_lossy().to_string());
+            }
+        }
+
+        // Save server configuration to SQLite database
+        self.db_manager.save_project(&updated_config)?;
+
         self.instances.insert(
             id,
             ProjectInstance {
-                config,
+                config: updated_config,
                 state: ProcessState::Stopped,
                 stop_sender: None,
             },
         );
+        Ok(())
     }
 
     /// Deregisters a project tab instance, terminating it first if running.
     pub async fn deregister_project(&mut self, project_id: &str) -> Result<(), String> {
         let _ = self.stop_process(project_id).await;
+        // Delete server configuration (and its logs via ON DELETE CASCADE) from SQLite
+        self.db_manager.delete_project(project_id)?;
         self.instances.remove(project_id);
         Ok(())
     }
@@ -105,6 +240,26 @@ impl ProcessManager {
         self.status_sender.subscribe()
     }
 
+    /// Spawns the background SQLite log writer task. Must be called from inside a Tokio runtime context (e.g. Tauri setup hook).
+    pub fn spawn_log_persister(&self) {
+        let log_rx = self.subscribe_logs();
+        let db_clone = self.db_manager.clone();
+        tokio::spawn(async move {
+            let mut log_rx = log_rx;
+            while let Ok(log) = log_rx.recv().await {
+                let db = db_clone.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    if let Err(e) = db.insert_log(&log.project_id, &log.stream, &log.text, log.timestamp) {
+                        eprintln!("SQLite log insert error: {}", e);
+                    }
+                    if let Err(e) = db.prune_logs(&log.project_id, 5000) {
+                        eprintln!("SQLite log pruning error: {}", e);
+                    }
+                }).await;
+            }
+        });
+    }
+
     /// Internal helper to update process state and broadcast changes.
     fn update_state(&mut self, project_id: &str, new_state: ProcessState) {
         if let Some(inst) = self.instances.get_mut(project_id) {
@@ -122,7 +277,24 @@ impl ProcessManager {
             return Err("Process is already running or in setup".to_string());
         }
 
-        let config = inst.config.clone();
+        let mut config = inst.config.clone();
+        
+        // 1. Prepare Workspace (Clone or Copy) if CWD does not exist yet (fallback)
+        if let Some(ref source) = config.source {
+            if !source.is_empty() {
+                let dest = self.workspace_manager.workspaces_dir.join(project_id);
+                if !dest.exists() {
+                    let dest = self.workspace_manager.prepare_workspace(project_id, source).await?;
+                    config.cwd = Some(dest.to_string_lossy().to_string());
+                } else {
+                    config.cwd = Some(dest.to_string_lossy().to_string());
+                }
+            }
+        }
+        
+        // Update local config in instance since cwd might have changed
+        inst.config = config.clone();
+
         let (stop_sender, stop_receiver) = oneshot::channel::<()>();
         inst.stop_sender = Some(stop_sender);
 
@@ -131,6 +303,21 @@ impl ProcessManager {
         let log_dir = self.log_dir.clone();
         let project_id_str = project_id.to_string();
         let max_log_size = self.max_log_size.unwrap_or(20 * 1024 * 1024);
+        
+        // Generate Spoofed ENV
+        let spoofed_envs = self.proto_manager.get_spoofed_env();
+
+        // Optional: Pre-install toolchain
+        let toolchain = config.toolchain.clone();
+        let mut toolchain_version = config.toolchain_version.clone().unwrap_or_else(|| "stable".to_string());
+        if toolchain_version == "stable" {
+            if let Some(ref tool) = toolchain {
+                if tool == "go" || tool == "python" {
+                    toolchain_version = "latest".to_string();
+                }
+            }
+        }
+        let proto_home = self.proto_manager.proto_home.clone();
 
         // Spin up the async execution loop
         tokio::spawn(async move {
@@ -144,7 +331,32 @@ impl ProcessManager {
 
             state_updater.update(ProcessState::Setup);
 
-            // 1. Run Setup Command if defined
+            // Install toolchain if requested using private proto binary
+            if let Some(ref tool) = toolchain {
+                if !tool.is_empty() {
+                    let _ = append_log_line(&log_file, &format!("--- Installing Toolchain {}@{} ---", tool, toolchain_version), max_log_size).await;
+                    let app_data_dir = std::env::current_dir().unwrap_or_default().join("app_data");
+                    let proto_bin = app_data_dir.join("bin").join(if cfg!(target_os = "windows") { "proto.exe" } else { "proto" });
+                    
+                    let status = Command::new(&proto_bin)
+                        .env("PROTO_HOME", &proto_home)
+                        .args(["install", tool, &toolchain_version, "--pin"])
+                        .status()
+                        .await;
+                    if let Ok(st) = status {
+                        if !st.success() {
+                            let reason = format!("Failed to install toolchain {}@{}", tool, toolchain_version);
+                            let _ = append_log_line(&log_file, &format!("--- ERROR: {} ---", reason), max_log_size).await;
+                            state_updater.update(ProcessState::Fatal { reason });
+                            return;
+                        }
+                    } else {
+                         let _ = append_log_line(&log_file, "--- WARNING: Private proto executable not found. Proceeding without strict toolchain installation. ---", max_log_size).await;
+                    }
+                }
+            }
+
+            // Run Setup Command if defined
             if let Some(ref setup_cmd) = config.setup_command {
                 let setup_args = config.setup_args.clone().unwrap_or_default();
                 let mut cmd = Command::new(setup_cmd);
@@ -152,6 +364,9 @@ impl ProcessManager {
                 if let Some(ref dir) = config.cwd {
                     cmd.current_dir(dir);
                 }
+                
+                cmd.envs(spoofed_envs.clone());
+                
                 if let Some(ref envs) = config.env {
                     cmd.envs(envs);
                 }
@@ -177,7 +392,7 @@ impl ProcessManager {
                 }
             }
 
-            // 2. Main Process Execution Loop with Backoff
+            // Main Process Execution Loop with Backoff
             let mut retry_count = 0;
             let max_retries = 5;
             let mut last_start_time;
@@ -195,6 +410,9 @@ impl ProcessManager {
                 if let Some(ref dir) = config.cwd {
                     cmd.current_dir(dir);
                 }
+                
+                cmd.envs(spoofed_envs.clone());
+
                 if let Some(ref envs) = config.env {
                     cmd.envs(envs);
                 }
@@ -289,7 +507,7 @@ impl ProcessManager {
                             _ = &mut stop_rx => {
                                 // Terminate active process tree recursively
                                 let _ = append_log_line(&log_file, "--- Stopping Process Tree... ---", max_log_size).await;
-                                terminate_process_tree(pid).await;
+                                crate::process::terminate_process_tree(pid).await;
                                 let _ = child.kill().await;
                                 let _ = stdout_task.await;
                                 let _ = stderr_task.await;
@@ -353,6 +571,205 @@ impl ProcessManager {
 
         // Force transition to Fatal
         self.update_state(project_id, ProcessState::Fatal { reason });
+        Ok(())
+    }
+
+    /// Subscribes to the global terminal output broadcast channel.
+    pub fn subscribe_terminal(&self) -> broadcast::Receiver<TerminalOutput> {
+        self.terminal_sender.subscribe()
+    }
+
+    /// Spawns a sandboxed interactive terminal session inside the private proto environment.
+    pub async fn spawn_terminal(&mut self, session_id: &str, cwd: Option<&str>) -> Result<(), String> {
+        // Kill existing if any
+        let _ = self.kill_terminal(session_id).await;
+
+        let mut spoofed_envs = self.proto_manager.get_spoofed_env();
+
+        let workspace_root = cwd.unwrap_or(".");
+        let abs_workspace_root = std::fs::canonicalize(workspace_root)
+            .unwrap_or_else(|_| std::path::PathBuf::from(workspace_root));
+        let abs_workspace_root_str = abs_workspace_root.to_string_lossy().to_string();
+        
+        let clean_workspace_root = if abs_workspace_root_str.starts_with(r"\\?\") {
+            abs_workspace_root_str[4..].to_string()
+        } else {
+            abs_workspace_root_str
+        };
+
+        spoofed_envs.push(("WORKSPACE_ROOT".to_string(), clean_workspace_root.clone()));
+
+        #[cfg(target_os = "windows")]
+        let cd_restrict_path = {
+            let app_data_dir = std::env::current_dir().unwrap_or_default().join("app_data");
+            let bin_dir = app_data_dir.join("bin");
+            let _ = std::fs::create_dir_all(&bin_dir);
+            let p = bin_dir.join("cd_restrict.bat");
+            let batch_content = r#"@echo off
+
+doskey cd="%~f0" $*
+doskey chdir="%~f0" $*
+
+if "%~1" == "" (
+    chdir
+    goto :eof
+)
+
+pushd "%~1" 2>nul
+if errorlevel 1 (
+    echo Path not found: %~1
+    goto :eof
+)
+set "RESOLVED_DIR=%CD%"
+popd
+
+set "CHECK_PATH=%RESOLVED_DIR%"
+set "ROOT_PATH=%WORKSPACE_ROOT%"
+
+if not "%ROOT_PATH:~-1%"=="\" set "ROOT_PATH=%ROOT_PATH%\"
+if not "%CHECK_PATH:~-1%"=="\" set "CHECK_PATH=%CHECK_PATH%\"
+
+call set "TEST_STR=%%CHECK_PATH:%ROOT_PATH%=%%"
+if "%TEST_STR%" == "%CHECK_PATH%" (
+    echo [Restricted Shell] Access denied: Cannot navigate outside the workspace root (%WORKSPACE_ROOT%)
+    goto :eof
+)
+
+chdir /d "%RESOLVED_DIR%"
+
+call set "REL_PATH=%%RESOLVED_DIR:%WORKSPACE_ROOT%=%%"
+if "%REL_PATH:~0,1%" == "\" set "REL_PATH=%REL_PATH:~1%"
+
+if "%REL_PATH%" == "" (
+    prompt $$ 
+) else (
+    prompt %REL_PATH%$$ 
+)
+"#;
+            let _ = std::fs::write(&p, batch_content);
+            p
+        };
+
+        let shell_cmd = if cfg!(target_os = "windows") { "cmd.exe" } else { "sh" };
+        let mut cmd = Command::new(shell_cmd);
+        
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.raw_arg(format!(
+                "/K \"\"{}\" \"{}\"\"",
+                cd_restrict_path.to_string_lossy(),
+                clean_workspace_root
+            ));
+        }
+
+        if let Some(dir) = cwd {
+            cmd.current_dir(dir);
+        }
+
+        cmd.envs(spoofed_envs);
+        cmd.stdin(std::process::Stdio::piped());
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+
+        let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn shell: {}", e))?;
+        let pid = child.id().unwrap_or(0);
+
+        let mut stdin = child.stdin.take().expect("Failed to capture stdin");
+        let stdout = child.stdout.take().expect("Failed to capture stdout");
+        let stderr = child.stderr.take().expect("Failed to capture stderr");
+
+        let (stdin_sender, mut stdin_rx) = mpsc::channel::<String>(100);
+
+        // Pipe stdin
+        tokio::spawn(async move {
+            while let Some(input) = stdin_rx.recv().await {
+                let _ = stdin.write_all(input.as_bytes()).await;
+                let _ = stdin.flush().await;
+            }
+        });
+
+        let terminal_sender = self.terminal_sender.clone();
+        let session_id_str = session_id.to_string();
+        
+        // Pipe stdout (read by buffers to support shell prompts)
+        let terminal_sender_stdout = terminal_sender.clone();
+        let session_id_stdout = session_id_str.clone();
+        tokio::spawn(async move {
+            let mut reader = stdout;
+            let mut buffer = [0; 4096];
+            loop {
+                match tokio::io::AsyncReadExt::read(&mut reader, &mut buffer).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let text = String::from_utf8_lossy(&buffer[..n]).to_string();
+                        let _ = terminal_sender_stdout.send(TerminalOutput {
+                            session_id: session_id_stdout.clone(),
+                            text,
+                        });
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        // Pipe stderr (read by buffers to support shell prompts)
+        let terminal_sender_stderr = terminal_sender.clone();
+        let session_id_stderr = session_id_str.clone();
+        tokio::spawn(async move {
+            let mut reader = stderr;
+            let mut buffer = [0; 4096];
+            loop {
+                match tokio::io::AsyncReadExt::read(&mut reader, &mut buffer).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let text = String::from_utf8_lossy(&buffer[..n]).to_string();
+                        let _ = terminal_sender_stderr.send(TerminalOutput {
+                            session_id: session_id_stderr.clone(),
+                            text,
+                        });
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        // Child wait loop
+        tokio::spawn(async move {
+            let _ = child.wait().await;
+        });
+
+        self.terminal_sessions.insert(session_id_str, TerminalSession {
+            stdin_sender,
+            pid,
+        });
+
+        Ok(())
+    }
+
+    /// Writes raw input text to the interactive terminal session's stdin.
+    pub async fn write_terminal(&self, session_id: &str, mut text: String) -> Result<(), String> {
+        if let Some(session) = self.terminal_sessions.get(session_id) {
+            #[cfg(target_os = "windows")]
+            {
+                if text.ends_with('\n') && !text.ends_with("\r\n") {
+                    text.pop();
+                    text.push_str("\r\n");
+                }
+            }
+            session.stdin_sender.send(text).await
+                .map_err(|e| format!("Failed to send input to terminal session: {}", e))?;
+            Ok(())
+        } else {
+            Err(format!("Terminal session '{}' not found", session_id))
+        }
+    }
+
+    /// Forcefully terminates an active interactive terminal session process tree.
+    pub async fn kill_terminal(&mut self, session_id: &str) -> Result<(), String> {
+        if let Some(session) = self.terminal_sessions.remove(session_id) {
+            terminate_process_tree(session.pid).await;
+        }
         Ok(())
     }
 }
@@ -579,9 +996,14 @@ mod tests {
             max_cpu_percent: None,
             max_ram_mb: None,
             port: None,
+            source: None,
+            terminal_mode: None,
+            toolchain: None,
+            toolchain_version: None,
+            enable_tunnel: None,
         };
 
-        pm.register_project(config.clone());
+        pm.register_project(config.clone()).await.unwrap();
 
         assert_eq!(pm.get_configs().len(), 1);
         assert_eq!(pm.get_state("test-id"), Some(ProcessState::Stopped));
@@ -614,9 +1036,14 @@ mod tests {
             max_cpu_percent: None,
             max_ram_mb: None,
             port: None,
+            source: None,
+            terminal_mode: None,
+            toolchain: None,
+            toolchain_version: None,
+            enable_tunnel: None,
         };
 
-        pm.register_project(config);
+        pm.register_project(config).await.unwrap();
 
         let mut log_rx = pm.subscribe_logs();
         let mut status_rx = pm.subscribe_status();
@@ -681,9 +1108,14 @@ mod tests {
             max_cpu_percent: None,
             max_ram_mb: None,
             port: None,
+            source: None,
+            terminal_mode: None,
+            toolchain: None,
+            toolchain_version: None,
+            enable_tunnel: None,
         };
 
-        pm.register_project(config);
+        pm.register_project(config).await.unwrap();
         let mut status_rx = pm.subscribe_status();
 
         let start_res = pm.start_process("nonexistent").await;
@@ -731,9 +1163,14 @@ mod tests {
             max_cpu_percent: None,
             max_ram_mb: None,
             port: None,
+            source: None,
+            terminal_mode: None,
+            toolchain: None,
+            toolchain_version: None,
+            enable_tunnel: None,
         };
 
-        pm.register_project(config);
+        pm.register_project(config).await.unwrap();
         let mut status_rx = pm.subscribe_status();
 
         let start_res = pm.start_process("setup-fail").await;
@@ -776,9 +1213,14 @@ mod tests {
             max_cpu_percent: None,
             max_ram_mb: None,
             port: None,
+            source: None,
+            terminal_mode: None,
+            toolchain: None,
+            toolchain_version: None,
+            enable_tunnel: None,
         };
 
-        pm.register_project(config);
+        pm.register_project(config).await.unwrap();
         
         let stop_res = pm.stop_process("test-stopped").await;
         assert!(stop_res.is_ok());
@@ -863,9 +1305,14 @@ mod tests {
             max_cpu_percent: None,
             max_ram_mb: None,
             port: None,
+            source: None,
+            terminal_mode: None,
+            toolchain: None,
+            toolchain_version: None,
+            enable_tunnel: None,
         };
 
-        pm.register_project(config);
+        pm.register_project(config).await.unwrap();
 
         let mut log_rx = pm.subscribe_logs();
         let start_res = pm.start_process("test-env").await;

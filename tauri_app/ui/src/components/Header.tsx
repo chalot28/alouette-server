@@ -1,6 +1,6 @@
+import brandIcon from "./brand-icon.png";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  Layers,
   FileText,
   Settings,
   Search,
@@ -68,7 +68,7 @@ export default function Header({
     <header className="global-header" data-tauri-drag-region>
       <div className="header-left">
         <div className="brand" data-tauri-drag-region>
-          <Layers className="brand-icon" size={16} />
+          <img src={brandIcon} className="brand-icon" alt="App Icon" />
         </div>
 
         <div className="top-red-boxes">

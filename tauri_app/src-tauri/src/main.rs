@@ -8,6 +8,24 @@ use tokio::sync::Mutex;
 use std::fs;
 use std::path::Path;
 
+fn log_to_app_file(msg: &str) {
+    let log_dir = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join("logs");
+    let _ = std::fs::create_dir_all(&log_dir);
+    let log_file = log_dir.join("app.log");
+    
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_file)
+    {
+        use std::io::Write;
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+        let _ = writeln!(file, "[{}] {}", timestamp, msg);
+    }
+}
+
 struct AppState {
     process_manager: Arc<Mutex<ProcessManager>>,
     resource_monitor: Arc<ResourceMonitor>,
@@ -18,9 +36,18 @@ async fn start_project_process(
     state: State<'_, AppState>,
     project_id: String,
 ) -> Result<(), String> {
+    log_to_app_file(&format!("Tauri command received: start_project_process for project_id: {}", project_id));
     let mut pm = state.process_manager.lock().await;
-    pm.start_process(&project_id).await?;
-    Ok(())
+    match pm.start_process(&project_id).await {
+        Ok(_) => {
+            log_to_app_file(&format!("Process successfully started for project_id: {}", project_id));
+            Ok(())
+        }
+        Err(e) => {
+            log_to_app_file(&format!("Failed to start process for project_id: {}. Error: {}", project_id, e));
+            Err(e)
+        }
+    }
 }
 
 #[tauri::command]
@@ -28,9 +55,18 @@ async fn stop_project_process(
     state: State<'_, AppState>,
     project_id: String,
 ) -> Result<(), String> {
+    log_to_app_file(&format!("Tauri command received: stop_project_process for project_id: {}", project_id));
     let mut pm = state.process_manager.lock().await;
-    pm.stop_process(&project_id).await?;
-    Ok(())
+    match pm.stop_process(&project_id).await {
+        Ok(_) => {
+            log_to_app_file(&format!("Process successfully stopped for project_id: {}", project_id));
+            Ok(())
+        }
+        Err(e) => {
+            log_to_app_file(&format!("Failed to stop process for project_id: {}. Error: {}", project_id, e));
+            Err(e)
+        }
+    }
 }
 
 #[tauri::command]
@@ -38,6 +74,26 @@ async fn get_projects(state: State<'_, AppState>) -> Result<Vec<ProjectConfig>, 
     let pm = state.process_manager.lock().await;
     Ok(pm.get_configs())
 }
+
+#[tauri::command]
+async fn get_project_logs(
+    state: State<'_, AppState>,
+    project_id: String,
+    limit: Option<usize>,
+) -> Result<Vec<core_engine::ProcessLog>, String> {
+    let pm = state.process_manager.lock().await;
+    let limit_val = limit.unwrap_or(1000);
+    let db = pm.db_manager.clone();
+    
+    let logs = tokio::task::spawn_blocking(move || {
+        db.get_logs(&project_id, limit_val)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+    
+    Ok(logs)
+}
+
 
 #[tauri::command]
 async fn get_project_state(
@@ -54,7 +110,39 @@ async fn register_project(
     config: ProjectConfig,
 ) -> Result<(), String> {
     let mut pm = state.process_manager.lock().await;
-    pm.register_project(config);
+    pm.register_project(config).await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn spawn_terminal_session(
+    state: State<'_, AppState>,
+    session_id: String,
+    cwd: Option<String>,
+) -> Result<(), String> {
+    let mut pm = state.process_manager.lock().await;
+    pm.spawn_terminal(&session_id, cwd.as_deref()).await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn write_to_terminal_session(
+    state: State<'_, AppState>,
+    session_id: String,
+    input: String,
+) -> Result<(), String> {
+    let pm = state.process_manager.lock().await;
+    pm.write_terminal(&session_id, input).await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn kill_terminal_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    let mut pm = state.process_manager.lock().await;
+    pm.kill_terminal(&session_id).await?;
     Ok(())
 }
 
@@ -202,7 +290,7 @@ fn main() {
     let mut pm = ProcessManager::new(&log_dir);
 
     // Pre-populate a standard System Connection diagnostics task for ease of testing
-    pm.register_project(ProjectConfig {
+    let _ = tauri::async_runtime::block_on(pm.register_project(ProjectConfig {
         id: "sys-ping".to_string(),
         name: "Local Connection diagnostics".to_string(),
         command: "ping".to_string(),
@@ -215,7 +303,12 @@ fn main() {
         max_cpu_percent: None,
         max_ram_mb: None,
         port: None,
-    });
+        source: None,
+        terminal_mode: None,
+        toolchain: None,
+        toolchain_version: None,
+        enable_tunnel: None,
+    }));
 
     let process_manager = Arc::new(Mutex::new(pm));
     let resource_monitor = Arc::new(ResourceMonitor::new());
@@ -233,6 +326,74 @@ fn main() {
             let window = app
                 .get_webview_window("main")
                 .ok_or_else(|| tauri::Error::WindowNotFound)?;
+
+            // Spawn SQLite background log persister task inside active Tokio runtime
+            let pm_for_persister = pm_clone.clone();
+            tauri::async_runtime::spawn(async move {
+                let pm = pm_for_persister.lock().await;
+                pm.spawn_log_persister();
+            });
+
+            // 0. Spawn environment preloader task (non-blocking ngầm)
+            let pm_for_init = pm_clone.clone();
+            tauri::async_runtime::spawn(async move {
+                let init_msg = "Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...";
+                println!("{}", init_msg);
+                log_to_app_file(init_msg);
+                
+                // 1. Brief lock to extract the config paths
+                let (proto_home, bin_dir) = {
+                    let pm = pm_for_init.lock().await;
+                    let app_data_dir = std::env::current_dir().unwrap_or_default().join("app_data");
+                    let bin_dir = app_data_dir.join("bin");
+                    (pm.proto_manager.proto_home.clone(), bin_dir)
+                };
+
+                // 2. Heavy operations outside the mutex lock
+                let proto_manager = core_engine::proto_manager::ProtoManager::new(proto_home);
+                let proto_bin = match proto_manager.ensure_proto_cli(&bin_dir).await {
+                    Ok(bin) => bin,
+                    Err(e) => {
+                        let err_msg = format!("ENVIRONMENT INIT ERROR (ensure_proto_cli): {}", e);
+                        eprintln!("{}", err_msg);
+                        log_to_app_file(&err_msg);
+                        return;
+                    }
+                };
+
+                log_to_app_file("Proto CLI verified and active.");
+
+                if let Err(e) = proto_manager.ensure_stable_toolchains(&proto_bin).await {
+                    let err_msg = format!("ENVIRONMENT INIT ERROR (ensure_stable_toolchains): {}", e);
+                    eprintln!("{}", err_msg);
+                    log_to_app_file(&err_msg);
+                    return;
+                }
+
+                log_to_app_file("Toolchains checked / verified stable.");
+
+                let cloudflared_bin = match core_engine::cloudflared_manager::CloudflaredManager::update_tunnel_binary(&bin_dir).await {
+                    Ok(bin) => bin,
+                    Err(e) => {
+                        let err_msg = format!("ENVIRONMENT INIT ERROR (update_tunnel_binary): {}", e);
+                        eprintln!("{}", err_msg);
+                        log_to_app_file(&err_msg);
+                        return;
+                    }
+                };
+
+                log_to_app_file("Cloudflared binary verified / updated successfully.");
+
+                // 3. Lock briefly again to write the computed cloudflared binary path back
+                {
+                    let mut pm = pm_for_init.lock().await;
+                    pm.cloudflared_manager.executable_path = cloudflared_bin;
+                }
+                
+                let success_msg = "Isolated environment initialized successfully!";
+                println!("{}", success_msg);
+                log_to_app_file(success_msg);
+            });
 
             // 1. Spawn Log Event Router Task
             let pm_for_logs = pm_clone.clone();
@@ -341,18 +502,35 @@ fn main() {
                 }
             });
 
+            // 4. Spawn Terminal Event Router Task
+            let pm_for_terminal = pm_clone.clone();
+            let window_for_terminal = window.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut term_rx = {
+                    let pm_lock = pm_for_terminal.lock().await;
+                    pm_lock.subscribe_terminal()
+                };
+                while let Ok(output) = term_rx.recv().await {
+                    let _ = window_for_terminal.emit("terminal-output", output);
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             start_project_process,
             stop_project_process,
             get_projects,
+            get_project_logs,
             get_project_state,
             register_project,
             deregister_project,
             check_port_status,
             force_kill_process,
-            get_project_files
+            get_project_files,
+            spawn_terminal_session,
+            write_to_terminal_session,
+            kill_terminal_session
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -367,6 +545,7 @@ fn main() {
 
                 tauri::async_runtime::spawn(async move {
                     let mut pids: Vec<(String, u32)> = Vec::new();
+                    let mut term_pids: Vec<u32> = Vec::new();
                     {
                         let mut pm = pm_clone.lock().await;
                         for (id, inst) in pm.instances.iter_mut() {
@@ -377,11 +556,18 @@ fn main() {
                                 }
                             }
                         }
+                        for (_, session) in pm.terminal_sessions.iter() {
+                            term_pids.push(session.pid);
+                        }
                     }
 
                     for (project_id, pid) in pids {
                         core_engine::terminate_process_tree(pid).await;
                         rm_clone.deregister(project_id);
+                    }
+                    
+                    for pid in term_pids {
+                        core_engine::terminate_process_tree(pid).await;
                     }
 
                     app_handle_clone.exit(0);

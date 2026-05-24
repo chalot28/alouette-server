@@ -27,6 +27,11 @@ interface Project {
   max_cpu_percent?: number;
   max_ram_mb?: number;
   port?: number;
+  source?: string;
+  terminal_mode?: string;
+  toolchain?: string;
+  toolchain_version?: string;
+  enable_tunnel?: boolean;
 }
 
 interface ProcessState {
@@ -57,6 +62,7 @@ export default function App() {
   const [projectStates, setProjectStates] = useState<{ [id: string]: ProcessState }>({});
   const [projectLogs, setProjectLogs] = useState<{ [id: string]: LogLine[] }>({});
   const [resourceHistory, setResourceHistory] = useState<ResourceHistory>({});
+  const [termOutputs, setTermOutputs] = useState<{ [id: string]: string }>({});
 
   // Bottom nav tab (for right-bottom panel between manager / user)
   const [rightBottomTab, setRightBottomTab] = useState<"manager" | "user">("manager");
@@ -81,6 +87,11 @@ export default function App() {
   const [newProjCpu, setNewProjCpu] = useState<string>("");
   const [newProjRam, setNewProjRam] = useState<string>("");
   const [newProjPort, setNewProjPort] = useState<string>("");
+  const [newProjSource, setNewProjSource] = useState("");
+  const [newProjTerminalMode, setNewProjTerminalMode] = useState("log");
+  const [newProjToolchain, setNewProjToolchain] = useState("");
+  const [newProjToolchainVersion, setNewProjToolchainVersion] = useState("stable");
+  const [newProjEnableTunnel, setNewProjEnableTunnel] = useState(false);
 
   // Port conflict state
   const [portConflict, setPortConflict] = useState<{ port: number; pid: number } | null>(null);
@@ -281,12 +292,37 @@ export default function App() {
       });
     });
 
+    // Listen to interactive terminal output events
+    const termListener = listen<any>("terminal-output", (event) => {
+      const payload = event.payload; // { session_id, text }
+      setTermOutputs((prev) => {
+        const prevText = prev[payload.session_id] || "";
+        let newText = prevText + payload.text;
+        if (newText.length > 100000) {
+          newText = newText.slice(newText.length - 100000);
+        }
+        return {
+          ...prev,
+          [payload.session_id]: newText,
+        };
+      });
+    });
+
     return () => {
       logListener.then((unlisten) => unlisten());
       statusListener.then((unlisten) => unlisten());
       resourceListener.then((unlisten) => unlisten());
+      termListener.then((unlisten) => unlisten());
     };
   }, []);
+
+  // Sync state parameters when clicking around tabs
+  const activeProject = projects.find((p) => p.id === activeProjectId);
+  const activeState = projectStates[activeProjectId] || { type: "Stopped" };
+  const activeLogs = projectLogs[activeProjectId] || [];
+  const activeHistory = resourceHistory[activeProjectId] || { cpu: [], ram: [] };
+  const activeCpuVal = activeHistory.cpu[activeHistory.cpu.length - 1] || 0.0;
+  const activeRamVal = activeHistory.ram[activeHistory.ram.length - 1] || 0.0;
 
   // Populate configuration fields when active project changes
   useEffect(() => {
@@ -312,13 +348,75 @@ export default function App() {
     }
   }, [activeProjectId, projects]);
 
-  // Sync state parameters when clicking around tabs
-  const activeProject = projects.find((p) => p.id === activeProjectId);
-  const activeState = projectStates[activeProjectId] || { type: "Stopped" };
-  const activeLogs = projectLogs[activeProjectId] || [];
-  const activeHistory = resourceHistory[activeProjectId] || { cpu: [], ram: [] };
-  const activeCpuVal = activeHistory.cpu[activeHistory.cpu.length - 1] || 0.0;
-  const activeRamVal = activeHistory.ram[activeHistory.ram.length - 1] || 0.0;
+  // 1.5. Interactive Sandboxed Terminal Auto-spawner
+  useEffect(() => {
+    if (activeProjectId && activeProjectId !== "__create_project__" && activeProject) {
+      // Spawn or attach terminal session on backend
+      invoke("spawn_terminal_session", {
+        sessionId: activeProjectId,
+        cwd: activeProject.cwd || null,
+      }).catch((err) => {
+        console.error("Failed to spawn terminal session for " + activeProjectId, err);
+      });
+    }
+  }, [activeProjectId, activeProject?.cwd]);
+
+  // 1.6. Load SQLite historical logs when activeProjectId changes
+  useEffect(() => {
+    if (activeProjectId && activeProjectId !== "__create_project__") {
+      invoke<LogLine[]>("get_project_logs", { projectId: activeProjectId, limit: 1000 })
+        .then((logs) => {
+          setProjectLogs((prev) => ({
+            ...prev,
+            [activeProjectId]: logs
+          }));
+        })
+        .catch((err) => {
+          console.error("Failed to load historical logs from SQLite: ", err);
+        });
+    }
+  }, [activeProjectId]);
+
+
+  // 1.7. Project source auto-fill name helper
+  useEffect(() => {
+    if (!newProjSource.trim()) return;
+    
+    // Auto-fill project identifier (name) if empty
+    if (!newProjName) {
+      let extractedName = "";
+      const source = newProjSource.trim();
+      if (source.startsWith("http://") || source.startsWith("https://") || source.startsWith("git@")) {
+        const parts = source.split("/");
+        let lastPart = parts[parts.length - 1];
+        if (lastPart.endsWith(".git")) {
+          lastPart = lastPart.slice(0, -4);
+        }
+        extractedName = lastPart;
+      } else {
+        const parts = source.split(/[\\/]/);
+        extractedName = parts[parts.length - 1] || "my-project";
+      }
+      if (extractedName) {
+        setNewProjName(extractedName);
+      }
+    }
+  }, [newProjSource]);
+
+  // 1.8. Toolchain auto-fill executor helper
+  useEffect(() => {
+    if (newProjToolchain === "node") {
+      if (!newProjCmd) setNewProjCmd("npm");
+      if (!newProjArgs) setNewProjArgs("run dev");
+    } else if (newProjToolchain === "go") {
+      if (!newProjCmd) setNewProjCmd("go");
+      if (!newProjArgs) setNewProjArgs("run main.go");
+    } else if (newProjToolchain === "python") {
+      if (!newProjCmd) setNewProjCmd("python");
+      if (!newProjArgs) setNewProjArgs("main.py");
+    }
+  }, [newProjToolchain]);
+
 
   // 2. Render CPU & RAM charts dynamically onto Canvas viewports
   useEffect(() => {
@@ -492,7 +590,12 @@ export default function App() {
       env: Object.keys(envObj).length > 0 ? envObj : undefined,
       max_cpu_percent: maxCpuVal,
       max_ram_mb: maxRamVal,
-      port: portVal
+      port: portVal,
+      source: newProjSource.trim() || undefined,
+      terminal_mode: newProjTerminalMode,
+      toolchain: newProjToolchain.trim() || undefined,
+      toolchain_version: newProjToolchainVersion.trim() || undefined,
+      enable_tunnel: newProjEnableTunnel
     };
 
     try {
@@ -542,6 +645,11 @@ export default function App() {
     setNewProjCpu("");
     setNewProjRam("");
     setNewProjPort("");
+    setNewProjSource("");
+    setNewProjTerminalMode("log");
+    setNewProjToolchain("");
+    setNewProjToolchainVersion("stable");
+    setNewProjEnableTunnel(false);
   };
 
   // Export / Import Mock Helpers
@@ -804,6 +912,16 @@ export default function App() {
                   setNewProjCpu={setNewProjCpu}
                   newProjRam={newProjRam}
                   setNewProjRam={setNewProjRam}
+                  newProjSource={newProjSource}
+                  setNewProjSource={setNewProjSource}
+                  newProjTerminalMode={newProjTerminalMode}
+                  setNewProjTerminalMode={setNewProjTerminalMode}
+                  newProjToolchain={newProjToolchain}
+                  setNewProjToolchain={setNewProjToolchain}
+                  newProjToolchainVersion={newProjToolchainVersion}
+                  setNewProjToolchainVersion={setNewProjToolchainVersion}
+                  newProjEnableTunnel={newProjEnableTunnel}
+                  setNewProjEnableTunnel={setNewProjEnableTunnel}
                   handleResetSetupForm={handleResetSetupForm}
                   handleAddProject={handleAddProject}
                 />
@@ -856,6 +974,8 @@ export default function App() {
                   projectStates={projectStates}
                   setActiveProjectId={setActiveProjectId}
                   handleResetSetupForm={handleResetSetupForm}
+                  termOutput={termOutputs[activeProjectId] || ""}
+                  clearTermOutput={(id) => setTermOutputs((prev) => ({ ...prev, [id]: "" }))}
                 />
               </div>
             </>
@@ -899,9 +1019,18 @@ export default function App() {
                 setNewProjCpu={setNewProjCpu}
                 newProjRam={newProjRam}
                 setNewProjRam={setNewProjRam}
+                newProjSource={newProjSource}
+                setNewProjSource={setNewProjSource}
+                newProjTerminalMode={newProjTerminalMode}
+                setNewProjTerminalMode={setNewProjTerminalMode}
+                newProjToolchain={newProjToolchain}
+                setNewProjToolchain={setNewProjToolchain}
+                newProjToolchainVersion={newProjToolchainVersion}
+                setNewProjToolchainVersion={setNewProjToolchainVersion}
+                newProjEnableTunnel={newProjEnableTunnel}
+                setNewProjEnableTunnel={setNewProjEnableTunnel}
                 handleResetSetupForm={handleResetSetupForm}
-                handleAddProject={handleAddProject}
-              />
+                handleAddProject={handleAddProject}              />
               {/* Horizontal splitter handle between ConfigSetup and Manager/Diagnostics */}
               <div 
                 className={`resizer-h ${isDraggingConfig ? "dragging" : ""}`}

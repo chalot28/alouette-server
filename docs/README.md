@@ -23,7 +23,7 @@ The application is structured into three clean, decoupled architectural layers:
                               |
 +-------------------------------------------------------------+
 |                     core_engine Rust Library                |
-|   (Config watch, Tokio Process spawner, PID tree monitor)   |
+|   (SQLite DB, Tokio Process spawner, PID tree monitor)      |
 +-------------------------------------------------------------+
 ```
 
@@ -109,3 +109,15 @@ pub struct AppState {
 }
 ```
 Access to process commands is synchronized via non-blocking async lock guards or thread-safe channels (`tokio::sync::mpsc`), ensuring that even under severe system stress or rapid user tab-switching, race conditions are mathematically impossible.
+
+---
+
+## 5. Enterprise Isolation & Sandboxing Upgrades
+
+Alouette Server incorporates deep environment isolation so spawned tasks and user actions do not depend on or infect host computer tools:
+1. **Self-Contained Proto Toolchains**: Pre-installs private Node.js, Go, and Python runtimes inside `app_data/alouette_toolchains/` on startup. See [proto_toolchain.md](file:///d:/alouette-server/docs/proto_toolchain.md).
+2. **Self-Updating Cloudflare Tunnels**: Downloads the latest `cloudflared` executable on boot with offline local recovery. See [cloudflared_tunnels.md](file:///d:/alouette-server/docs/cloudflared_tunnels.md).
+3. **Workspace Auto-Cloning**: Prepares separate repositories inside private sub-directories (`app_data/workspaces/`) immediately upon saving configurations.
+4. **Isolated Interactive Shells**: Houses real-time terminal shells running directly inside the shadowed environment path. See [interactive_terminals.md](file:///d:/alouette-server/docs/interactive_terminals.md).
+5. **SQLite Persistence & Automatic Pruning**: Securely persists all server configurations and automatically-pruned execution log histories to local database engines. See [sqlite_storage.md](file:///d:/alouette-server/docs/sqlite_storage.md).
+

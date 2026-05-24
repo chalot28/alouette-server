@@ -17,6 +17,16 @@ interface ConfigSetupProps {
   setNewProjCpu: (v: string) => void;
   newProjRam: string;
   setNewProjRam: (v: string) => void;
+  newProjSource: string;
+  setNewProjSource: (v: string) => void;
+  newProjTerminalMode: string;
+  setNewProjTerminalMode: (v: string) => void;
+  newProjToolchain: string;
+  setNewProjToolchain: (v: string) => void;
+  newProjToolchainVersion: string;
+  setNewProjToolchainVersion: (v: string) => void;
+  newProjEnableTunnel: boolean;
+  setNewProjEnableTunnel: (v: boolean) => void;
   handleResetSetupForm: () => void;
   handleAddProject: () => void;
 }
@@ -38,6 +48,16 @@ export default function ConfigSetup({
   setNewProjCpu,
   newProjRam,
   setNewProjRam,
+  newProjSource,
+  setNewProjSource,
+  newProjTerminalMode,
+  setNewProjTerminalMode,
+  newProjToolchain,
+  setNewProjToolchain,
+  newProjToolchainVersion,
+  setNewProjToolchainVersion,
+  newProjEnableTunnel,
+  setNewProjEnableTunnel,
   handleResetSetupForm,
   handleAddProject
 }: ConfigSetupProps) {
@@ -105,6 +125,74 @@ export default function ConfigSetup({
               value={newProjCwd}
               onChange={(e) => setNewProjCwd(e.target.value)}
             />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group flex-1">
+            <label className="form-label">Clone / Copy Source (Optional)</label>
+            <input
+              type="text"
+              className="form-input-sm"
+              placeholder="Git URL or local path to copy..."
+              value={newProjSource}
+              onChange={(e) => setNewProjSource(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group flex-1">
+            <label className="form-label">Toolchain (Proto)</label>
+            <select
+              className="form-input-sm"
+              value={newProjToolchain}
+              onChange={(e) => setNewProjToolchain(e.target.value)}
+            >
+              <option value="">System Default (No strict isolation)</option>
+              <option value="node">Node.js</option>
+              <option value="go">Go</option>
+              <option value="python">Python</option>
+            </select>
+          </div>
+          {newProjToolchain && (
+            <div className="form-group flex-1">
+              <label className="form-label">Version</label>
+              <input
+                type="text"
+                className="form-input-sm"
+                placeholder="e.g. stable, 20.9.0"
+                value={newProjToolchainVersion}
+                onChange={(e) => setNewProjToolchainVersion(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="form-row">
+          <div className="form-group flex-1">
+            <label className="form-label">Terminal Mode</label>
+            <select
+              className="form-input-sm"
+              value={newProjTerminalMode}
+              onChange={(e) => setNewProjTerminalMode(e.target.value)}
+            >
+              <option value="log">Piped Log Stream (Mode B)</option>
+              <option value="pty">Interactive PTY (Mode A)</option>
+            </select>
+          </div>
+          <div className="form-group flex-1" style={{ alignSelf: "flex-end", paddingBottom: "6px" }}>
+            <div className="checkbox-wrapper">
+              <input
+                type="checkbox"
+                id="enable_tunnel_sw"
+                checked={newProjEnableTunnel}
+                onChange={(e) => setNewProjEnableTunnel(e.target.checked)}
+              />
+              <label htmlFor="enable_tunnel_sw" className="checkbox-label">
+                Enable Cloudflare Tunnel
+              </label>
+            </div>
           </div>
         </div>
 
