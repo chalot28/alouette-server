@@ -11,10 +11,11 @@ interface FileNode {
 
 interface FileExplorerProps {
   activeCwd: string | undefined;
+  onFileSelect: (filePath: string) => void;
 }
 
 // Sub-component to render directory tree nodes recursively
-function TreeNode({ node }: { node: FileNode }) {
+function TreeNode({ node, onFileSelect }: { node: FileNode; onFileSelect: (filePath: string) => void }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const getFileIcon = (fileName: string, isDir: boolean) => {
@@ -47,8 +48,7 @@ function TreeNode({ node }: { node: FileNode }) {
     if (node.is_dir) {
       setIsOpen(!isOpen);
     } else {
-      // Just print file click to developer console
-      console.log("File selected:", node.path);
+      onFileSelect(node.path as string);
     }
   };
 
@@ -69,7 +69,7 @@ function TreeNode({ node }: { node: FileNode }) {
       {node.is_dir && isOpen && node.children && (
         <div style={{ paddingLeft: "12px", borderLeft: "1px solid var(--border-primary)", marginLeft: "18px" }}>
           {node.children.map((child, idx) => (
-            <TreeNode key={idx} node={child} />
+            <TreeNode key={idx} node={child} onFileSelect={onFileSelect} />
           ))}
         </div>
       )}
@@ -77,7 +77,7 @@ function TreeNode({ node }: { node: FileNode }) {
   );
 }
 
-export default function FileExplorer({ activeCwd }: FileExplorerProps) {
+export default function FileExplorer({ activeCwd, onFileSelect }: FileExplorerProps) {
   const [files, setFiles] = useState<FileNode[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -123,7 +123,7 @@ export default function FileExplorer({ activeCwd }: FileExplorerProps) {
         {!loading && !error && files.length > 0 && (
           <div>
             {files.map((file, idx) => (
-              <TreeNode key={idx} node={file} />
+              <TreeNode key={idx} node={file} onFileSelect={onFileSelect} />
             ))}
           </div>
         )}

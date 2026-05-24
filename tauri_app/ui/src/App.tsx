@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Layers, Activity, User, Terminal as TerminalIcon, Plus } from "lucide-react";
+import { Layers, Activity, User, Terminal as TerminalIcon, Plus, X, FileCode } from "lucide-react";
 
 // Components
 import Header from "./components/Header";
-import ProcessMonitor from "./components/ProcessMonitor";
+import CodeEditor from "./components/CodeEditor";
 import ConfigSetup from "./components/ConfigSetup";
 import TabList from "./components/TabList";
 import TerminalPanel from "./components/TerminalPanel";
@@ -83,6 +83,13 @@ export default function App() {
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [settingMenuOpen, setSettingMenuOpen] = useState(false);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
+  const [openFilePath, setOpenFilePath] = useState<string | null>(null);
+  const [openFiles, setOpenFiles] = useState<string[]>([]);
+
+  useEffect(() => {
+    setOpenFilePath(null);
+    setOpenFiles([]);
+  }, [activeProjectId]);
 
   // Form State
   const [newProjName, setNewProjName] = useState("");
@@ -365,7 +372,7 @@ export default function App() {
         if (currentTerms.length === 0) {
           const defaultTermId = `${activeProjectId}-term-default`;
           const defaultTerm: TerminalSessionItem = { id: defaultTermId, name: "Terminal 1" };
-          
+
           setActiveTerminalIds((activePrev) => ({
             ...activePrev,
             [activeProjectId]: defaultTermId
@@ -408,7 +415,7 @@ export default function App() {
   // 1.7. Project source auto-fill name helper
   useEffect(() => {
     if (!newProjSource.trim()) return;
-    
+
     // Auto-fill project identifier (name) if empty
     if (!newProjName) {
       let extractedName = "";
@@ -521,7 +528,7 @@ export default function App() {
     try {
       const proj = projects.find((p) => p.id === id);
       if (!proj) return;
-      
+
       const occupiedPid = proj.port ? await invoke<number | null>("check_port_status", { port: proj.port }) : null;
       if (occupiedPid) {
         setPortConflict({ port: proj.port!, pid: occupiedPid });
@@ -638,7 +645,7 @@ export default function App() {
   const handleAddTerminal = (projectId: string) => {
     const proj = projects.find((p) => p.id === projectId);
     const cwd = proj?.cwd || null;
-    
+
     setProjectTerminals((prev) => {
       const currentTerms = prev[projectId] || [];
       const nextIndex = currentTerms.length + 1;
@@ -704,14 +711,14 @@ export default function App() {
 
   const handleDeleteAllTerminals = async (projectId: string) => {
     const currentTerms = projectTerminals[projectId] || [];
-    
+
     for (const term of currentTerms) {
       try {
         await invoke("kill_terminal_session", { sessionId: term.id });
       } catch (err) {
         console.error("Failed to kill terminal session:", err);
       }
-      
+
       setTermOutputs((prev) => {
         const copy = { ...prev };
         delete copy[term.id];
@@ -723,7 +730,7 @@ export default function App() {
     const defaultTermId = `${projectId}-term-default-${Date.now()}`;
     const defaultTerm: TerminalSessionItem = { id: defaultTermId, name: "Terminal 1" };
     const proj = projects.find((p) => p.id === projectId);
-    
+
     setProjectTerminals((prev) => ({
       ...prev,
       [projectId]: [defaultTerm]
@@ -770,7 +777,7 @@ export default function App() {
     try {
       const terms = projectTerminals[id] || [];
       for (const t of terms) {
-        await invoke("kill_terminal_session", { sessionId: t.id }).catch(() => {});
+        await invoke("kill_terminal_session", { sessionId: t.id }).catch(() => { });
         setTermOutputs((prev) => {
           const copy = { ...prev };
           delete copy[t.id];
@@ -804,6 +811,25 @@ export default function App() {
     const { scrollTop, scrollHeight, clientHeight } = terminalRef.current;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 30;
     setAutoScroll(isAtBottom);
+  };
+
+  const handleFileOpen = (path: string) => {
+    // Normalize path to avoid UTF-8 stream errors with mixed slashes
+    const normalizedPath = path.replace(/\\/g, '/');
+
+    if (!openFiles.includes(normalizedPath)) {
+      setOpenFiles((prev) => [...prev, normalizedPath]);
+    }
+    setOpenFilePath(normalizedPath);
+  };
+
+  const handleFileClose = (path: string) => {
+    const normalizedPath = path.replace(/\\/g, '/');
+    const newOpenFiles = openFiles.filter((f) => f !== normalizedPath);
+    setOpenFiles(newOpenFiles);
+    if (openFilePath === normalizedPath) {
+      setOpenFilePath(newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null);
+    }
   };
 
   const handleResetSetupForm = () => {
@@ -972,7 +998,6 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* 1. Global Header Bar */}
       <Header
         theme={theme}
         setTheme={setTheme}
@@ -985,41 +1010,45 @@ export default function App() {
         handleExportConfig={handleExportConfig}
         handleImportMockConfig={handleImportMockConfig}
         wipeConfig={wipeConfig}
+        activeProject={activeProject}
+        activeState={activeState}
+        handleStart={handleStart}
+        handleStop={handleStop}
       />
 
       {/* 2. Main Workspace — Full Dashboard Grid */}
-      <div 
+      <div
         className="workspace-grid"
-        style={{ 
-          gridTemplateColumns: `${leftSidebarWidth}px 1fr ${rightSidebarWidth}px`, 
-          position: "relative" 
+        style={{
+          gridTemplateColumns: `${leftSidebarWidth}px 1fr ${rightSidebarWidth}px`,
+          position: "relative"
         }}
       >
 
         {/* ── LEFT COLUMN: Zone 1 (Tab list) + Zone 3 (File Explorer) + Zone 6 (New project btn) ── */}
         <div className="col-left" style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
           {/* Zone 1: Tab List */}
-          <div 
-            ref={tabListRef} 
-            className="zone zone-1" 
-            style={{ 
-              flex: `0 0 ${tabListHeight}px`, 
+          <div
+            ref={tabListRef}
+            className="zone zone-1"
+            style={{
+              flex: `0 0 ${tabListHeight}px`,
               borderBottom: '1px solid var(--border-primary)',
-              position: 'relative' 
+              position: 'relative'
             }}
           >
             <TabList
               filteredProjects={
                 activeProjectId === "__create_project__"
                   ? [
-                      ...filteredProjects,
-                      {
-                        id: "__create_project__",
-                        name: "New Project",
-                        command: "",
-                        args: []
-                      }
-                    ]
+                    ...filteredProjects,
+                    {
+                      id: "__create_project__",
+                      name: "New Project",
+                      command: "",
+                      args: []
+                    }
+                  ]
                   : filteredProjects
               }
               activeProjectId={activeProjectId}
@@ -1029,7 +1058,7 @@ export default function App() {
               handleDeleteProject={handleDeleteProject}
             />
             {/* Horizontal splitter handle between TabList and FileExplorer */}
-            <div 
+            <div
               className={`resizer-h ${isDraggingTabList ? "dragging" : ""}`}
               style={{ position: "absolute", bottom: "-2px", left: 0 }}
               onMouseDown={handleTabListResizeStart}
@@ -1038,7 +1067,7 @@ export default function App() {
 
           {/* Zone 3: Project File Explorer */}
           <div className="zone zone-file-explorer" style={{ flex: 1, overflow: 'hidden' }}>
-            <FileExplorer activeCwd={activeProject?.cwd} />
+            <FileExplorer activeCwd={activeProject?.cwd} onFileSelect={handleFileOpen} />
           </div>
 
           {/* Zone 6: New Project Button */}
@@ -1053,7 +1082,7 @@ export default function App() {
           </div>
 
           {/* Vertical splitter handle for Left Sidebar */}
-          <div 
+          <div
             className={`resizer-v ${isDraggingLeft ? "dragging" : ""}`}
             style={{ right: "-2px" }}
             onMouseDown={handleLeftResizeStart}
@@ -1103,28 +1132,45 @@ export default function App() {
             </div>
           ) : (
             <>
-              {/* Zone 2: Resource Monitor */}
-              <div 
-                ref={monitorRef} 
-                className="zone zone-2" 
-                style={{ 
+              {/* Zone 2: Code Editor */}
+              <div
+                ref={monitorRef}
+                className="zone zone-2"
+                style={{
                   flex: `0 0 ${monitorHeight}px`,
                   borderBottom: '1px solid var(--border-primary)',
                   position: 'relative'
                 }}
               >
-                <ProcessMonitor
-                  activeProject={activeProject}
-                  activeState={activeState}
-                  activeCpuVal={activeCpuVal}
-                  activeRamVal={activeRamVal}
-                  cpuCanvasRef={cpuCanvasRef}
-                  ramCanvasRef={ramCanvasRef}
-                  handleStart={handleStart}
-                  handleStop={handleStop}
-                />
-                {/* Horizontal splitter handle between ProcessMonitor and TerminalPanel */}
-                <div 
+                {/* VS Code Style Editor Tabs */}
+                {openFiles.length > 0 && (
+                  <div className="editor-tabs-bar">
+                    {openFiles.map((path) => (
+                      <div
+                        // Use encodeURIComponent to ensure the key is a valid UTF-8 string for React
+                        key={`tab-${encodeURIComponent(path)}`}
+                        className={`editor-tab ${openFilePath === path ? "active" : ""}`}
+                        onClick={() => setOpenFilePath(path)}
+                        title={path}
+                      >
+                        <FileCode size={12} className="tab-icon" />
+                        <span className="tab-name">{path.split(/[\\/]/).pop()}</span>
+                        <button
+                          className="tab-close-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFileClose(path);
+                          }}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <CodeEditor filePath={openFilePath} />
+                {/* Horizontal splitter handle between CodeEditor and TerminalPanel */}
+                <div
                   className={`resizer-h ${isDraggingMonitor ? "dragging" : ""}`}
                   style={{ position: "absolute", bottom: "-2px", left: 0 }}
                   onMouseDown={handleMonitorResizeStart}
@@ -1162,7 +1208,7 @@ export default function App() {
         {/* ── RIGHT COLUMN: Zone 3 (Config) + Zone 5 (Process Manager) ── */}
         <div className="col-right" style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
           {/* Vertical splitter handle for Right Sidebar */}
-          <div 
+          <div
             className={`resizer-v ${isDraggingRight ? "dragging" : ""}`}
             style={{ left: "-2px" }}
             onMouseDown={handleRightResizeStart}
@@ -1170,13 +1216,13 @@ export default function App() {
 
           {/* Zone 3: Configuration & Watchdog Setup */}
           {activeProjectId && activeProjectId !== "__create_project__" && (
-            <div 
-              ref={configRef} 
+            <div
+              ref={configRef}
               className="zone zone-3"
-              style={{ 
-                flex: `0 0 ${configHeight}px`, 
+              style={{
+                flex: `0 0 ${configHeight}px`,
                 borderBottom: '1px solid var(--border-primary)',
-                position: 'relative' 
+                position: 'relative'
               }}
             >
               <ConfigSetup
@@ -1207,9 +1253,9 @@ export default function App() {
                 newProjEnableTunnel={newProjEnableTunnel}
                 setNewProjEnableTunnel={setNewProjEnableTunnel}
                 handleResetSetupForm={handleResetSetupForm}
-                handleAddProject={handleAddProject}              />
+                handleAddProject={handleAddProject} />
               {/* Horizontal splitter handle between ConfigSetup and Manager/Diagnostics */}
-              <div 
+              <div
                 className={`resizer-h ${isDraggingConfig ? "dragging" : ""}`}
                 style={{ position: "absolute", bottom: "-2px", left: 0 }}
                 onMouseDown={handleConfigResizeStart}

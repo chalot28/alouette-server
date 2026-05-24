@@ -83,3 +83,44 @@
 [2026-05-24 11:02:20.489] Toolchains checked / verified stable.
 [2026-05-24 11:02:26.870] Cloudflared binary verified / updated successfully.
 [2026-05-24 11:02:26.871] Isolated environment initialized successfully!
+[2026-05-24 11:28:20.284] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 11:28:20.288] Proto CLI verified and active.
+[2026-05-24 11:28:20.305] Toolchains checked / verified stable.
+[2026-05-24 11:28:26.601] Cloudflared binary verified / updated successfully.
+[2026-05-24 11:28:26.602] Isolated environment initialized successfully!
+[2026-05-24 11:29:37.567] Reading file: D:\alouette-server\tauri_app\src-tauri\Cargo.toml
+[2026-05-24 12:06:02.966] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-24 12:06:02.969] Proto CLI verified and active.
+[2026-05-24 12:06:03.093] Toolchains checked / verified stable.
+[2026-05-24 12:06:10.810] Cloudflared binary verified / updated successfully.
+[2026-05-24 12:06:10.812] Isolated environment initialized successfully!
+[2026-05-24 13:15:08.189] Reading file: D:\alouette-server\tauri_app\src-tauri\Cargo.toml
+[2026-05-24 13:15:13.012] Reading file: D:\alouette-server\tauri_app\src-tauri\tauri.conf.json
+[2026-05-24 13:15:14.499] Reading file: D:\alouette-server\tauri_app\src-tauri\Cargo.toml
+[2026-05-24 13:15:15.252] Reading file: D:\alouette-server\tauri_app\src-tauri\build.rs
+[2026-05-24 13:15:15.942] Reading file: D:\alouette-server\tauri_app\src-tauri\tauri.conf.json
+[2026-05-24 13:15:17.518] Reading file: D:\alouette-server\tauri_app\src-tauri\Cargo.toml
+[2026-05-24 13:15:18.733] Reading file: D:\alouette-server\tauri_app\src-tauri\build.rs
+[2026-05-24 13:15:19.083] Reading file: D:\alouette-server\tauri_app\src-tauri\Cargo.toml
+[2026-05-24 13:15:19.429] Reading file: D:\alouette-server\tauri_app\src-tauri\tauri.conf.json
+[2026-05-24 13:26:41.682] Reading file: D:\server_dvtn\models.json
+[2026-05-24 13:26:43.619] Reading file: D:\server_dvtn\nodemon.json
+[2026-05-24 13:26:49.941] Reading file: D:\server_dvtn\models.json
+[2026-05-24 13:26:54.349] Reading file: D:\server_dvtn\package.json
+[2026-05-24 13:26:56.036] Reading file: D:\server_dvtn\nodemon.json
+[2026-05-24 13:26:56.636] Reading file: D:\server_dvtn\package.json
+[2026-05-24 13:26:57.356] Reading file: D:\server_dvtn\models.json
+[2026-05-24 13:26:58.871] Reading file: D:\server_dvtn\nodemon.json
+[2026-05-24 13:26:59.403] Reading file: D:\server_dvtn\models.json
+[2026-05-24 13:27:00.020] Reading file: D:\server_dvtn\nodemon.json
+[2026-05-24 13:27:01.312] Reading file: D:\server_dvtn\package.json
+[2026-05-24 13:27:03.186] Reading file: D:\server_dvtn\nodemon.json
+[2026-05-24 13:27:08.969] Reading file: D:\server_dvtn\models.json
+[2026-05-24 13:27:12.719] Reading file: D:\server_dvtn\package.json
+[2026-05-24 13:33:42.876] Reading file: D:\server_dvtn\nodemon.json
+[2026-05-24 13:33:43.304] Reading file: D:\server_dvtn\package.json
+[2026-05-24 13:33:46.163] Reading file: D:\server_dvtn\models.json
+[2026-05-24 13:38:50.968] Reading file: D:/server_dvtn/README.md
+[2026-05-24 13:38:53.001] Reading file: D:/server_dvtn/package.json
+[2026-05-24 13:38:54.916] Reading file: D:/server_dvtn/package-lock.json
+[2026-05-24 13:38:57.988] Reading file: D:/server_dvtn/README.md

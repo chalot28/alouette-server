@@ -8,7 +8,8 @@ import {
   Moon,
   Minus,
   Square,
-  X
+  X,
+  Play
 } from "lucide-react";
 
 interface HeaderProps {
@@ -23,6 +24,10 @@ interface HeaderProps {
   handleExportConfig: () => void;
   handleImportMockConfig: () => void;
   wipeConfig: () => void;
+  activeProject?: any;
+  activeState?: any;
+  handleStart?: () => void;
+  handleStop?: () => void;
 }
 
 export default function Header({
@@ -36,7 +41,11 @@ export default function Header({
   setSettingMenuOpen,
   handleExportConfig,
   handleImportMockConfig,
-  wipeConfig
+  wipeConfig,
+  activeProject,
+  activeState,
+  handleStart,
+  handleStop
 }: HeaderProps) {
   const appWindow = getCurrentWindow();
 
@@ -168,6 +177,36 @@ export default function Header({
       </div>
 
       <div className="header-right">
+        {activeProject && (
+          <div className="header-process-controls">
+            <span className="header-process-name" title={activeProject.name}>
+              {activeProject.name}
+            </span>
+            <div className="header-meta-capsule">
+              <span className="label">PID</span>
+              <span className="value mono">
+                {activeState?.type === "Running" ? activeState.data : "N/A"}
+              </span>
+            </div>
+            {activeProject.port && (
+              <div className="header-meta-capsule">
+                <span className="label">PORT</span>
+                <span className="value mono text-success">{activeProject.port}</span>
+              </div>
+            )}
+            {activeState?.type === "Running" || activeState?.type === "Setup" ? (
+              <button className="btn-header-stop" onClick={handleStop} title="Stop process">
+                <Square size={10} fill="currentColor" />
+                <span>Stop</span>
+              </button>
+            ) : (
+              <button className="btn-header-start" onClick={handleStart} title="Start process">
+                <Play size={10} fill="currentColor" />
+                <span>Start</span>
+              </button>
+            )}
+          </div>
+        )}
 
         <button
           className="btn-theme-toggle"

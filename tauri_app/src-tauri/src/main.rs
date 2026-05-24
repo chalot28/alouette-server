@@ -239,6 +239,18 @@ fn get_project_files(dir_path: Option<String>) -> Result<Vec<FileNode>, String> 
     read_dir_recursive(path, 0)
 }
 
+#[tauri::command]
+async fn read_file_content(path: String) -> Result<String, String> {
+    log_to_app_file(&format!("Reading file: {}", path));
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn write_file_content(path: String, content: String) -> Result<(), String> {
+    log_to_app_file(&format!("Writing file: {}", path));
+    std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
 fn read_dir_recursive(path: &Path, depth: usize) -> Result<Vec<FileNode>, String> {
     if depth > 4 {
         return Ok(Vec::new());
@@ -530,7 +542,9 @@ fn main() {
             get_project_files,
             spawn_terminal_session,
             write_to_terminal_session,
-            kill_terminal_session
+            kill_terminal_session,
+            read_file_content,
+            write_file_content
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
