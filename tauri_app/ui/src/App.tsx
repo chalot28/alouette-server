@@ -11,7 +11,14 @@ import {
   CheckCircle2,
   AlertTriangle,
   Info,
-  HelpCircle
+  HelpCircle,
+  GitBranch,
+  Sparkles,
+  Wifi,
+  Chrome,
+  Server,
+  Cpu,
+  Settings
 } from "lucide-react";
 
 // Components
@@ -888,6 +895,33 @@ export default function App() {
           >
             <User size={13} />
             <span>User</span>
+          </button>
+        </div>
+
+        <div className="navbar-tool-buttons">
+          <button className="tool-btn tool-git" title="1. Git">
+            <GitBranch size={14} />
+          </button>
+          <button className="tool-btn tool-ai" title="2. AI">
+            <Sparkles size={14} />
+          </button>
+          <button className="tool-btn tool-ping" title="3. Ping">
+            <Wifi size={14} />
+          </button>
+          <button className="tool-btn tool-chrome" title="4. Chrome">
+            <Chrome size={14} />
+          </button>
+          <button className="tool-btn tool-env" title="5. Environment (Môi trường)">
+            <Server size={14} />
+          </button>
+          <button className="tool-btn tool-build" title="6. Build">
+            <Cpu size={14} />
+          </button>
+          <button className="tool-btn tool-settings" title="7. Setting">
+            <Settings size={14} />
+          </button>
+          <button className="tool-btn tool-help" title="8. Help">
+            <HelpCircle size={14} />
           </button>
         </div>
       </footer>

@@ -1382,8 +1382,33 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px;
+  padding: 0 0 0 14px;
   z-index: 50;
+}
+
+.navbar-tool-buttons {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.tool-btn {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  width: 36px;
+  height: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.tool-btn:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
 }
 
 .navbar-nav-tabs {
