@@ -2138,23 +2138,168 @@ export default function MiniPostman() {
                   </div>
                   {bodyType !== "none" && (
                     <div className="body-editor-wrapper">
-                      {bodyType === "form-data" ? (
-                        <div
-                          className="form-data-editor"
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "6px",
-                          }}
-                        >
-                          <table className="grid-table">
+                      {/* ---- JSON / TEXT / URLENCODED ---- */}
+                      {bodyType === "json" && (
+                        <>
+                          <div className="body-editor-header">
+                            <span className="lang-badge json">
+                              <span
+                                className="badge-dot"
+                                style={{ backgroundColor: "#818cf8" }}
+                              />
+                              JSON
+                            </span>
+                            <span style={{ fontSize: "9px", opacity: 0.4 }}>
+                              application/json
+                            </span>
+                            <div className="header-actions">
+                              <button
+                                onClick={() => {
+                                  try {
+                                    setBody(
+                                      JSON.stringify(
+                                        JSON.parse(body || "{}"),
+                                        null,
+                                        2,
+                                      ),
+                                    );
+                                  } catch {
+                                    /* ignore */
+                                  }
+                                }}
+                                title="Format JSON"
+                              >
+                                <Code size={11} /> Format
+                              </button>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(body);
+                                }}
+                                title="Copy"
+                              >
+                                <Copy size={11} />
+                              </button>
+                            </div>
+                          </div>
+                          <textarea
+                            className="body-textarea json-textarea"
+                            placeholder={'{\n  "key": "value"\n}'}
+                            value={body}
+                            onChange={(e) => setBody(e.target.value)}
+                            rows={8}
+                          />
+                        </>
+                      )}
+
+                      {/* ---- TEXT ---- */}
+                      {bodyType === "text" && (
+                        <>
+                          <div className="body-editor-header">
+                            <span className="lang-badge text">
+                              <span
+                                className="badge-dot"
+                                style={{ backgroundColor: "#67e8f9" }}
+                              />
+                              TEXT
+                            </span>
+                            <span style={{ fontSize: "9px", opacity: 0.4 }}>
+                              text/plain
+                            </span>
+                            <div className="header-actions">
+                              <button
+                                onClick={() =>
+                                  navigator.clipboard.writeText(body)
+                                }
+                                title="Copy"
+                              >
+                                <Copy size={11} />
+                              </button>
+                            </div>
+                          </div>
+                          <textarea
+                            className="body-textarea"
+                            placeholder="Enter plain text body..."
+                            value={body}
+                            onChange={(e) => setBody(e.target.value)}
+                            rows={6}
+                          />
+                        </>
+                      )}
+
+                      {/* ---- URLENCODED ---- */}
+                      {bodyType === "urlencoded" && (
+                        <>
+                          <div className="body-editor-header">
+                            <span className="lang-badge form">
+                              <span
+                                className="badge-dot"
+                                style={{ backgroundColor: "#34d399" }}
+                              />
+                              FORM
+                            </span>
+                            <span style={{ fontSize: "9px", opacity: 0.4 }}>
+                              x-www-form-urlencoded
+                            </span>
+                            <div className="header-actions">
+                              <button
+                                onClick={() => {
+                                  // Parse and prettify URL-encoded data into line-by-line
+                                  try {
+                                    const params = new URLSearchParams(body);
+                                    const lines: string[] = [];
+                                    params.forEach((v, k) =>
+                                      lines.push(`${k}=${v}`),
+                                    );
+                                    setBody(lines.join("\n"));
+                                  } catch {
+                                    /* ignore */
+                                  }
+                                }}
+                                title="Format"
+                              >
+                                <Code size={11} /> Format
+                              </button>
+                            </div>
+                          </div>
+                          <textarea
+                            className="body-textarea"
+                            placeholder={"key1=value1\nkey2=value2"}
+                            value={body}
+                            onChange={(e) => setBody(e.target.value)}
+                            rows={6}
+                          />
+                        </>
+                      )}
+
+                      {/* ---- FORM-DATA ---- */}
+                      {bodyType === "form-data" && (
+                        <div className="form-data-editor">
+                          <div className="fd-header">
+                            <span className="lang-badge form">
+                              <span
+                                className="badge-dot"
+                                style={{ backgroundColor: "#34d399" }}
+                              />
+                              MULTIPART
+                            </span>
+                            <span style={{ fontSize: "9px", opacity: 0.4 }}>
+                              multipart/form-data
+                            </span>
+                          </div>
+                          <table>
                             <thead>
                               <tr>
-                                <th style={{ width: "30px" }}></th>
+                                <th
+                                  style={{ width: "32px", textAlign: "center" }}
+                                ></th>
                                 <th>Key</th>
                                 <th>Value</th>
-                                <th style={{ width: "70px" }}>Type</th>
-                                <th style={{ width: "40px" }}></th>
+                                <th
+                                  style={{ width: "72px", textAlign: "center" }}
+                                >
+                                  Type
+                                </th>
+                                <th style={{ width: "36px" }}></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -2209,7 +2354,7 @@ export default function MiniPostman() {
                                     <div
                                       style={{
                                         display: "flex",
-                                        gap: "4px",
+                                        gap: "6px",
                                         alignItems: "center",
                                       }}
                                     >
@@ -2224,20 +2369,11 @@ export default function MiniPostman() {
                                             style={{
                                               flex: 1,
                                               fontSize: "11px",
-                                              padding: "3px 6px",
-                                              backgroundColor:
-                                                "var(--bg-secondary)",
-                                              border:
-                                                "1px solid var(--border-primary)",
-                                              color: "var(--text-primary)",
-                                              borderRadius: "4px",
                                             }}
                                           />
                                           <button
                                             className="btn btn-ghost btn-xs"
                                             onClick={() => {
-                                              // In a real Tauri app, this would use @tauri-apps/plugin-dialog
-                                              // For now, simulate with a prompt
                                               const filePath =
                                                 window.prompt(
                                                   "Enter file path:",
@@ -2257,6 +2393,7 @@ export default function MiniPostman() {
                                                 setFormDataFields(updated);
                                               }
                                             }}
+                                            style={{ flexShrink: 0 }}
                                           >
                                             Browse
                                           </button>
@@ -2277,7 +2414,7 @@ export default function MiniPostman() {
                                       )}
                                     </div>
                                   </td>
-                                  <td>
+                                  <td align="center">
                                     <select
                                       value={field.type}
                                       onChange={(e) => {
@@ -2285,19 +2422,9 @@ export default function MiniPostman() {
                                         updated[index].type = e.target.value as
                                           | "text"
                                           | "file";
-                                        if (e.target.value === "file") {
+                                        if (e.target.value === "file")
                                           updated[index].fileName = "";
-                                        }
                                         setFormDataFields(updated);
-                                      }}
-                                      style={{
-                                        fontSize: "10px",
-                                        padding: "2px 4px",
-                                        backgroundColor: "var(--bg-primary)",
-                                        border:
-                                          "1px solid var(--border-primary)",
-                                        color: "var(--text-primary)",
-                                        borderRadius: "4px",
                                       }}
                                     >
                                       <option value="text">Text</option>
@@ -2309,10 +2436,11 @@ export default function MiniPostman() {
                                       <button
                                         className="delete-row-btn"
                                         onClick={() => {
-                                          const updated = formDataFields.filter(
-                                            (_, idx) => idx !== index,
+                                          setFormDataFields(
+                                            formDataFields.filter(
+                                              (_, idx) => idx !== index,
+                                            ),
                                           );
-                                          setFormDataFields(updated);
                                         }}
                                       >
                                         <Trash2 size={12} />
@@ -2324,139 +2452,154 @@ export default function MiniPostman() {
                             </tbody>
                           </table>
                         </div>
-                      ) : bodyType === "binary" ? (
-                        <div
-                          className="binary-editor"
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
-                            alignItems: "flex-start",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "8px",
-                              alignItems: "center",
-                            }}
-                          >
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => {
-                                const filePath = window.prompt(
-                                  "Select file path for binary upload:",
-                                );
-                                if (filePath) {
-                                  setBinaryFilePath(filePath);
-                                  setBody(
-                                    "[BINARY FILE: " +
-                                      filePath.split(/\\|\//).pop() +
-                                      "]",
+                      )}
+
+                      {/* ---- BINARY ---- */}
+                      {bodyType === "binary" && (
+                        <>
+                          <div className="body-editor-header">
+                            <span className="lang-badge binary">
+                              <span
+                                className="badge-dot"
+                                style={{ backgroundColor: "#a78bfa" }}
+                              />
+                              BINARY
+                            </span>
+                            <span style={{ fontSize: "9px", opacity: 0.4 }}>
+                              application/octet-stream
+                            </span>
+                          </div>
+                          <div className="binary-editor">
+                            {!binaryFilePath ? (
+                              <div
+                                className="binary-dropzone"
+                                onClick={() => {
+                                  const filePath = window.prompt(
+                                    "Select file path for binary upload:",
                                   );
-                                }
-                              }}
-                            >
-                              <FileCode size={12} /> Select File
-                            </button>
-                            {binaryFilePath && (
-                              <span className="text-xs text-muted">
-                                {binaryFilePath.split(/\\|\//).pop()}
-                              </span>
+                                  if (filePath) {
+                                    setBinaryFilePath(filePath);
+                                    setBody(
+                                      "[BINARY FILE: " +
+                                        filePath.split(/\\|\//).pop() +
+                                        "]",
+                                    );
+                                  }
+                                }}
+                              >
+                                <div className="dropzone-icon">
+                                  <FileCode size={18} />
+                                </div>
+                                <span
+                                  style={{
+                                    fontSize: "13px",
+                                    fontWeight: 600,
+                                    color: "var(--text-secondary)",
+                                  }}
+                                >
+                                  Select a File
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: "10px",
+                                    color: "var(--text-muted)",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  Click to browse — supports images, PDFs,
+                                  archives, etc.
+                                </span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="binary-file-info">
+                                  <FileCode size={16} />
+                                  <span style={{ fontWeight: 600 }}>
+                                    {binaryFilePath.split(/\\|\//).pop()}
+                                  </span>
+                                  <span style={{ opacity: 0.6 }}>
+                                    — ready to upload
+                                  </span>
+                                </div>
+                                <button
+                                  className="btn btn-ghost btn-xs"
+                                  onClick={() => {
+                                    setBinaryFilePath("");
+                                    setBody("");
+                                  }}
+                                  style={{ gap: "4px" }}
+                                >
+                                  <Trash2 size={11} /> Clear file
+                                </button>
+                              </>
                             )}
                           </div>
-                          {binaryFilePath && (
-                            <button
-                              className="btn btn-ghost btn-xs"
-                              onClick={() => {
-                                setBinaryFilePath("");
-                                setBody("");
-                              }}
-                            >
-                              <Trash2 size={11} /> Clear
-                            </button>
-                          )}
-                          <span className="text-xxs text-muted italic">
-                            Binary data will be sent as raw octet-stream.
-                          </span>
-                        </div>
-                      ) : bodyType === "graphql" ? (
-                        <div
-                          className="graphql-editor"
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "4px",
-                            }}
-                          >
-                            <label className="text-xxs font-bold text-muted uppercase">
-                              Query
-                            </label>
-                            <textarea
-                              className="body-textarea mono"
-                              placeholder={`query GetUser {\n  user(id: 1) {\n    id\n    name\n    email\n  }\n}`}
-                              value={graphqlQuery}
-                              onChange={(e) => {
-                                setGraphqlQuery(e.target.value);
-                                setBody(
-                                  JSON.stringify({
-                                    query: e.target.value,
-                                    variables:
-                                      parseGraphqlVars(graphqlVariables),
-                                  }),
-                                );
-                              }}
-                              rows={7}
-                            />
+                        </>
+                      )}
+
+                      {/* ---- GRAPHQL ---- */}
+                      {bodyType === "graphql" && (
+                        <>
+                          <div className="body-editor-header">
+                            <span className="lang-badge graphql">
+                              <span
+                                className="badge-dot"
+                                style={{ backgroundColor: "#f472b6" }}
+                              />
+                              GRAPHQL
+                            </span>
+                            <span style={{ fontSize: "9px", opacity: 0.4 }}>
+                              application/json
+                            </span>
                           </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "4px",
-                            }}
-                          >
-                            <label className="text-xxs font-bold text-muted uppercase">
-                              Variables (JSON)
-                            </label>
-                            <textarea
-                              className="body-textarea mono"
-                              placeholder='{"id": 1}'
-                              value={graphqlVariables}
-                              onChange={(e) => {
-                                setGraphqlVariables(e.target.value);
-                                setBody(
-                                  JSON.stringify({
-                                    query: graphqlQuery,
-                                    variables: parseGraphqlVars(e.target.value),
-                                  }),
-                                );
-                              }}
-                              rows={4}
-                            />
+                          <div className="graphql-editor">
+                            <div className="gql-section">
+                              <div className="gql-label">
+                                <span className="gql-dot query" />
+                                Query
+                              </div>
+                              <textarea
+                                className="body-textarea"
+                                placeholder={`query GetUser {\n  user(id: 1) {\n    id\n    name\n    email\n  }\n}`}
+                                value={graphqlQuery}
+                                onChange={(e) => {
+                                  setGraphqlQuery(e.target.value);
+                                  setBody(
+                                    JSON.stringify({
+                                      query: e.target.value,
+                                      variables:
+                                        parseGraphqlVars(graphqlVariables),
+                                    }),
+                                  );
+                                }}
+                                rows={7}
+                              />
+                            </div>
+                            <div className="gql-section">
+                              <div className="gql-label">
+                                <span className="gql-dot vars" />
+                                Variables (JSON)
+                              </div>
+                              <textarea
+                                className="body-textarea"
+                                placeholder='{"id": 1}'
+                                value={graphqlVariables}
+                                onChange={(e) => {
+                                  setGraphqlVariables(e.target.value);
+                                  setBody(
+                                    JSON.stringify({
+                                      query: graphqlQuery,
+                                      variables: parseGraphqlVars(
+                                        e.target.value,
+                                      ),
+                                    }),
+                                  );
+                                }}
+                                rows={4}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <textarea
-                          className="body-textarea mono"
-                          placeholder={
-                            bodyType === "json"
-                              ? '{\n  "key": "value"\n}'
-                              : bodyType === "urlencoded"
-                                ? "key1=value1&key2=value2"
-                                : "Enter request body..."
-                          }
-                          value={body}
-                          onChange={(e) => setBody(e.target.value)}
-                          rows={6}
-                        />
+                        </>
                       )}
                     </div>
                   )}
