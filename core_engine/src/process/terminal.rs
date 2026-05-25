@@ -1,7 +1,4 @@
-//! # Terminal — Trần, 0 sandbox
-//!
-//! Chỉ spawn PTY + forward I/O. Không sandbox, không cmdlet override,
-//! không inject profile. Nếu cần sandbox, thêm SAU.
+//! # Terminal
 
 use std::path::PathBuf;
 use tokio::sync::{broadcast, mpsc};
@@ -29,7 +26,6 @@ impl ProcessManager {
         })
     }
 
-    /// Spawn PowerShell (thuần) bên trong PTY.
     pub async fn spawn_terminal(
         &mut self,
         session_id: &str,
@@ -38,13 +34,11 @@ impl ProcessManager {
         let sid = session_id.to_string();
         let _ = self.kill_terminal(&sid).await;
 
-        // Resolve workspace root (for env only, no sandbox)
         let abs_root = cwd.unwrap_or(".");
         let abs_root = std::fs::canonicalize(abs_root)
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| abs_root.to_string());
 
-        // Build environment
         let proto_home = &self.proto_manager.proto_home;
         let mut envs: Vec<(String, String)> = vec![
             ("PROTO_HOME".into(), proto_home.to_string_lossy().to_string()),
@@ -60,37 +54,20 @@ impl ProcessManager {
             envs.push(("PATH".into(), full.to_string_lossy().to_string()));
         }
 
-        // Cosmetic: write unix-style prompt to temp file
-        // Shows: ~<workspace_dirname>[/subpath]>
-        // Hardcode path (not env var) to avoid any env resolution issues.
-        let escaped_root = abs_root.replace("'", "''"); // single-quote safe
-        let profile_script = format!(
-            r#"function global:prompt {{
-    $ws = '{escaped_root}'
-    $base = ($ws.Split('\'))[-1]
-    $c = (Get-Location).Path
-    if ($c -eq $ws) {{
-        "~$base> "
-    }} elseif ($c.StartsWith($ws, [StringComparison]::OrdinalIgnoreCase)) {{
-        $rel = $c.Substring($ws.Length).TrimStart('\').Replace('\', '/')
-        "~$base/$rel> "
-    }} else {{
-        "~$base> "
-    }}
-}}"#,
-            escaped_root = escaped_root
-        );
+        // DEBUG: prompt shows full current path
+        let prompt = r#"function global:prompt { "$((Get-Location).Path)> " }"#.to_string();
+
         let tmp_dir = std::env::temp_dir().join("alouette_term");
         let _ = std::fs::create_dir_all(&tmp_dir);
         let profile_path = tmp_dir.join(format!("prompt_{sid}.ps1"));
-        let _ = std::fs::write(&profile_path, profile_script.replace('\n', "\r\n"));
+        let _ = std::fs::write(&profile_path, prompt.replace('\n', "\r\n"));
         self._prompt_files.insert(sid.clone(), profile_path.clone());
+
         let pty_system = native_pty_system();
         let pty = pty_system
             .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
             .map_err(|e| format!("PTY open: {e}"))?;
 
-        // Build command
         let mut cmd = CommandBuilder::new("powershell.exe");
         cmd.arg("-NoLogo");
         cmd.arg("-NoExit");
@@ -103,24 +80,20 @@ impl ProcessManager {
             cmd.env(k, v);
         }
 
-        // Spawn — MUST store child handle or process gets killed on drop!
         let child: Box<dyn portable_pty::Child + Send + Sync> = pty.slave.spawn_command(cmd)
             .map_err(|e| format!("Spawn powershell.exe: {e}"))?;
         let pid = child.process_id().unwrap_or(0);
         eprintln!("[terminal] Spawned '{sid}' PID {pid}");
 
-        // Reader / writer
         let writer = pty.master.take_writer()
             .map_err(|e| format!("PTY writer: {e}"))?;
         let reader = pty.master.try_clone_reader()
             .map_err(|e| format!("PTY reader: {e}"))?;
 
-        // Channel
         let (tx, mut rx) = mpsc::channel::<String>(256);
         let sid_w = sid.clone();
         let sid_r = sid.clone();
 
-        // Writer: mpsc → PTY
         std::thread::spawn(move || {
             let mut w = writer;
             while let Some(input) = rx.blocking_recv() {
@@ -132,7 +105,6 @@ impl ProcessManager {
             }
         });
 
-        // Reader: PTY → broadcast
         let out_tx = self.terminal_sender.clone();
         std::thread::spawn(move || {
             let mut r = reader;
@@ -149,8 +121,6 @@ impl ProcessManager {
             }
         });
 
-        // Register session — KEEP child alive by storing it!
-        // Also leak PtyPair to prevent ClosePseudoConsole killing the process.
         let pty_ptr = Box::into_raw(Box::new(pty));
         self._pty_pairs.insert(sid.clone(), pty_ptr as usize);
 
@@ -161,7 +131,6 @@ impl ProcessManager {
             _child: Some(child),
         });
 
-        // Heartbeat
         let hb_tx = self.terminal_sender.clone();
         tokio::spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
@@ -171,18 +140,14 @@ impl ProcessManager {
         Ok(())
     }
 
-    /// Kill terminal + process tree + cleanup leaked PtyPair + temp files.
     pub async fn kill_terminal(&mut self, session_id: &str) -> Result<(), String> {
-        // Kill process tree first
         if let Some(s) = self.terminal_sessions.remove(session_id) {
             eprintln!("[terminal] Kill '{session_id}' PID {}", s.pid);
             super::tree::terminate_process_tree(s.pid).await;
         }
-        // Drop leaked PtyPair (process already dead)
         if let Some(ptr) = self._pty_pairs.remove(session_id) {
             let _ = unsafe { Box::from_raw(ptr as *mut portable_pty::PtyPair) };
         }
-        // Clean temp prompt file
         if let Some(path) = self._prompt_files.remove(session_id) {
             let _ = std::fs::remove_file(&path);
         }
@@ -190,13 +155,11 @@ impl ProcessManager {
     }
 }
 
-/// Forward input đến PTY.
 pub async fn process_and_send_terminal_input(
     _session_id: &str,
     mut text: String,
     ctx: &TerminalWriteContext,
 ) -> Result<(), String> {
-    // Chuẩn hóa LF → CRLF
     if text.ends_with('\n') && !text.ends_with("\r\n") {
         text.pop();
         text.push_str("\r\n");
