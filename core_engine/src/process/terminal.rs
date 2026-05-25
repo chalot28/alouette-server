@@ -44,10 +44,11 @@ impl ProcessManager {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| abs_root.to_string());
 
-        // Build PATH with proto
+        // Build environment
         let proto_home = &self.proto_manager.proto_home;
         let mut envs: Vec<(String, String)> = vec![
             ("PROTO_HOME".into(), proto_home.to_string_lossy().to_string()),
+            ("WORKSPACE_ROOT".into(), abs_root.clone()),
         ];
         if let Ok(existing_path) = std::env::var("PATH") {
             let full = std::env::join_paths(
@@ -59,7 +60,31 @@ impl ProcessManager {
             envs.push(("PATH".into(), full.to_string_lossy().to_string()));
         }
 
-        // Open PTY
+        // Cosmetic: write unix-style prompt to temp file
+        // Shows: ~<workspace_dirname>[/subpath]>
+        // Hardcode path (not env var) to avoid any env resolution issues.
+        let escaped_root = abs_root.replace("'", "''"); // single-quote safe
+        let profile_script = format!(
+            r#"function global:prompt {{
+    $ws = '{escaped_root}'
+    $base = ($ws.Split('\'))[-1]
+    $c = (Get-Location).Path
+    if ($c -eq $ws) {{
+        "~$base> "
+    }} elseif ($c.StartsWith($ws, [StringComparison]::OrdinalIgnoreCase)) {{
+        $rel = $c.Substring($ws.Length).TrimStart('\').Replace('\', '/')
+        "~$base/$rel> "
+    }} else {{
+        "~$base> "
+    }}
+}}"#,
+            escaped_root = escaped_root
+        );
+        let tmp_dir = std::env::temp_dir().join("alouette_term");
+        let _ = std::fs::create_dir_all(&tmp_dir);
+        let profile_path = tmp_dir.join(format!("prompt_{sid}.ps1"));
+        let _ = std::fs::write(&profile_path, profile_script.replace('\n', "\r\n"));
+        self._prompt_files.insert(sid.clone(), profile_path.clone());
         let pty_system = native_pty_system();
         let pty = pty_system
             .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
@@ -69,6 +94,8 @@ impl ProcessManager {
         let mut cmd = CommandBuilder::new("powershell.exe");
         cmd.arg("-NoLogo");
         cmd.arg("-NoExit");
+        cmd.arg("-File");
+        cmd.arg(profile_path.to_string_lossy().to_string());
         if let Some(dir) = cwd {
             cmd.cwd(dir);
         }
@@ -144,16 +171,20 @@ impl ProcessManager {
         Ok(())
     }
 
-    /// Kill terminal + process tree + cleanup leaked PtyPair.
+    /// Kill terminal + process tree + cleanup leaked PtyPair + temp files.
     pub async fn kill_terminal(&mut self, session_id: &str) -> Result<(), String> {
         // Kill process tree first
         if let Some(s) = self.terminal_sessions.remove(session_id) {
             eprintln!("[terminal] Kill '{session_id}' PID {}", s.pid);
             super::tree::terminate_process_tree(s.pid).await;
         }
-        // Then safely drop the leaked PtyPair (process already dead)
+        // Drop leaked PtyPair (process already dead)
         if let Some(ptr) = self._pty_pairs.remove(session_id) {
             let _ = unsafe { Box::from_raw(ptr as *mut portable_pty::PtyPair) };
+        }
+        // Clean temp prompt file
+        if let Some(path) = self._prompt_files.remove(session_id) {
+            let _ = std::fs::remove_file(&path);
         }
         Ok(())
     }

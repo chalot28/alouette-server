@@ -22,6 +22,8 @@ pub struct ProcessManager {
     pub db_manager: crate::db::DbManager,
     /// Leaked PtyPair pointers to prevent Drop (ClosePseudoConsole kills process).
     pub(crate) _pty_pairs: HashMap<String, usize>,
+    /// Temp prompt profile files to clean up on kill.
+    pub(crate) _prompt_files: HashMap<String, PathBuf>,
 }
 
 impl ProcessManager {
@@ -122,6 +124,7 @@ impl ProcessManager {
             cloudflared_manager: CloudflaredManager::new(cloudflared_exe),
             db_manager,
             _pty_pairs: HashMap::new(),
+            _prompt_files: HashMap::new(),
         }
     }
 
