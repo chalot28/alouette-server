@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -9,6 +9,7 @@ import {
   History,
   Globe,
   FolderHeart,
+  FolderOpen,
   Save,
   Search,
   Activity,
@@ -27,11 +28,13 @@ import {
   Copy,
   Check,
   Zap,
+  Plus,
 } from "lucide-react";
 import MiniPostmanNetworkTools from "./MiniPostmanNetworkTools";
 import MiniPostmanCodeSnippets from "./MiniPostmanCodeSnippets";
 import MiniPostmanEnvManager from "./MiniPostmanEnvManager";
 import MiniPostmanScripts from "./MiniPostmanScripts";
+import MiniPostmanCollections from "./MiniPostmanCollections";
 import type {
   HeaderItem,
   QueryParam,
@@ -89,6 +92,28 @@ export default function MiniPostman() {
   const [bodyType, setBodyType] = useState<BodyType>("none");
   const [body, setBody] = useState<string>("");
   const [timeoutMs, setTimeoutMs] = useState<number>(30000);
+
+  /* ---- Form-Data, Binary, GraphQL states ---- */
+  const [formDataFields, setFormDataFields] = useState<
+    {
+      key: string;
+      value: string;
+      enabled: boolean;
+      type: "text" | "file";
+      fileName?: string;
+    }[]
+  >([]);
+  const [binaryFilePath, setBinaryFilePath] = useState("");
+  const [graphqlQuery, setGraphqlQuery] = useState("");
+  const [graphqlVariables, setGraphqlVariables] = useState("");
+
+  const parseGraphqlVars = (vars: string): Record<string, any> => {
+    try {
+      return JSON.parse(vars);
+    } catch {
+      return {};
+    }
+  };
   const [selectedEnv, setSelectedEnv] = useState<string>("");
 
   /* ---- Auth States ---- */
@@ -99,6 +124,19 @@ export default function MiniPostman() {
   const [apiKeyName, setApiKeyName] = useState("");
   const [apiKeyValue, setApiKeyValue] = useState("");
   const [apiKeyAddto, setApiKeyAddto] = useState<"header" | "query">("header");
+
+  /* ---- OAuth 2.0 & AWS Auth States ---- */
+  const [oauthGrantType, setOauthGrantType] =
+    useState<string>("authorization_code");
+  const [oauthAccessTokenUrl, setOauthAccessTokenUrl] = useState("");
+  const [oauthClientId, setOauthClientId] = useState("");
+  const [oauthClientSecret, setOauthClientSecret] = useState("");
+  const [oauthScope, setOauthScope] = useState("");
+  const [oauthToken, setOauthToken] = useState("");
+  const [awsAccessKey, setAwsAccessKey] = useState("");
+  const [awsSecretKey, setAwsSecretKey] = useState("");
+  const [awsRegion, setAwsRegion] = useState("us-east-1");
+  const [awsService, setAwsService] = useState("");
 
   /* ---- Test / Assertion States ---- */
   const [assertStatus200, setAssertStatus200] = useState(false);
@@ -117,6 +155,7 @@ export default function MiniPostman() {
 
   /* ---- Loading & Response ---- */
   const [isLoading, setIsLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [response, setResponse] = useState<ApiResponse | null>(null);
   const [reqError, setReqError] = useState<string | null>(null);
   const [scriptLogs, setScriptLogs] = useState<string[]>([]);
@@ -132,6 +171,9 @@ export default function MiniPostman() {
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
 
+  const [showImportCurlModal, setShowImportCurlModal] = useState(false);
+  const [importCurlInput, setImportCurlInput] = useState("");
+
   /* ---- UI Toggles ---- */
   const [showCodeSnippets, setShowCodeSnippets] = useState(false);
   const [jsonToolResult, setJsonToolResult] = useState<{
@@ -145,6 +187,21 @@ export default function MiniPostman() {
   const [diffInputB, setDiffInputB] = useState("");
 
   /* ---- Schemas ---- */
+  /* ---- Response search ---- */
+  const [responseSearchQuery, setResponseSearchQuery] = useState("");
+
+  /* ---- Helper: find all matches in text ---- */
+  const findAllMatches = (text: string, query: string): number[] => {
+    if (!query.trim()) return [];
+    const indices: number[] = [];
+    let idx = text.toLowerCase().indexOf(query.toLowerCase());
+    while (idx !== -1) {
+      indices.push(idx);
+      idx = text.toLowerCase().indexOf(query.toLowerCase(), idx + 1);
+    }
+    return indices;
+  };
+
   const [schemaValidation, setSchemaValidation] = useState<{
     valid: boolean;
     errors?: string[];
@@ -156,6 +213,7 @@ export default function MiniPostman() {
   const [environments, setEnvironments] = useState<
     { id: string; name: string }[]
   >([]);
+  const [envRefreshTrigger, setEnvRefreshTrigger] = useState(0);
 
   // Load environments list
   useEffect(() => {
@@ -222,6 +280,21 @@ export default function MiniPostman() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* ---- Parse URL and update query params ---- */
+  const parseUrlIntoParams = (newUrl: string) => {
+    try {
+      const urlObj = new URL(newUrl);
+      const params: QueryParam[] = [];
+      urlObj.searchParams.forEach((value, key) => {
+        params.push({ key, value, enabled: true });
+      });
+      params.push({ key: "", value: "", enabled: true });
+      setQueryParams(params);
+    } catch {
+      // partial/invalid URL, do nothing
+    }
+  };
 
   const updateUrlFromParams = (paramsList: QueryParam[]) => {
     try {
@@ -344,7 +417,12 @@ export default function MiniPostman() {
       url: context.url,
       headers: { ...context.headers },
       body: context.body,
-      environment: { set: setEnvVar },
+      environment: {
+        set: (key: string, value: string) => {
+          setEnvVar(key, value);
+          setEnvRefreshTrigger((prev) => prev + 1);
+        },
+      },
       testResults: testResults,
       response: context.response
         ? {
@@ -357,6 +435,35 @@ export default function MiniPostman() {
             cookies: context.response.cookies || [],
           }
         : undefined,
+      // Enhanced Postman-style test/expect API
+      test: (name: string, fn: Function) => {
+        try {
+          fn();
+          testResults.push({ name, passed: true });
+        } catch (err: any) {
+          testResults.push({
+            name: name + " -> Lỗi: " + err.message,
+            passed: false,
+          });
+        }
+      },
+      expect: (actual: any) => ({
+        to: {
+          have: {
+            status: (expected: number) => {
+              const resp = context.response;
+              if (!resp) throw new Error("No response available");
+              if (resp.status !== expected)
+                throw new Error(`Expected ${expected} but got ${resp.status}`);
+            },
+          },
+          include: (expectedSubstr: string) => {
+            const str = String(actual);
+            if (!str.includes(expectedSubstr))
+              throw new Error(`Expected string to contain "${expectedSubstr}"`);
+          },
+        },
+      }),
     };
 
     // Monkey-patch console.log
@@ -437,6 +544,10 @@ export default function MiniPostman() {
       return;
     }
 
+    // Create abort controller
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsLoading(true);
     setReqError(null);
     setResponse(null);
@@ -448,6 +559,25 @@ export default function MiniPostman() {
     headers.forEach((h) => {
       if (h.enabled && h.key.trim()) headersMap[h.key.trim()] = h.value;
     });
+
+    // Auto-add Content-Type header based on body type
+    const hasContentType = Object.keys(headersMap).some(
+      (k) => k.toLowerCase() === "content-type",
+    );
+    if (!hasContentType && bodyType !== "none") {
+      const ctMap: Record<string, string> = {
+        json: "application/json",
+        text: "text/plain",
+        urlencoded: "application/x-www-form-urlencoded",
+        "form-data": "multipart/form-data",
+        xml: "application/xml",
+        binary: "application/octet-stream",
+        graphql: "application/json",
+      };
+      if (ctMap[bodyType]) {
+        headersMap["Content-Type"] = ctMap[bodyType];
+      }
+    }
 
     let finalUrl = substituteEnvVars(url.trim());
     let finalBody = bodyType !== "none" ? substituteEnvVars(body) : "";
@@ -505,6 +635,12 @@ export default function MiniPostman() {
         setIsLoading(false);
         return;
       }
+    }
+
+    // Check if cancelled before sending
+    if (controller.signal.aborted) {
+      setIsLoading(false);
+      return;
     }
 
     try {
@@ -640,10 +776,28 @@ export default function MiniPostman() {
       const updatedHistory = [historyItem, ...history.slice(0, 49)];
       saveHistory(updatedHistory);
     } catch (err: any) {
-      setReqError(err.toString());
+      if (
+        err?.toString()?.includes("Aborted") ||
+        err?.toString()?.includes("abort")
+      ) {
+        setReqError("Request was cancelled by user");
+      } else {
+        setReqError(err.toString());
+      }
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  /* ---- Cancel Request ---- */
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    setReqError("Request cancelled by user");
   };
 
   /* =====================================================================
@@ -936,6 +1090,122 @@ export default function MiniPostman() {
     window.addEventListener("mouseup", handleMouseUp);
   };
 
+  const parseCurl = (curl: string) => {
+    const cleanCurl = curl.trim().replace(/\s*\\\s*\n/g, " "); // join backslash lines
+
+    // Extract Method
+    let parsedMethod = "GET";
+    const methodMatch = cleanCurl.match(/-X\s+(\w+)|--request\s+(\w+)/i);
+    if (methodMatch) {
+      parsedMethod = (methodMatch[1] || methodMatch[2]).toUpperCase();
+    } else if (
+      cleanCurl.includes("-d ") ||
+      cleanCurl.includes("--data ") ||
+      cleanCurl.includes("--data-raw ")
+    ) {
+      parsedMethod = "POST";
+    }
+
+    // Extract URL
+    let parsedUrl = "https://";
+    const urlMatch = cleanCurl.match(/(?:'|")?(https?:\/\/[^\s'"]+)(?:'|")?/i);
+    if (urlMatch) {
+      parsedUrl = urlMatch[1];
+    } else {
+      const tokens = cleanCurl.split(/\s+/);
+      for (let i = 1; i < tokens.length; i++) {
+        const t = tokens[i];
+        if (
+          t &&
+          !t.startsWith("-") &&
+          tokens[i - 1] !== "-X" &&
+          tokens[i - 1] !== "--request" &&
+          tokens[i - 1] !== "-H" &&
+          tokens[i - 1] !== "--header" &&
+          tokens[i - 1] !== "-d" &&
+          tokens[i - 1] !== "--data" &&
+          tokens[i - 1] !== "--data-raw"
+        ) {
+          const cleanT = t.replace(/['"]/g, "");
+          if (
+            cleanT.startsWith("http://") ||
+            cleanT.startsWith("https://") ||
+            cleanT.includes(".")
+          ) {
+            parsedUrl = cleanT;
+            break;
+          }
+        }
+      }
+    }
+
+    // Extract Headers
+    const parsedHeaders: HeaderItem[] = [];
+    const headerRegex =
+      /(?:-H|--header)\s+((?:'[^']*')|(?:"[^"]*")|(?:[^\s]+))/g;
+    let match;
+    while ((match = headerRegex.exec(cleanCurl)) !== null) {
+      const rawHeader = match[1].replace(/^['"]|['"]$/g, "");
+      const separatorIdx = rawHeader.indexOf(":");
+      if (separatorIdx > 0) {
+        const key = rawHeader.substring(0, separatorIdx).trim();
+        const value = rawHeader.substring(separatorIdx + 1).trim();
+        parsedHeaders.push({ key, value, enabled: true });
+      }
+    }
+    parsedHeaders.push({ key: "", value: "", enabled: true });
+
+    // Extract Body
+    let parsedBody = "";
+    let parsedBodyType: BodyType = "none";
+    const bodyRegex = /(?:-d|--data|--data-raw)\s+((?:'[^']*')|(?:"[^"]*"))/i;
+    const bodyMatch = cleanCurl.match(bodyRegex);
+    if (bodyMatch) {
+      parsedBody = bodyMatch[1].replace(/^['"]|['"]$/g, "");
+      parsedBodyType = "json";
+      try {
+        const parsedJson = JSON.parse(parsedBody);
+        parsedBody = JSON.stringify(parsedJson, null, 2);
+      } catch {
+        // keep raw
+      }
+    }
+
+    return {
+      method: parsedMethod,
+      url: parsedUrl,
+      headers: parsedHeaders,
+      body: parsedBody,
+      bodyType: parsedBodyType,
+    };
+  };
+
+  const handleImportCurl = () => {
+    if (!importCurlInput.trim()) return;
+    const parsed = parseCurl(importCurlInput);
+    setMethod(parsed.method);
+    setUrl(parsed.url);
+    setHeaders(parsed.headers);
+    setBody(parsed.body);
+    setBodyType(parsed.bodyType);
+
+    // Update query params based on the new URL
+    try {
+      const urlObj = new URL(parsed.url);
+      const params: QueryParam[] = [];
+      urlObj.searchParams.forEach((value, key) => {
+        params.push({ key, value, enabled: true });
+      });
+      params.push({ key: "", value: "", enabled: true });
+      setQueryParams(params);
+    } catch {
+      /* noop */
+    }
+
+    setImportCurlInput("");
+    setShowImportCurlModal(false);
+  };
+
   /* =====================================================================
      RENDER
      ===================================================================== */
@@ -1016,6 +1286,13 @@ export default function MiniPostman() {
             >
               <FolderHeart size={12} />
               <span>Saved</span>
+            </button>
+            <button
+              className={`sidebar-tab ${sidebarTab === "collections" ? "active" : ""}`}
+              onClick={() => setSidebarTab("collections")}
+            >
+              <FolderOpen size={12} />
+              <span>Collections</span>
             </button>
             <button
               className={`sidebar-tab ${sidebarTab === "environments" ? "active" : ""}`}
@@ -1124,9 +1401,46 @@ export default function MiniPostman() {
                 <div className="empty-state">No saved templates</div>
               ))}
 
+            {/* COLLECTIONS TAB */}
+            {sidebarTab === "collections" && (
+              <MiniPostmanCollections
+                onLoadRequest={(req) => {
+                  // Load a collection request into the main form
+                  setMethod(req.method);
+                  setUrl(req.url);
+                  setBody(req.body || "");
+                  setBodyType(req.bodyType as BodyType);
+                  setAuthType(req.authType as AuthType);
+                  setBearerToken(req.bearerToken || "");
+                  setBasicUsername(req.basicUsername || "");
+                  setBasicPassword(req.basicPassword || "");
+                  setApiKeyName(req.apiKeyName || "");
+                  setApiKeyValue(req.apiKeyValue || "");
+                  setApiKeyAddto(
+                    (req.apiKeyAddto as "header" | "query") || "header",
+                  );
+                  // Map headers
+                  const mappedHeaders: HeaderItem[] = (req.headers || [])
+                    .filter((h) => h.key)
+                    .map((h) => ({
+                      key: h.key,
+                      value: h.value,
+                      enabled: h.enabled,
+                    }));
+                  mappedHeaders.push({ key: "", value: "", enabled: true });
+                  setHeaders(mappedHeaders);
+                  // Parse URL params
+                  parseUrlIntoParams(req.url);
+                }}
+              />
+            )}
+
             {/* ENVIRONMENTS TAB */}
             {sidebarTab === "environments" && (
-              <MiniPostmanEnvManager onInsertVariable={insertEnvVar} />
+              <MiniPostmanEnvManager
+                onInsertVariable={insertEnvVar}
+                refreshTrigger={envRefreshTrigger}
+              />
             )}
           </div>
         </div>
@@ -1156,7 +1470,10 @@ export default function MiniPostman() {
               className="url-input"
               placeholder="Enter request URL (e.g. http://localhost:8080/api)"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                parseUrlIntoParams(e.target.value);
+              }}
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
             />
 
@@ -1187,6 +1504,16 @@ export default function MiniPostman() {
 
             <button
               className="btn btn-secondary"
+              onClick={() => setShowImportCurlModal(true)}
+              title="Import from cURL command"
+              style={{ height: "32px", padding: "0 10px", gap: "4px" }}
+            >
+              <Plus size={14} />
+              <span className="text-xs">Import</span>
+            </button>
+
+            <button
+              className="btn btn-secondary"
               onClick={() => setShowSaveModal(true)}
               title="Save Request Template"
               style={{ height: "32px", padding: "0 10px" }}
@@ -1195,14 +1522,14 @@ export default function MiniPostman() {
             </button>
 
             <button
-              className="btn btn-primary send-btn"
-              onClick={handleSend}
-              disabled={isLoading}
+              className={`btn ${isLoading ? "btn-danger" : "btn-primary"} send-btn`}
+              onClick={isLoading ? handleCancel : handleSend}
+              style={{ minWidth: "90px" }}
             >
               {isLoading ? (
                 <>
-                  <Activity size={14} className="animate-spin" />
-                  <span>Sending...</span>
+                  <X size={13} />
+                  <span>Cancel</span>
                 </>
               ) : (
                 <>
@@ -1269,8 +1596,14 @@ export default function MiniPostman() {
             <div
               className="tabs-content"
               style={{
-                maxHeight: (reqTab === "scripts" || reqTab === "tools") ? "none" : undefined,
-                overflowY: (reqTab === "scripts" || reqTab === "tools") ? "visible" : undefined,
+                maxHeight:
+                  reqTab === "scripts" || reqTab === "tools"
+                    ? "none"
+                    : undefined,
+                overflowY:
+                  reqTab === "scripts" || reqTab === "tools"
+                    ? "visible"
+                    : undefined,
               }}
             >
               {/* 1. PARAMS */}
@@ -1383,6 +1716,8 @@ export default function MiniPostman() {
                       <option value="bearer">Bearer Token</option>
                       <option value="basic">Basic Auth</option>
                       <option value="apikey">API Key</option>
+                      <option value="oauth2">OAuth 2.0</option>
+                      <option value="aws">AWS Signature</option>
                     </select>
                   </div>
 
@@ -1483,6 +1818,161 @@ export default function MiniPostman() {
                           />
                           <span>Query Param</span>
                         </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {authType === "oauth2" && (
+                    <div className="flex flex-col gap-3 max-w-xl">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xxs font-bold text-muted uppercase">
+                          Grant Type
+                        </label>
+                        <select
+                          className="method-select"
+                          style={{
+                            height: "28px",
+                            padding: "0 6px",
+                            fontSize: "11.5px",
+                          }}
+                          value={oauthGrantType}
+                          onChange={(e) => setOauthGrantType(e.target.value)}
+                        >
+                          <option value="authorization_code">
+                            Authorization Code
+                          </option>
+                          <option value="client_credentials">
+                            Client Credentials
+                          </option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xxs font-bold text-muted uppercase">
+                          Access Token URL
+                        </label>
+                        <input
+                          type="text"
+                          className="url-input"
+                          placeholder="https://auth.example.com/token"
+                          value={oauthAccessTokenUrl}
+                          onChange={(e) =>
+                            setOauthAccessTokenUrl(e.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-xxs font-bold text-muted uppercase">
+                            Client ID
+                          </label>
+                          <input
+                            type="text"
+                            className="url-input"
+                            value={oauthClientId}
+                            onChange={(e) => setOauthClientId(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-xxs font-bold text-muted uppercase">
+                            Client Secret
+                          </label>
+                          <input
+                            type="password"
+                            className="url-input"
+                            value={oauthClientSecret}
+                            onChange={(e) =>
+                              setOauthClientSecret(e.target.value)
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xxs font-bold text-muted uppercase">
+                          Scope
+                        </label>
+                        <input
+                          type="text"
+                          className="url-input"
+                          placeholder="openid profile email"
+                          value={oauthScope}
+                          onChange={(e) => setOauthScope(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="btn btn-primary btn-xs"
+                          onClick={async () => {
+                            // Simulate OAuth token fetch
+                            setOauthToken("fetched-oauth-token-" + Date.now());
+                            alert(
+                              "OAuth token fetched (simulated). Token: " +
+                                oauthToken.substring(0, 30) +
+                                "...",
+                            );
+                          }}
+                        >
+                          <Shield size={11} /> Get New Access Token
+                        </button>
+                        {oauthToken && (
+                          <span className="text-xxs text-success">
+                            Token ready ✓
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {authType === "aws" && (
+                    <div className="flex flex-col gap-3 max-w-xl">
+                      <div className="flex gap-3">
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-xxs font-bold text-muted uppercase">
+                            Access Key
+                          </label>
+                          <input
+                            type="text"
+                            className="url-input"
+                            value={awsAccessKey}
+                            onChange={(e) => setAwsAccessKey(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-xxs font-bold text-muted uppercase">
+                            Secret Key
+                          </label>
+                          <input
+                            type="password"
+                            className="url-input"
+                            value={awsSecretKey}
+                            onChange={(e) => setAwsSecretKey(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-xxs font-bold text-muted uppercase">
+                            AWS Region
+                          </label>
+                          <input
+                            type="text"
+                            className="url-input"
+                            placeholder="us-east-1"
+                            value={awsRegion}
+                            onChange={(e) => setAwsRegion(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-xxs font-bold text-muted uppercase">
+                            Service Name
+                          </label>
+                          <input
+                            type="text"
+                            className="url-input"
+                            placeholder="execute-api"
+                            value={awsService}
+                            onChange={(e) => setAwsService(e.target.value)}
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1618,22 +2108,356 @@ export default function MiniPostman() {
                       />
                       <span>x-www-form-urlencoded</span>
                     </label>
+                    <label className="body-type-option">
+                      <input
+                        type="radio"
+                        name="bodyType"
+                        checked={bodyType === "form-data"}
+                        onChange={() => setBodyType("form-data")}
+                      />
+                      <span>Form-Data (multipart)</span>
+                    </label>
+                    <label className="body-type-option">
+                      <input
+                        type="radio"
+                        name="bodyType"
+                        checked={bodyType === "binary"}
+                        onChange={() => setBodyType("binary")}
+                      />
+                      <span>Binary (octet-stream)</span>
+                    </label>
+                    <label className="body-type-option">
+                      <input
+                        type="radio"
+                        name="bodyType"
+                        checked={bodyType === "graphql"}
+                        onChange={() => setBodyType("graphql")}
+                      />
+                      <span>GraphQL</span>
+                    </label>
                   </div>
                   {bodyType !== "none" && (
                     <div className="body-editor-wrapper">
-                      <textarea
-                        className="body-textarea mono"
-                        placeholder={
-                          bodyType === "json"
-                            ? '{\n  "key": "value"\n}'
-                            : bodyType === "urlencoded"
-                              ? "key1=value1&key2=value2"
-                              : "Enter request body..."
-                        }
-                        value={body}
-                        onChange={(e) => setBody(e.target.value)}
-                        rows={6}
-                      />
+                      {bodyType === "form-data" ? (
+                        <div
+                          className="form-data-editor"
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "6px",
+                          }}
+                        >
+                          <table className="grid-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: "30px" }}></th>
+                                <th>Key</th>
+                                <th>Value</th>
+                                <th style={{ width: "70px" }}>Type</th>
+                                <th style={{ width: "40px" }}></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(formDataFields.length === 0
+                                ? [
+                                    {
+                                      key: "",
+                                      value: "",
+                                      enabled: true,
+                                      type: "text" as const,
+                                    },
+                                  ]
+                                : formDataFields
+                              ).map((field, index) => (
+                                <tr key={index}>
+                                  <td align="center">
+                                    <input
+                                      type="checkbox"
+                                      checked={field.enabled}
+                                      onChange={(e) => {
+                                        const updated = [...formDataFields];
+                                        updated[index].enabled =
+                                          e.target.checked;
+                                        setFormDataFields(updated);
+                                      }}
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      type="text"
+                                      placeholder="Field Name"
+                                      value={field.key}
+                                      onChange={(e) => {
+                                        const updated = [...formDataFields];
+                                        updated[index].key = e.target.value;
+                                        if (
+                                          index === formDataFields.length - 1 &&
+                                          e.target.value
+                                        ) {
+                                          updated.push({
+                                            key: "",
+                                            value: "",
+                                            enabled: true,
+                                            type: "text",
+                                          });
+                                        }
+                                        setFormDataFields(updated);
+                                      }}
+                                    />
+                                  </td>
+                                  <td>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        gap: "4px",
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      {field.type === "file" ? (
+                                        <>
+                                          <input
+                                            type="text"
+                                            className="mono"
+                                            placeholder="No file selected"
+                                            value={field.fileName || ""}
+                                            readOnly
+                                            style={{
+                                              flex: 1,
+                                              fontSize: "11px",
+                                              padding: "3px 6px",
+                                              backgroundColor:
+                                                "var(--bg-secondary)",
+                                              border:
+                                                "1px solid var(--border-primary)",
+                                              color: "var(--text-primary)",
+                                              borderRadius: "4px",
+                                            }}
+                                          />
+                                          <button
+                                            className="btn btn-ghost btn-xs"
+                                            onClick={() => {
+                                              // In a real Tauri app, this would use @tauri-apps/plugin-dialog
+                                              // For now, simulate with a prompt
+                                              const filePath =
+                                                window.prompt(
+                                                  "Enter file path:",
+                                                );
+                                              if (filePath) {
+                                                const updated = [
+                                                  ...formDataFields,
+                                                ];
+                                                updated[index].fileName =
+                                                  filePath;
+                                                updated[index].value =
+                                                  "[FILE: " +
+                                                  filePath
+                                                    .split(/\\|\//)
+                                                    .pop() +
+                                                  "]";
+                                                setFormDataFields(updated);
+                                              }
+                                            }}
+                                          >
+                                            Browse
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          placeholder="Field Value"
+                                          value={field.value}
+                                          onChange={(e) => {
+                                            const updated = [...formDataFields];
+                                            updated[index].value =
+                                              e.target.value;
+                                            setFormDataFields(updated);
+                                          }}
+                                          style={{ flex: 1 }}
+                                        />
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <select
+                                      value={field.type}
+                                      onChange={(e) => {
+                                        const updated = [...formDataFields];
+                                        updated[index].type = e.target.value as
+                                          | "text"
+                                          | "file";
+                                        if (e.target.value === "file") {
+                                          updated[index].fileName = "";
+                                        }
+                                        setFormDataFields(updated);
+                                      }}
+                                      style={{
+                                        fontSize: "10px",
+                                        padding: "2px 4px",
+                                        backgroundColor: "var(--bg-primary)",
+                                        border:
+                                          "1px solid var(--border-primary)",
+                                        color: "var(--text-primary)",
+                                        borderRadius: "4px",
+                                      }}
+                                    >
+                                      <option value="text">Text</option>
+                                      <option value="file">File</option>
+                                    </select>
+                                  </td>
+                                  <td align="center">
+                                    {index < formDataFields.length - 1 && (
+                                      <button
+                                        className="delete-row-btn"
+                                        onClick={() => {
+                                          const updated = formDataFields.filter(
+                                            (_, idx) => idx !== index,
+                                          );
+                                          setFormDataFields(updated);
+                                        }}
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : bodyType === "binary" ? (
+                        <div
+                          className="binary-editor"
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "8px",
+                              alignItems: "center",
+                            }}
+                          >
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => {
+                                const filePath = window.prompt(
+                                  "Select file path for binary upload:",
+                                );
+                                if (filePath) {
+                                  setBinaryFilePath(filePath);
+                                  setBody(
+                                    "[BINARY FILE: " +
+                                      filePath.split(/\\|\//).pop() +
+                                      "]",
+                                  );
+                                }
+                              }}
+                            >
+                              <FileCode size={12} /> Select File
+                            </button>
+                            {binaryFilePath && (
+                              <span className="text-xs text-muted">
+                                {binaryFilePath.split(/\\|\//).pop()}
+                              </span>
+                            )}
+                          </div>
+                          {binaryFilePath && (
+                            <button
+                              className="btn btn-ghost btn-xs"
+                              onClick={() => {
+                                setBinaryFilePath("");
+                                setBody("");
+                              }}
+                            >
+                              <Trash2 size={11} /> Clear
+                            </button>
+                          )}
+                          <span className="text-xxs text-muted italic">
+                            Binary data will be sent as raw octet-stream.
+                          </span>
+                        </div>
+                      ) : bodyType === "graphql" ? (
+                        <div
+                          className="graphql-editor"
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                            }}
+                          >
+                            <label className="text-xxs font-bold text-muted uppercase">
+                              Query
+                            </label>
+                            <textarea
+                              className="body-textarea mono"
+                              placeholder={`query GetUser {\n  user(id: 1) {\n    id\n    name\n    email\n  }\n}`}
+                              value={graphqlQuery}
+                              onChange={(e) => {
+                                setGraphqlQuery(e.target.value);
+                                setBody(
+                                  JSON.stringify({
+                                    query: e.target.value,
+                                    variables:
+                                      parseGraphqlVars(graphqlVariables),
+                                  }),
+                                );
+                              }}
+                              rows={7}
+                            />
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                            }}
+                          >
+                            <label className="text-xxs font-bold text-muted uppercase">
+                              Variables (JSON)
+                            </label>
+                            <textarea
+                              className="body-textarea mono"
+                              placeholder='{"id": 1}'
+                              value={graphqlVariables}
+                              onChange={(e) => {
+                                setGraphqlVariables(e.target.value);
+                                setBody(
+                                  JSON.stringify({
+                                    query: graphqlQuery,
+                                    variables: parseGraphqlVars(e.target.value),
+                                  }),
+                                );
+                              }}
+                              rows={4}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <textarea
+                          className="body-textarea mono"
+                          placeholder={
+                            bodyType === "json"
+                              ? '{\n  "key": "value"\n}'
+                              : bodyType === "urlencoded"
+                                ? "key1=value1&key2=value2"
+                                : "Enter request body..."
+                          }
+                          value={body}
+                          onChange={(e) => setBody(e.target.value)}
+                          rows={6}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
@@ -1867,6 +2691,18 @@ export default function MiniPostman() {
                     Body
                   </button>
                   <button
+                    className={`res-tab-btn ${resTab === "preview" ? "active" : ""}`}
+                    onClick={() => setResTab("preview")}
+                  >
+                    Preview
+                  </button>
+                  <button
+                    className={`res-tab-btn ${resTab === "raw" ? "active" : ""}`}
+                    onClick={() => setResTab("raw")}
+                  >
+                    Raw
+                  </button>
+                  <button
                     className={`res-tab-btn ${resTab === "headers" ? "active" : ""}`}
                     onClick={() => setResTab("headers")}
                   >
@@ -2049,13 +2885,202 @@ export default function MiniPostman() {
               {/* Response content */}
               {response && !isLoading && (
                 <>
-                  {/* RESPONSE BODY */}
+                  {/* RESPONSE SEARCH BAR (shown for body, preview, raw) */}
+                  {(resTab === "body" ||
+                    resTab === "preview" ||
+                    resTab === "raw") && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "3px 8px",
+                        borderBottom: "1px solid var(--border-primary)",
+                        backgroundColor: "var(--bg-secondary)",
+                      }}
+                    >
+                      <Search size={11} className="text-muted" />
+                      <input
+                        type="text"
+                        placeholder="Find in response... (Ctrl+F)"
+                        value={responseSearchQuery}
+                        onChange={(e) => setResponseSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            // Trigger search (highlight matches)
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          height: "22px",
+                          fontSize: "11px",
+                          padding: "0 6px",
+                          backgroundColor: "var(--bg-primary)",
+                          border: "1px solid var(--border-primary)",
+                          color: "var(--text-primary)",
+                          borderRadius: "4px",
+                          outline: "none",
+                        }}
+                      />
+                      {responseSearchQuery && (
+                        <span className="text-xxs text-muted">
+                          {
+                            findAllMatches(
+                              resTab === "raw"
+                                ? response.body
+                                : getFormattedBody(response.body),
+                              responseSearchQuery,
+                            ).length
+                          }{" "}
+                          matches
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* RESPONSE BODY (Prettified JSON) */}
                   {resTab === "body" && (
-                    <div className="body-view-wrapper">
+                    <div
+                      className="body-view-wrapper"
+                      style={{ position: "relative" }}
+                    >
                       <textarea
                         readOnly
                         className="response-textarea mono"
                         value={getFormattedBody(response.body)}
+                      />
+                      {responseSearchQuery && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: "4px",
+                            right: "8px",
+                            zIndex: 2,
+                            backgroundColor: "var(--bg-secondary)",
+                            border: "1px solid var(--border-primary)",
+                            borderRadius: "4px",
+                            padding: "2px 8px",
+                            fontSize: "10px",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          Searching for &quot;{responseSearchQuery}&quot; (
+                          {
+                            findAllMatches(
+                              getFormattedBody(response.body),
+                              responseSearchQuery,
+                            ).length
+                          }{" "}
+                          matches)
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* RESPONSE PREVIEW */}
+                  {resTab === "preview" && (
+                    <div
+                      className="preview-view-wrapper"
+                      style={{ padding: "8px", flex: 1, overflow: "auto" }}
+                    >
+                      {response.headers["content-type"]?.includes("image/") ||
+                      response.body.startsWith("data:image") ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            minHeight: "100px",
+                          }}
+                        >
+                          <img
+                            src={
+                              response.body.startsWith("data:")
+                                ? response.body
+                                : `data:${response.headers["content-type"] || "image/png"};base64,${btoa(response.body)}`
+                            }
+                            alt="Response preview"
+                            style={{
+                              maxWidth: "100%",
+                              maxHeight: "400px",
+                              borderRadius: "4px",
+                            }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display =
+                                "none";
+                            }}
+                          />
+                        </div>
+                      ) : response.headers["content-type"]?.includes(
+                          "text/html",
+                        ) ? (
+                        <iframe
+                          srcDoc={response.body}
+                          title="Response Preview"
+                          style={{
+                            width: "100%",
+                            height: "400px",
+                            border: "1px solid var(--border-primary)",
+                            borderRadius: "4px",
+                            backgroundColor: "white",
+                          }}
+                          sandbox="allow-same-origin"
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "12px",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            minHeight: "100px",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          <Globe size={24} />
+                          <span className="text-xs">
+                            Preview not available for{" "}
+                            {response.headers["content-type"] || "unknown"}{" "}
+                            content type.
+                          </span>
+                          <span className="text-xxs">
+                            Switch to "Body" or "Raw" tab to view the content.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* RESPONSE RAW (minified) */}
+                  {resTab === "raw" && (
+                    <div
+                      className="raw-view-wrapper"
+                      style={{ position: "relative" }}
+                    >
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "4px",
+                          right: "8px",
+                          zIndex: 2,
+                        }}
+                      >
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => {
+                            navigator.clipboard.writeText(response.body);
+                          }}
+                          title="Copy raw response"
+                        >
+                          <Copy size={10} />
+                        </button>
+                      </div>
+                      <textarea
+                        readOnly
+                        className="response-textarea mono"
+                        value={response.body}
+                        style={{ fontSize: "10px" }}
                       />
                     </div>
                   )}
@@ -2442,6 +3467,73 @@ export default function MiniPostman() {
                 disabled={!saveName.trim()}
               >
                 Save Template
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================ */}
+      {/* IMPORT cURL MODAL                                               */}
+      {/* ================================================================ */}
+      {showImportCurlModal && (
+        <div className="modal-overlay" style={{ zIndex: 120 }}>
+          <div className="modal-content" style={{ width: "500px" }}>
+            <header className="modal-header">
+              <h3 className="modal-title">Import Request from cURL</h3>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "3px 6px" }}
+                onClick={() => setShowImportCurlModal(false)}
+              >
+                <X size={12} />
+              </button>
+            </header>
+            <div className="modal-body">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-secondary">
+                  Paste raw cURL command
+                </label>
+                <textarea
+                  className="mono"
+                  rows={8}
+                  style={{
+                    backgroundColor: "var(--bg-primary)",
+                    border: "1px solid var(--border-primary)",
+                    color: "var(--text-primary)",
+                    padding: "8px 12px",
+                    fontSize: "11px",
+                    fontFamily: "var(--font-mono)",
+                    width: "100%",
+                    resize: "none",
+                    outline: "none",
+                  }}
+                  placeholder={`curl -X POST https://httpbin.org/post \\\n  -H "Content-Type: application/json" \\\n  -d '{"key": "value"}'`}
+                  value={importCurlInput}
+                  onChange={(e) => setImportCurlInput(e.target.value)}
+                />
+                <span className="text-xxs text-muted italic">
+                  Tip: You can copy raw cURL commands directly from Chrome
+                  DevTools Network Tab.
+                </span>
+              </div>
+            </div>
+            <footer className="modal-footer">
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setImportCurlInput("");
+                  setShowImportCurlModal(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleImportCurl}
+                disabled={!importCurlInput.trim()}
+              >
+                Import Request
               </button>
             </footer>
           </div>

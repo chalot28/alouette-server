@@ -4707,3 +4707,75 @@ body {
     font-size: 11px;
     font-style: italic;
 }
+
+/* --- PREMIUM BUTTON UTILITIES FOR MINI POSTMAN --- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--transition-fast, 0.15s) ease;
+    user-select: none;
+    padding: 6px 12px;
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
+}
+
+.btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background-color: var(--color-accent);
+    color: #ffffff;
+}
+
+.btn-primary:hover {
+    background-color: var(--color-accent-hover, #2b6cb0);
+}
+
+.btn-secondary {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-primary);
+    color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn-ghost {
+    background: transparent !important;
+    border-color: transparent !important;
+    color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+    color: var(--text-primary) !important;
+}
+
+.btn-xs {
+    padding: 2px 6px;
+    font-size: 10px;
+    border-radius: 3px;
+    gap: 4px;
+    height: auto !important;
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 11px;
+    border-radius: 3px;
+}

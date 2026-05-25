@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Trash2, Variable, Globe } from "lucide-react";
 
 interface EnvironmentVariable {
@@ -15,10 +15,18 @@ interface Environment {
 
 interface Props {
   onInsertVariable?: (varName: string) => void;
+  refreshTrigger?: number;
 }
 
-export default function MiniPostmanEnvManager({ onInsertVariable }: Props) {
+export default function MiniPostmanEnvManager({
+  onInsertVariable,
+  refreshTrigger,
+}: Props) {
   const [environments, setEnvironments] = useState<Environment[]>(() => {
+    return loadEnvironments();
+  });
+
+  const loadEnvironments = (): Environment[] => {
     const saved = localStorage.getItem("postman_environments");
     if (saved) {
       try {
@@ -47,7 +55,13 @@ export default function MiniPostmanEnvManager({ onInsertVariable }: Props) {
         ],
       },
     ];
-  });
+  };
+
+  // Reload when refreshTrigger changes (e.g., pm.environment.set from scripts)
+  useEffect(() => {
+    const envs = loadEnvironments();
+    setEnvironments(envs);
+  }, [refreshTrigger]);
 
   const [activeEnvId, setActiveEnvId] = useState(environments[0]?.id || "");
   const [newVarKey, setNewVarKey] = useState("");

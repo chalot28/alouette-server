@@ -120,8 +120,15 @@ export type BodyType =
   | "urlencoded"
   | "xml"
   | "form-data"
-  | "binary";
-export type AuthType = "none" | "bearer" | "basic" | "apikey";
+  | "binary"
+  | "graphql";
+export type AuthType =
+  | "none"
+  | "bearer"
+  | "basic"
+  | "apikey"
+  | "oauth2"
+  | "aws";
 export type ReqTab =
   | "params"
   | "headers"
@@ -133,12 +140,14 @@ export type ReqTab =
   | "settings";
 export type ResTab =
   | "body"
+  | "preview"
+  | "raw"
   | "headers"
   | "cookies"
   | "tests"
   | "timeline"
   | "schema";
-export type SidebarTab = "history" | "saved" | "environments";
+export type SidebarTab = "history" | "saved" | "collections" | "environments";
 export type ToolsTab =
   | "dns"
   | "ping"
