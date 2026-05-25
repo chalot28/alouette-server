@@ -1,5 +1,12 @@
 use crate::state::AppState;
+use serde::Serialize;
 use tauri::State;
+
+#[derive(Serialize)]
+pub struct TerminalSessionInfo {
+    pub exists: bool,
+    pub pid: Option<u32>,
+}
 
 #[tauri::command]
 pub async fn spawn_terminal_session(
@@ -39,4 +46,23 @@ pub async fn kill_terminal_session(
     let mut pm = state.process_manager.lock().await;
     pm.kill_terminal(&session_id).await?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn check_terminal_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<TerminalSessionInfo, String> {
+    let pm = state.process_manager.lock().await;
+    if let Some(session) = pm.terminal_sessions.get(&session_id) {
+        Ok(TerminalSessionInfo {
+            exists: true,
+            pid: Some(session.pid),
+        })
+    } else {
+        Ok(TerminalSessionInfo {
+            exists: false,
+            pid: None,
+        })
+    }
 }

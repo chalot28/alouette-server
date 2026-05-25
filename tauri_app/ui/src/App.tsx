@@ -38,12 +38,7 @@ import BrowserWindow from "./components/browser";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // Types
-import {
-  ResourceHistory,
-  TerminalSessionItem,
-  ProcessState,
-  LogLine,
-} from "./types";
+import { ResourceHistory, TerminalSessionItem, ProcessState } from "./types";
 
 // Hooks
 import { useProjects } from "./hooks/useProjects";
@@ -154,9 +149,6 @@ export default function App() {
   const setActiveTerminalIdsRef = useRef<
     React.Dispatch<React.SetStateAction<{ [projectId: string]: string }>>
   >(() => {});
-  const setTermOutputsRef = useRef<
-    React.Dispatch<React.SetStateAction<{ [id: string]: string }>>
-  >(() => {});
 
   // ── Hooks ──
 
@@ -166,7 +158,7 @@ export default function App() {
     projectTerminals: projectTerminalsRef.current,
     setProjectTerminals: (action) => setProjectTerminalsRef.current(action),
     setActiveTerminalIds: (action) => setActiveTerminalIdsRef.current(action),
-    setTermOutputs: (action) => setTermOutputsRef.current(action),
+    setTermOutputs: () => {}, // no-op: output is rendered directly in TerminalPanel via xterm.js
     triggerToast,
     triggerConfirm,
   });
@@ -176,8 +168,6 @@ export default function App() {
     activeProjectId,
     setActiveProjectId,
     projectStates,
-    projectLogs,
-    setProjectLogs,
     activeProject,
     openFilePath,
     setOpenFilePath,
@@ -259,33 +249,25 @@ export default function App() {
   setResourceHistoryRef.current = resourceHook.setResourceHistory;
 
   // 3. Terminal management
-  const terminalHook = useTerminal(activeProjectId, activeProject, projects);
+  const terminalHook = useTerminal(activeProjectId, activeProject);
   const {
-    termOutputs,
-    setTermOutputs,
-    projectTerminals,
-    setProjectTerminals,
-    activeTerminalIds,
-    setActiveTerminalIds,
-    logFilter,
-    setLogFilter,
-    logSearchQuery,
-    setLogSearchQuery,
-    autoScroll,
-    setAutoScroll,
-    terminalRef,
-    handleAddTerminal,
-    handleDeleteTerminal,
-    handleDeleteAllTerminals,
-    handleRenameTerminal,
-    handleTerminalScroll,
+    terminals,
+    activeTerminalId,
+    setActiveTerminalId,
+    activeStatus,
+    activeError,
+    terminalBufferRef,
+    setProjectTerminalsState,
+    setActiveTerminalIdsState,
+    addTerminal,
+    deleteTerminal,
+    deleteAllTerminals,
+    renameTerminal,
+    respawnTerminal,
+    retrySpawn,
   } = terminalHook;
-
-  // Update cross-hook refs after useTerminal is called
-  projectTerminalsRef.current = projectTerminals;
-  setProjectTerminalsRef.current = setProjectTerminals;
-  setActiveTerminalIdsRef.current = setActiveTerminalIds;
-  setTermOutputsRef.current = setTermOutputs;
+  setProjectTerminalsRef.current = setProjectTerminalsState;
+  setActiveTerminalIdsRef.current = setActiveTerminalIdsState;
 
   // ── Theme effect ──
   useEffect(() => {
@@ -315,13 +297,10 @@ export default function App() {
   const activeState: ProcessState = projectStates[activeProjectId] || {
     type: "Stopped",
   };
-  const activeLogs: LogLine[] = projectLogs[activeProjectId] || [];
-  const activeHistory = resourceHistory[activeProjectId] || {
-    cpu: [],
-    ram: [],
-  };
-  const activeCpuVal = activeHistory.cpu[activeHistory.cpu.length - 1] || 0.0;
-  const activeRamVal = activeHistory.ram[activeHistory.ram.length - 1] || 0.0;
+
+  // Local state for backward compat (TabList references these)
+  const [autoScroll, setAutoScroll] = useState(true);
+  const terminalRef = useRef<HTMLDivElement>(null);
 
   // Filter project lists based on Search input
   const filteredProjects = projects.filter((p) => {
@@ -333,21 +312,12 @@ export default function App() {
     );
   });
 
-  // Filter logs inside Terminal
-  const filteredLogs = activeLogs.filter((log) => {
-    if (logFilter !== "all" && log.stream !== logFilter) return false;
-    if (logSearchQuery.trim()) {
-      return log.text.toLowerCase().includes(logSearchQuery.toLowerCase());
-    }
-    return true;
-  });
-
   // ── Auto-scroll terminal ──
   useEffect(() => {
     if (autoScroll && terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
-  }, [activeLogs, autoScroll]);
+  }, []);
 
   // ── Resize Handlers ──
 
@@ -744,42 +714,18 @@ export default function App() {
               <div className="zone zone-4" style={{ flex: 1 }}>
                 <TerminalPanel
                   activeProject={activeProject}
-                  activeProjectId={activeProjectId}
-                  filteredLogs={filteredLogs}
-                  triggerToast={triggerToast}
-                  logFilter={logFilter}
-                  setLogFilter={setLogFilter}
-                  logSearchQuery={logSearchQuery}
-                  setLogSearchQuery={setLogSearchQuery}
-                  clearLogs={(id) =>
-                    setProjectLogs((prev) => ({ ...prev, [id]: [] }))
-                  }
-                  terminalRef={terminalRef}
-                  handleTerminalScroll={handleTerminalScroll}
-                  termOutput={
-                    termOutputs[activeTerminalIds[activeProjectId] || ""] || ""
-                  }
-                  clearTermOutput={(id) =>
-                    setTermOutputs((prev) => ({ ...prev, [id]: "" }))
-                  }
-                  terminals={projectTerminals[activeProjectId] || []}
-                  activeTerminalId={activeTerminalIds[activeProjectId] || ""}
-                  setActiveTerminalId={(termId) =>
-                    setActiveTerminalIds((prev) => ({
-                      ...prev,
-                      [activeProjectId]: termId,
-                    }))
-                  }
-                  onAddTerminal={() => handleAddTerminal(activeProjectId)}
-                  onDeleteTerminal={(termId) =>
-                    handleDeleteTerminal(activeProjectId, termId)
-                  }
-                  onDeleteAllTerminals={() =>
-                    handleDeleteAllTerminals(activeProjectId)
-                  }
-                  onRenameTerminal={(termId, name) =>
-                    handleRenameTerminal(activeProjectId, termId, name)
-                  }
+                  terminals={terminals}
+                  activeTerminalId={activeTerminalId}
+                  setActiveTerminalId={setActiveTerminalId}
+                  activeStatus={activeStatus}
+                  activeError={activeError}
+                  terminalBufferRef={terminalBufferRef}
+                  onRespawnTerminal={respawnTerminal}
+                  onRetrySpawn={retrySpawn}
+                  onAddTerminal={addTerminal}
+                  onDeleteTerminal={deleteTerminal}
+                  onDeleteAllTerminals={deleteAllTerminals}
+                  onRenameTerminal={renameTerminal}
                 />
               </div>
             </>

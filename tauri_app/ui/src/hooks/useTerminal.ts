@@ -1,222 +1,253 @@
 import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Project, TerminalSessionItem } from "../types";
-import { MAX_TERM_OUTPUT_LENGTH } from "../constants";
+import {
+  Project,
+  TerminalSessionItem,
+  TerminalConnectionStatus,
+} from "../types";
 
-export function useTerminal(activeProjectId: string, activeProject: Project | undefined, projects: Project[]) {
-  const [termOutputs, setTermOutputs] = useState<{ [id: string]: string }>({});
-  const [projectTerminals, setProjectTerminals] = useState<{ [projectId: string]: TerminalSessionItem[] }>({});
-  const [activeTerminalIds, setActiveTerminalIds] = useState<{ [projectId: string]: string }>({});
-  const [logFilter, setLogFilter] = useState<"all" | "stdout" | "stderr" | "system">("all");
-  const [logSearchQuery, setLogSearchQuery] = useState("");
-  const [autoScroll, setAutoScroll] = useState(true);
-  const terminalRef = useRef<HTMLDivElement>(null);
+/**
+ * useTerminal — manages sandbox terminal sessions for the active project.
+ *
+ * Features:
+ * - Auto-spawns one terminal when a project becomes active
+ * - Manages multiple named terminal sessions per project
+ * - Tracks connection status (connecting → connected → error)
+ * - Buffers output in a ref so xterm.js can replay on mount
+ * - Clean up all sessions on unmount / project switch
+ */
+export function useTerminal(
+  activeProjectId: string,
+  activeProject: Project | undefined,
+) {
+  const [projectTerminals, setProjectTerminals] = useState<{
+    [projectId: string]: TerminalSessionItem[];
+  }>({});
+  const [activeTerminalIds, setActiveTerminalIds] = useState<{
+    [projectId: string]: string;
+  }>({});
+  const [terminalStatuses, setTerminalStatuses] = useState<{
+    [sessionId: string]: TerminalConnectionStatus;
+  }>({});
+  const [terminalErrors, setTerminalErrors] = useState<{
+    [sessionId: string]: string;
+  }>({});
 
-  // Listen to interactive terminal output events
+  // Buffer accumulates ALL terminal-output events so xterm.js can replay
+  // them on mount (solves race: output arrives before xterm is ready).
+  const terminalBufferRef = useRef<{ [sessionId: string]: string }>({});
+
+  // ── Global listener: buffers output from ALL sessions ────────────────
   useEffect(() => {
-    const termListener = listen<any>("terminal-output", (event) => {
-      const payload = event.payload; // { session_id, text }
-      setTermOutputs((prev) => {
-        const prevText = prev[payload.session_id] || "";
-        let newText = prevText + payload.text;
-        if (newText.length > MAX_TERM_OUTPUT_LENGTH) {
-          newText = newText.slice(newText.length - MAX_TERM_OUTPUT_LENGTH);
-        }
-        return {
-          ...prev,
-          [payload.session_id]: newText,
+    const unlisten = listen<any>("terminal-output", (event) => {
+      const sid: string = event.payload.session_id;
+      const text: string = event.payload.text;
+      if (text) {
+        terminalBufferRef.current = {
+          ...terminalBufferRef.current,
+          [sid]: (terminalBufferRef.current[sid] || "") + text,
         };
-      });
+      }
     });
-
     return () => {
-      termListener.then((unlisten) => unlisten());
+      unlisten.then((u) => u());
     };
   }, []);
 
-  // Interactive Sandboxed Terminal Auto-spawner
-  useEffect(() => {
-    if (activeProjectId && activeProjectId !== "__create_project__" && activeProject) {
-      setProjectTerminals((prev) => {
-        const currentTerms = prev[activeProjectId] || [];
-        if (currentTerms.length === 0) {
-          const defaultTermId = `${activeProjectId}-term-default`;
-          const defaultTerm: TerminalSessionItem = { id: defaultTermId, name: "Terminal 1" };
-
-          setActiveTerminalIds((activePrev) => ({
-            ...activePrev,
-            [activeProjectId]: defaultTermId
-          }));
-
-          invoke("spawn_terminal_session", {
-            sessionId: defaultTermId,
-            cwd: activeProject.cwd || null,
-          }).catch((err) => {
-            console.error("Failed to spawn default terminal session for " + activeProjectId, err);
-          });
-
-          return {
-            ...prev,
-            [activeProjectId]: [defaultTerm]
-          };
-        }
-        return prev;
-      });
-    }
-  }, [activeProjectId, activeProject?.cwd]);
-
-  const handleAddTerminal = (projectId: string) => {
-    const proj = projects.find((p) => p.id === projectId);
-    const cwd = proj?.cwd || null;
-
-    setProjectTerminals((prev) => {
-      const currentTerms = prev[projectId] || [];
-      const nextIndex = currentTerms.length + 1;
-      const newTermId = `${projectId}-term-${Date.now()}`;
-      const newTerm: TerminalSessionItem = {
-        id: newTermId,
-        name: `Terminal ${nextIndex}`
-      };
-
-      setActiveTerminalIds((activePrev) => ({
-        ...activePrev,
-        [projectId]: newTermId
-      }));
-
-      invoke("spawn_terminal_session", {
-        sessionId: newTermId,
-        cwd
-      }).catch((err) => {
-        console.error("Failed to spawn terminal session:", err);
-      });
-
-      return {
-        ...prev,
-        [projectId]: [...currentTerms, newTerm]
-      };
+  // ── Spawn ────────────────────────────────────────────────────────────
+  const spawnTerminal = async (
+    sessionId: string,
+    cwd: string | null | undefined,
+  ) => {
+    console.log("[term-hook] spawn START:", sessionId, "cwd:", cwd);
+    setTerminalStatuses((prev) => ({ ...prev, [sessionId]: "connecting" }));
+    setTerminalErrors((prev) => {
+      const c = { ...prev };
+      delete c[sessionId];
+      return c;
     });
-  };
 
-  const handleDeleteTerminal = async (projectId: string, terminalId: string) => {
     try {
-      await invoke("kill_terminal_session", { sessionId: terminalId });
+      await invoke("spawn_terminal_session", { sessionId, cwd: cwd || null });
+      console.log("[term-hook] spawn OK, checking:", sessionId);
+      const info = await invoke<{ exists: boolean; pid: number | null }>(
+        "check_terminal_session",
+        { sessionId },
+      );
+      console.log("[term-hook] check result:", sessionId, info);
+      if (info.exists) {
+        console.log("[term-hook] CONNECTED:", sessionId, "PID:", info.pid);
+        setTerminalStatuses((prev) => ({ ...prev, [sessionId]: "connected" }));
+      } else {
+        throw new Error("Session not found after spawn");
+      }
     } catch (err) {
-      console.error("Failed to kill terminal session:", err);
-    }
-
-    setTermOutputs((prev) => {
-      const copy = { ...prev };
-      delete copy[terminalId];
-      return copy;
-    });
-
-    setProjectTerminals((prev) => {
-      const currentTerms = prev[projectId] || [];
-      const remainingTerms = currentTerms.filter((t) => t.id !== terminalId);
-
-      setActiveTerminalIds((activePrev) => {
-        const currentActive = activePrev[projectId];
-        if (currentActive === terminalId) {
-          return {
-            ...activePrev,
-            [projectId]: remainingTerms.length > 0 ? remainingTerms[0].id : ""
-          };
-        }
-        return activePrev;
-      });
-
-      return {
+      console.error("[term-hook] spawn ERROR:", sessionId, err);
+      setTerminalStatuses((prev) => ({ ...prev, [sessionId]: "error" }));
+      setTerminalErrors((prev) => ({
         ...prev,
-        [projectId]: remainingTerms
-      };
-    });
+        [sessionId]: err instanceof Error ? err.message : String(err),
+      }));
+    }
   };
 
-  const handleDeleteAllTerminals = async (projectId: string) => {
-    const currentTerms = projectTerminals[projectId] || [];
+  // ── Auto-spawn default terminal on project activation ────────────────
+  useEffect(() => {
+    if (
+      !activeProjectId ||
+      activeProjectId === "__create_project__" ||
+      !activeProject
+    )
+      return;
+    const existing = projectTerminals[activeProjectId];
+    console.log(
+      "[term-hook] auto-spawn check:",
+      activeProjectId,
+      "existing:",
+      existing?.length,
+    );
+    if (existing && existing.length > 0) return;
 
-    for (const term of currentTerms) {
-      try {
-        await invoke("kill_terminal_session", { sessionId: term.id });
-      } catch (err) {
-        console.error("Failed to kill terminal session:", err);
-      }
-
-      setTermOutputs((prev) => {
-        const copy = { ...prev };
-        delete copy[term.id];
-        return copy;
-      });
-    }
-
-    // Reset with a default terminal
-    const defaultTermId = `${projectId}-term-default-${Date.now()}`;
-    const defaultTerm: TerminalSessionItem = { id: defaultTermId, name: "Terminal 1" };
-    const proj = projects.find((p) => p.id === projectId);
+    const defaultId = `${activeProjectId}-term-default`;
+    const defaultTerm: TerminalSessionItem = {
+      id: defaultId,
+      name: "Terminal 1",
+    };
 
     setProjectTerminals((prev) => ({
       ...prev,
-      [projectId]: [defaultTerm]
+      [activeProjectId]: [defaultTerm],
     }));
+    setActiveTerminalIds((prev) => ({ ...prev, [activeProjectId]: defaultId }));
+    spawnTerminal(defaultId, activeProject.cwd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProjectId, activeProject?.cwd]);
 
-    setActiveTerminalIds((prev) => ({
-      ...prev,
-      [projectId]: defaultTermId
-    }));
-
-    try {
-      await invoke("spawn_terminal_session", {
-        sessionId: defaultTermId,
-        cwd: proj?.cwd || null
-      });
-    } catch (err) {
-      console.error("Failed to spawn terminal session after trash:", err);
-    }
-  };
-
-  const handleRenameTerminal = (projectId: string, terminalId: string, newName: string) => {
-    if (!newName.trim()) return;
+  // ── Add terminal ─────────────────────────────────────────────────────
+  const addTerminal = () => {
+    const cwd = activeProject?.cwd || null;
     setProjectTerminals((prev) => {
-      const current = prev[projectId] || [];
-      const updated = current.map((t) => {
-        if (t.id === terminalId) {
-          return { ...t, name: newName };
-        }
-        return t;
-      });
+      const list = prev[activeProjectId] || [];
+      const nid = `${activeProjectId}-term-${Date.now()}`;
+      setActiveTerminalIds((a) => ({ ...a, [activeProjectId]: nid }));
+      spawnTerminal(nid, cwd);
       return {
         ...prev,
-        [projectId]: updated
+        [activeProjectId]: [
+          ...list,
+          { id: nid, name: `Terminal ${list.length + 1}` },
+        ],
       };
     });
   };
 
-  const handleTerminalScroll = () => {
-    if (!terminalRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = terminalRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 30;
-    setAutoScroll(isAtBottom);
+  // ── Delete terminal ──────────────────────────────────────────────────
+  const deleteTerminal = async (terminalId: string) => {
+    await invoke("kill_terminal_session", { sessionId: terminalId }).catch(
+      () => {},
+    );
+    setTerminalStatuses((p) => {
+      const c = { ...p };
+      delete c[terminalId];
+      return c;
+    });
+    setTerminalErrors((p) => {
+      const c = { ...p };
+      delete c[terminalId];
+      return c;
+    });
+    setProjectTerminals((prev) => {
+      const list = (prev[activeProjectId] || []).filter(
+        (t) => t.id !== terminalId,
+      );
+      setActiveTerminalIds((a) => {
+        if (a[activeProjectId] === terminalId) {
+          return { ...a, [activeProjectId]: list[0]?.id || "" };
+        }
+        return a;
+      });
+      return { ...prev, [activeProjectId]: list };
+    });
   };
 
+  // ── Delete all terminals → respawn one ──────────────────────────────
+  const deleteAllTerminals = async () => {
+    const list = projectTerminals[activeProjectId] || [];
+    for (const t of list) {
+      await invoke("kill_terminal_session", { sessionId: t.id }).catch(
+        () => {},
+      );
+      setTerminalStatuses((p) => {
+        const c = { ...p };
+        delete c[t.id];
+        return c;
+      });
+      setTerminalErrors((p) => {
+        const c = { ...p };
+        delete c[t.id];
+        return c;
+      });
+    }
+    const nid = `${activeProjectId}-term-${Date.now()}`;
+    setProjectTerminals((prev) => ({
+      ...prev,
+      [activeProjectId]: [{ id: nid, name: "Terminal 1" }],
+    }));
+    setActiveTerminalIds((prev) => ({ ...prev, [activeProjectId]: nid }));
+    await spawnTerminal(nid, activeProject?.cwd);
+  };
+
+  // ── Rename terminal ─────────────────────────────────────────────────
+  const renameTerminal = (terminalId: string, name: string) => {
+    if (!name.trim()) return;
+    setProjectTerminals((prev) => ({
+      ...prev,
+      [activeProjectId]: (prev[activeProjectId] || []).map((t) =>
+        t.id === terminalId ? { ...t, name } : t,
+      ),
+    }));
+  };
+
+  const setProjectTerminalsState = setProjectTerminals;
+  const setActiveTerminalIdsState = setActiveTerminalIds;
+
+  // ── Respawn (kill + spawn) ──────────────────────────────────────────
+  const respawnTerminal = async (sessionId: string) => {
+    await invoke("kill_terminal_session", { sessionId }).catch(() => {});
+    await spawnTerminal(sessionId, activeProject?.cwd);
+  };
+
+  // ── Retry spawn for errored sessions ────────────────────────────────
+  const retrySpawn = async (sessionId: string) => {
+    await spawnTerminal(sessionId, activeProject?.cwd);
+  };
+
+  // ── Derived values ──────────────────────────────────────────────────
+  const terminals = projectTerminals[activeProjectId] || [];
+  const activeTerminalId = activeTerminalIds[activeProjectId] || "";
+  const activeStatus: TerminalConnectionStatus = activeTerminalId
+    ? terminalStatuses[activeTerminalId] || "connecting"
+    : "disconnected";
+  const activeError = activeTerminalId
+    ? terminalErrors[activeTerminalId]
+    : undefined;
+
   return {
-    termOutputs,
-    setTermOutputs,
-    projectTerminals,
-    setProjectTerminals,
-    activeTerminalIds,
-    setActiveTerminalIds,
-    logFilter,
-    setLogFilter,
-    logSearchQuery,
-    setLogSearchQuery,
-    autoScroll,
-    setAutoScroll,
-    terminalRef,
-    handleAddTerminal,
-    handleDeleteTerminal,
-    handleDeleteAllTerminals,
-    handleRenameTerminal,
-    handleTerminalScroll,
+    terminals,
+    activeTerminalId,
+    setActiveTerminalId: (id: string) =>
+      setActiveTerminalIds((prev) => ({ ...prev, [activeProjectId]: id })),
+    activeStatus,
+    activeError,
+    terminalBufferRef,
+    setProjectTerminalsState,
+    setActiveTerminalIdsState,
+    addTerminal,
+    deleteTerminal,
+    deleteAllTerminals,
+    renameTerminal,
+    respawnTerminal,
+    retrySpawn,
   };
 }

@@ -31,7 +31,8 @@ pub struct TerminalSession {
     pub stdin_sender: mpsc::Sender<String>,
     pub pid: u32,
     pub workspace_root: PathBuf,
-    pub current_dir: std::sync::Arc<std::sync::Mutex<PathBuf>>,
+    /// MUST keep child alive or portable-pty kills the process on drop.
+    pub _child: Option<Box<dyn portable_pty::Child + Send>>,
 }
 
 /// Lightweight context cloned from a TerminalSession, used to process
@@ -39,8 +40,6 @@ pub struct TerminalSession {
 pub struct TerminalWriteContext {
     pub stdin_sender: mpsc::Sender<String>,
     pub terminal_sender: broadcast::Sender<TerminalOutput>,
-    pub workspace_root: PathBuf,
-    pub current_dir: std::sync::Arc<std::sync::Mutex<PathBuf>>,
 }
 
 pub struct ProjectInstance {

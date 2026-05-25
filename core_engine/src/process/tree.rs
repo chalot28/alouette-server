@@ -28,38 +28,6 @@ pub(crate) fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-pub(crate) fn is_subpath(target: &Path, root: &Path) -> bool {
-    let target_norm = normalize_path(target);
-    let root_norm = normalize_path(root);
-
-    let target_str = target_norm.to_string_lossy().to_lowercase();
-    let root_str = root_norm.to_string_lossy().to_lowercase();
-
-    let root_str_with_slash = if root_str.ends_with(std::path::MAIN_SEPARATOR) || root_str.ends_with('/') {
-        root_str.clone()
-    } else {
-        format!("{}{}", root_str, std::path::MAIN_SEPARATOR)
-    };
-
-    target_str.starts_with(&root_str_with_slash) || target_str == root_str
-}
-
-pub(crate) fn get_relative_path(target: &Path, root: &Path) -> String {
-    let target_norm = normalize_path(target);
-    let root_norm = normalize_path(root);
-
-    if let Ok(rel) = target_norm.strip_prefix(&root_norm) {
-        let rel_str = rel.to_string_lossy().replace('\\', "/");
-        if rel_str.starts_with('/') {
-            rel_str[1..].to_string()
-        } else {
-            rel_str
-        }
-    } else {
-        String::new()
-    }
-}
-
 // Struct to handle background status broadcasts cleanly
 pub(crate) struct StateUpdater {
     pub project_id: String,

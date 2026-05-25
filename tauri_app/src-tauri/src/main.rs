@@ -91,6 +91,7 @@ fn main() {
             commands::terminal::spawn_terminal_session,
             commands::terminal::write_to_terminal_session,
             commands::terminal::kill_terminal_session,
+            commands::terminal::check_terminal_session,
             commands::files::get_project_files,
             commands::files::read_file_content,
             commands::files::write_file_content,

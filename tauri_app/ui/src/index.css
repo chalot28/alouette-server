@@ -6305,3 +6305,396 @@ body {
     background: rgba(58, 134, 255, 0.12);
     border: 1px solid rgba(58, 134, 255, 0.2);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sandbox Terminal — Clean & Minimal
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.sandbox-terminal {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+    background-color: var(--terminal-bg);
+}
+
+.sandbox-terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 12px;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-primary);
+    flex-shrink: 0;
+    height: 34px;
+}
+
+.sandbox-terminal-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.sandbox-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--color-success);
+    background-color: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    padding: 1px 6px;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+}
+
+.sandbox-project-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sandbox-workspace-path {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+}
+
+.sandbox-terminal-header-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.sandbox-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    height: 22px;
+}
+
+.sandbox-btn:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
+}
+
+.sandbox-terminal-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sandbox-terminal-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    position: relative;
+    background-color: var(--terminal-bg);
+}
+
+/* ── Status overlay ─────────────────────────────────────────────────── */
+
+.sandbox-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 32px;
+    background-color: var(--terminal-bg);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.sandbox-overlay-title {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sandbox-overlay-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    max-width: 360px;
+    line-height: 1.5;
+}
+
+.sandbox-overlay-sub code {
+    font-family: var(--font-mono);
+    background-color: var(--bg-tertiary);
+    padding: 1px 5px;
+    font-size: 10px;
+}
+
+.sandbox-spinner {
+    color: var(--color-accent);
+    animation: spin 1s linear infinite;
+}
+
+.sandbox-error-icon {
+    color: var(--color-danger);
+}
+
+.sandbox-error-text {
+    color: var(--color-danger);
+}
+
+.sandbox-error-detail {
+    color: var(--color-danger);
+    opacity: 0.8;
+}
+
+.sandbox-retry-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: var(--color-accent);
+    color: #fff;
+    border: none;
+    padding: 6px 18px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.sandbox-retry-btn:hover {
+    background-color: var(--color-accent-hover);
+}
+
+/* ── xterm.js container ─────────────────────────────────────────────── */
+
+.sandbox-xterm-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    cursor: text;
+    outline: none;
+    padding: 6px;
+    background-color: #050507;
+    position: relative;
+}
+
+.sandbox-xterm-viewport {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────── */
+
+.sandbox-sidebar {
+    width: 170px;
+    border-left: 1px solid var(--border-primary);
+    background-color: var(--bg-secondary);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.sandbox-sidebar-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding: 6px 8px;
+}
+
+.sandbox-sidebar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+}
+
+.sandbox-sidebar-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    transition: all var(--transition-fast);
+}
+
+.sandbox-sidebar-btn:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+}
+
+.sandbox-terminal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.sandbox-terminal-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    color: var(--text-secondary);
+}
+
+.sandbox-terminal-item:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.sandbox-terminal-item.active {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-weight: 600;
+    border-left: 2px solid var(--color-accent);
+}
+
+.sandbox-terminal-item-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+}
+
+.sandbox-terminal-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50% !important;
+    background-color: var(--color-success);
+    flex-shrink: 0;
+}
+
+.sandbox-terminal-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sandbox-terminal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    opacity: 0;
+    transition: all var(--transition-fast);
+}
+
+.sandbox-terminal-item:hover .sandbox-terminal-close {
+    opacity: 1;
+}
+
+.sandbox-terminal-close:hover {
+    color: var(--color-danger);
+}
+
+.sandbox-rename-input {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-focus);
+    color: var(--text-primary);
+    font-size: 11px;
+    padding: 2px 4px;
+    width: 100%;
+    outline: none;
+    font-family: var(--font-sans);
+}
+
+/* ── Sidebar footer (status) ───────────────────────────────────────── */
+
+.sandbox-sidebar-footer {
+    border-top: 1px solid var(--border-primary);
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.sandbox-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+}
+
+.sandbox-status-label {
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.sandbox-status-value {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.sandbox-status-value.connected {
+    color: var(--color-success);
+}
+
+.sandbox-status-value.connecting {
+    color: var(--color-warning);
+}
+
+.sandbox-status-value.error {
+    color: var(--color-danger);
+}
+
+.sandbox-status-value.mono {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+.sandbox-overlay {
+    user-select: none;
+}
+
+.sandbox-terminal {
+    user-select: text;
+}

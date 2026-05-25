@@ -20,6 +20,8 @@ pub struct ProcessManager {
     pub proto_manager: ProtoManager,
     pub cloudflared_manager: CloudflaredManager,
     pub db_manager: crate::db::DbManager,
+    /// Leaked PtyPair pointers to prevent Drop (ClosePseudoConsole kills process).
+    pub(crate) _pty_pairs: HashMap<String, usize>,
 }
 
 impl ProcessManager {
@@ -119,6 +121,7 @@ impl ProcessManager {
             proto_manager: ProtoManager::new(proto_home),
             cloudflared_manager: CloudflaredManager::new(cloudflared_exe),
             db_manager,
+            _pty_pairs: HashMap::new(),
         }
     }
 

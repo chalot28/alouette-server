@@ -24,6 +24,18 @@ export interface TerminalSessionItem {
   name: string;
 }
 
+export type TerminalConnectionStatus =
+  | "connecting"
+  | "connected"
+  | "error"
+  | "disconnected";
+
+export interface TerminalState {
+  id: string;
+  status: TerminalConnectionStatus;
+  errorMessage?: string;
+}
+
 export interface ProcessState {
   type: "Stopped" | "Setup" | "Running" | "Crashing" | "Terminated" | "Fatal";
   data?: any; // PID or error reasons
