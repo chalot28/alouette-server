@@ -20,8 +20,6 @@ import {
   Project,
 } from "../types";
 
-/* ─── Props ────────────────────────────────────────────────────────── */
-
 interface TerminalPanelProps {
   activeProject: Project | undefined | null;
   terminals: TerminalSessionItem[];
@@ -37,8 +35,6 @@ interface TerminalPanelProps {
   onDeleteAllTerminals: () => void;
   onRenameTerminal: (id: string, name: string) => void;
 }
-
-/* ─── Theme colors for xterm.js ────────────────────────────────────── */
 
 const XTERM_THEME = {
   background: "#050507",
@@ -62,8 +58,6 @@ const XTERM_THEME = {
   brightWhite: "#ffffff",
 };
 
-/* ─── Component ────────────────────────────────────────────────────── */
-
 export default function TerminalPanel({
   activeProject,
   terminals,
@@ -84,7 +78,6 @@ export default function TerminalPanel({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [hasContent, setHasContent] = useState(false);
 
-  // ── Rename state ───────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameRef = useRef<HTMLInputElement>(null);
@@ -110,10 +103,8 @@ export default function TerminalPanel({
       );
       return;
     }
-
     console.log("[term] CREATING xterm for session:", activeTerminalId);
 
-    // Clear stale DOM
     shellRef.current.innerHTML = "";
     setHasContent(false);
 
@@ -138,40 +129,30 @@ export default function TerminalPanel({
       } catch {}
     });
 
-    // ── Input: forward keystrokes to backend ─────────────────────
     const dataDisposer = term.onData((data) => {
-      console.log(
-        "[term] onData session=%s char=%j code=%d",
-        activeTerminalId,
-        data,
-        data.charCodeAt(0),
-      );
       invoke("write_to_terminal_session", {
         sessionId: activeTerminalId,
         input: data,
       }).catch((err) => console.warn("[term] write FAILED:", err));
     });
 
-    // ── Replay buffered output ──────────────────────────────────
     const buf = terminalBufferRef.current[activeTerminalId];
     if (buf) {
       term.write(buf);
       setHasContent(true);
     }
 
-    // ── Output: listen to Tauri events ─────────────────────────
     const termListener = listen<any>("terminal-output", (event) => {
       if (event.payload.session_id === activeTerminalId) {
         const text = event.payload.text;
-        console.log("[term] output len=%d", text ? text.length : 0);
         if (text) {
+          console.log("[term] RAW OUTPUT:", JSON.stringify(text));
           term.write(text);
           if (!hasContent) setHasContent(true);
         }
       }
     });
 
-    // ── Resize observer ────────────────────────────────────────
     const ro = new ResizeObserver(() => {
       try {
         fit.fit();
@@ -179,7 +160,6 @@ export default function TerminalPanel({
     });
     ro.observe(shellRef.current);
 
-    // ── Focus helper ───────────────────────────────────────────
     const focusTerm = () => {
       term.focus();
       const ta = shellRef.current?.querySelector<HTMLTextAreaElement>(
@@ -204,19 +184,16 @@ export default function TerminalPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTerminalId]);
 
-  // ── Clear screen ──────────────────────────────────────────────────
   const clearScreen = () => {
     setHasContent(false);
     xtermRef.current?.clear();
   };
 
   console.log("[term] RENDER: status=%s id=%s", activeStatus, activeTerminalId);
-
   const workspacePath = activeProject?.cwd || "workspace";
 
   return (
     <div className="sandbox-terminal">
-      {/* ── Header ───────────────────────────────────────────── */}
       <header className="sandbox-terminal-header">
         <div className="sandbox-terminal-header-left">
           <span className="sandbox-badge">
@@ -231,7 +208,6 @@ export default function TerminalPanel({
             {workspacePath}
           </span>
         </div>
-
         <div className="sandbox-terminal-header-right">
           <button
             className="sandbox-btn"
@@ -250,11 +226,8 @@ export default function TerminalPanel({
         </div>
       </header>
 
-      {/* ── Body ─────────────────────────────────────────────── */}
       <div className="sandbox-terminal-body">
-        {/* Terminal area */}
         <div className="sandbox-terminal-main">
-          {/* Status overlay */}
           {activeStatus !== "connected" && (
             <div className="sandbox-overlay">
               {activeStatus === "connecting" && (
@@ -292,7 +265,6 @@ export default function TerminalPanel({
               )}
             </div>
           )}
-          {/* xterm container */}
           <div
             className="sandbox-xterm-wrapper"
             onClick={() => {
@@ -307,7 +279,6 @@ export default function TerminalPanel({
           </div>
         </div>
 
-        {/* ── Sidebar ─────────────────────────────────────────── */}
         <aside className="sandbox-sidebar">
           <div className="sandbox-sidebar-section">
             <div className="sandbox-sidebar-actions">
@@ -373,7 +344,6 @@ export default function TerminalPanel({
               })}
             </div>
           </div>
-
           <div className="sandbox-sidebar-footer">
             <div className="sandbox-status-row">
               <span className="sandbox-status-label">Shell</span>
@@ -386,7 +356,7 @@ export default function TerminalPanel({
             </div>
             <div className="sandbox-status-row">
               <span className="sandbox-status-label">PID</span>
-              <span className="sandbox-status-value mono">—</span>
+              <span className="sandbox-status-value mono">&mdash;</span>
             </div>
           </div>
         </aside>
