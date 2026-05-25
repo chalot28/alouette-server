@@ -41,3 +41,21 @@ export interface ResourceHistory {
     ram: number[];
   };
 }
+
+/// Mirrors core_engine::settings::AppSettings
+export interface AppSettings {
+  theme: "dark" | "light";
+  language: string;
+  max_log_lines: number;
+  auto_scroll: boolean;
+  active_log_filter: string;
+  max_history_points: number;
+  max_term_output_length: number;
+  monitor_interval_ms: number;
+  font_size: number;
+  default_left_sidebar_width: number;
+  default_right_sidebar_width: number;
+  default_tab_list_height: number;
+  default_monitor_height: number;
+  default_config_height: number;
+}

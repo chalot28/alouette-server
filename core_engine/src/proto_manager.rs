@@ -22,15 +22,20 @@ impl ProtoManager {
         let proto_shim_name = if cfg!(target_os = "windows") { "proto-shim.exe" } else { "proto-shim" };
         let proto_shim_path = bin_dir.join(proto_shim_name);
 
-        // Ensure the proto-shim is copied to PROTO_HOME/bin/ directory even if files already exist
+        // Ensure BOTH the proto-shim and the main proto executable are copied to PROTO_HOME/bin/ directory even if files already exist
         let proto_home_bin_dir = self.proto_home.join("bin");
         std::fs::create_dir_all(&proto_home_bin_dir).unwrap_or_default();
         let proto_home_shim_path = proto_home_bin_dir.join(proto_shim_name);
+        let proto_home_bin_path = proto_home_bin_dir.join(proto_exe_name);
 
         if proto_path.exists() && proto_shim_path.exists() {
             if !proto_home_shim_path.exists() {
                 println!("Copying proto-shim to PROTO_HOME/bin...");
                 let _ = std::fs::copy(&proto_shim_path, &proto_home_shim_path);
+            }
+            if !proto_home_bin_path.exists() {
+                println!("Copying proto to PROTO_HOME/bin...");
+                let _ = std::fs::copy(&proto_path, &proto_home_bin_path);
             }
             return Ok(proto_path);
         }
@@ -121,16 +126,21 @@ impl ProtoManager {
             }
         }
 
-        // Copy proto-shim to PROTO_HOME/bin/
+        // Copy both proto-shim and main proto executable to PROTO_HOME/bin/
+        let proto_home_bin_path = proto_home_bin_dir.join(proto_exe_name);
         if proto_shim_path.exists() && !proto_home_shim_path.exists() {
             println!("Copying proto-shim to PROTO_HOME/bin...");
             let _ = std::fs::copy(&proto_shim_path, &proto_home_shim_path);
+        }
+        if proto_path.exists() && !proto_home_bin_path.exists() {
+            println!("Copying proto to PROTO_HOME/bin...");
+            let _ = std::fs::copy(&proto_path, &proto_home_bin_path);
         }
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            for path in &[&proto_path, &proto_shim_path, &proto_home_shim_path] {
+            for path in &[&proto_path, &proto_shim_path, &proto_home_shim_path, &proto_home_bin_path] {
                 if path.exists() {
                     let mut perms = std::fs::metadata(path).map_err(|e| e.to_string())?.permissions();
                     perms.set_mode(0o755);

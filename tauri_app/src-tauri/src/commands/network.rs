@@ -1462,3 +1462,32 @@ pub async fn prettify_xml(xml_text: String) -> Result<String, String> {
 
     Ok(cleaned.join("\n"))
 }
+
+// ============================================================================
+// Admin Window
+// ============================================================================
+
+/// Open (or focus) a standalone Admin / Settings window with left dock navigation.
+#[tauri::command]
+pub async fn open_admin_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("admin_window") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let _window = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        "admin_window",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("Admin - Settings & Management")
+    .inner_size(1100.0, 750.0)
+    .min_inner_size(800.0, 500.0)
+    .resizable(true)
+    .decorations(false)
+    .build()
+    .map_err(|e: tauri::Error| e.to_string())?;
+
+    Ok(())
+}

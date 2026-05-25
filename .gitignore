@@ -3,3 +3,4 @@ tauri_app/src-tauri/target
 tauri_app/ui/node_modules
 tauri_app/src-tauri/app_data/
 .env
+ai.json

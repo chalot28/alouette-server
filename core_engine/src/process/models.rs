@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", content = "data")]
@@ -31,7 +31,16 @@ pub struct TerminalSession {
     pub stdin_sender: mpsc::Sender<String>,
     pub pid: u32,
     pub workspace_root: PathBuf,
-    pub current_dir: std::sync::Mutex<PathBuf>,
+    pub current_dir: std::sync::Arc<std::sync::Mutex<PathBuf>>,
+}
+
+/// Lightweight context cloned from a TerminalSession, used to process
+/// terminal writes entirely outside the ProcessManager mutex lock.
+pub struct TerminalWriteContext {
+    pub stdin_sender: mpsc::Sender<String>,
+    pub terminal_sender: broadcast::Sender<TerminalOutput>,
+    pub workspace_root: PathBuf,
+    pub current_dir: std::sync::Arc<std::sync::Mutex<PathBuf>>,
 }
 
 pub struct ProjectInstance {

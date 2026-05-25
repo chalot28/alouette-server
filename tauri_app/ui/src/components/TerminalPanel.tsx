@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Terminal as TerminalIcon, Search, Trash2, Cpu, Hammer, CheckCircle2, XCircle, Plus, TerminalSquare, RefreshCw, X, Copy, Download } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { Terminal } from "xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "xterm/css/xterm.css";
 
 interface TerminalSessionItem {
   id: string;
@@ -70,9 +74,8 @@ export default function TerminalPanel({
 }: TerminalPanelProps) {
   // Tab selector between Piped Logs (Mode B) and Isolated Interactive Terminal (Mode A)
   const [terminalTab, setTerminalTab] = useState<"logs" | "shell">("shell");
-  const [cmdInput, setCmdInput] = useState("");
   const shellViewportRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const xtermRef = useRef<Terminal | null>(null);
 
   const handleCopyAllLogs = () => {
     if (filteredLogs.length === 0) {
@@ -127,28 +130,108 @@ export default function TerminalPanel({
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  // Scroll interactive terminal to the bottom whenever text is appended
+  // Initialize and manage xterm.js interactive terminal
   useEffect(() => {
-    if (shellViewportRef.current) {
-      shellViewportRef.current.scrollTop = shellViewportRef.current.scrollHeight;
+    if (terminalTab !== "shell" || !activeTerminalId || !shellViewportRef.current) return;
+
+    // Clear container before re-init to avoid orphaned xterm DOM
+    shellViewportRef.current.innerHTML = "";
+
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      fontFamily: "ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+      theme: {
+        background: "#050507",
+        foreground: "#cbd5e1",
+        cursor: "#528bff",
+        black: "#000000",
+        red: "#ef4444",
+        green: "#10b981",
+        yellow: "#f59e0b",
+        blue: "#3b82f6",
+        magenta: "#d946ef",
+        cyan: "#06b6d4",
+        white: "#f1f5f9",
+        brightBlack: "#475569",
+        brightRed: "#f87171",
+        brightGreen: "#34d399",
+        brightYellow: "#fbbf24",
+        brightBlue: "#60a5fa",
+        brightMagenta: "#e879f9",
+        brightCyan: "#22d3ee",
+        brightWhite: "#ffffff",
+      },
+      convertEol: true,
+      rows: 24,
+    });
+
+    xtermRef.current = term;
+
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+
+    term.open(shellViewportRef.current);
+
+    // Fit after DOM is ready
+    requestAnimationFrame(() => {
+      try { fitAddon.fit(); } catch (_) {}
+    });
+
+    // Populate terminal output history (or default message if new)
+    if (termOutput) {
+      term.write(termOutput);
+    } else {
+      term.write("\r\n\x1b[33m--- Sandboxed Interactive Terminal Session Attached. Active toolchain prioritizes proto environment. ---\x1b[0m\r\n\r\n");
     }
-  }, [termOutput, terminalTab]);
 
-  const handleSendCmd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cmdInput.trim() || !activeTerminalId) return;
+    // DEBUG: Log keyboard events to diagnose input issues
+    const onKeyDisposable = term.onKey((e) => {
+      console.log("[XTERM DEBUG] onKey fired:", e.key, "domEvent:", e.domEvent.key);
+    });
 
-    try {
-      // Send key line feed to isolated shell process stdin
-      await invoke("write_to_terminal_session", {
+    // Stream typed keys directly to standard input of the shell
+    const onDataDisposable = term.onData((data) => {
+      console.log("[XTERM DEBUG] onData fired, data:", JSON.stringify(data), "sessionId:", activeTerminalId);
+      invoke("write_to_terminal_session", {
         sessionId: activeTerminalId,
-        input: cmdInput + "\n"
+        input: data,
+      }).catch((err) => {
+        console.warn("[XTERM DEBUG] write_to_terminal_session FAILED:", err);
       });
-      setCmdInput("");
-    } catch (err) {
-      console.error("Failed to write to terminal session:", err);
-    }
-  };
+    });
+
+    // Listen to new output events from backend
+    const termListener = listen<any>("terminal-output", (event) => {
+      if (event.payload.session_id === activeTerminalId) {
+        term.write(event.payload.text);
+      }
+    });
+
+    // Auto resize terminal using ResizeObserver when panel dimensions change
+    const resizeObserver = new ResizeObserver(() => {
+      try { fitAddon.fit(); } catch (_) {}
+    });
+    resizeObserver.observe(shellViewportRef.current);
+
+    // Focus the terminal after a brief delay to ensure DOM is rendered
+    term.focus();
+    const focusTimer = setTimeout(() => {
+      term.focus();
+      console.log("[XTERM DEBUG] Delayed focus applied. textarea exists:", !!term.textarea);
+    }, 300);
+
+    return () => {
+      clearTimeout(focusTimer);
+      xtermRef.current = null;
+      onKeyDisposable.dispose();
+      onDataDisposable.dispose();
+      termListener.then((unlisten) => unlisten());
+      resizeObserver.disconnect();
+      term.dispose();
+    };
+  }, [terminalTab, activeTerminalId]);
+
 
   const handleRespawnTerminal = async () => {
     if (!activeTerminalId) return;
@@ -326,28 +409,16 @@ export default function TerminalPanel({
               )}
             </div>
           ) : (
-            <div className="interactive-terminal-container" onClick={() => inputRef.current?.focus()}>
-              <div ref={shellViewportRef} className="interactive-terminal-viewport">
-                {termOutput ? (
-                  termOutput
-                ) : (
-                  <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>
-                    --- Sandboxed Interactive Terminal Session Attached. Active toolchain prioritizes proto environment. type commands below (e.g. node -v, go version) ---{"\n\n"}
-                  </span>
-                )}
-              </div>
-              <form onSubmit={handleSendCmd} className="terminal-prompt-bar" onClick={(e) => e.stopPropagation()}>
-                <span className="terminal-prompt-prefix">$</span>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  className="terminal-prompt-field"
-                  value={cmdInput}
-                  onChange={(e) => setCmdInput(e.target.value)}
-                  placeholder="Execute commands inside the sandboxed workspace folder..."
-                  disabled={!activeTerminalId}
-                />
-              </form>
+            <div 
+              className="interactive-terminal-container" 
+              style={{ padding: "8px", cursor: "text" }}
+              onClick={() => {
+                if (xtermRef.current) {
+                  xtermRef.current.focus();
+                }
+              }}
+            >
+              <div ref={shellViewportRef} style={{ width: "100%", height: "100%", overflow: "hidden" }} />
             </div>
           )}
         </div>

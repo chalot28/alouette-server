@@ -19,7 +19,7 @@ import {
   Chrome,
   Server,
   Cpu,
-  Settings
+  Settings,
 } from "lucide-react";
 
 // Components
@@ -30,9 +30,11 @@ import TabList from "./components/TabList";
 import TerminalPanel from "./components/TerminalPanel";
 import ProcessManager from "./components/ProcessManager";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
+import AdminPanel from "./components/AdminPanel";
 import FileExplorer from "./components/FileExplorer";
 import SqliteEditor from "./components/SqliteEditor";
 import MiniPostman from "./components/MiniPostman";
+import BrowserWindow from "./components/browser";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // Types
@@ -65,18 +67,28 @@ export default function App() {
   }, []);
 
   // Custom Toast & Confirm states
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     message: string;
     onConfirm: () => void;
     onCancel?: () => void;
   } | null>(null);
 
-  const triggerToast = (message: string, type: "success" | "error" | "info" = "info") => {
+  const triggerToast = (
+    message: string,
+    type: "success" | "error" | "info" = "info",
+  ) => {
     setToast({ message, type });
   };
 
-  const triggerConfirm = (message: string, onConfirm: () => void, onCancel?: () => void) => {
+  const triggerConfirm = (
+    message: string,
+    onConfirm: () => void,
+    onCancel?: () => void,
+  ) => {
     setConfirmModal({ message, onConfirm, onCancel });
   };
 
@@ -446,6 +458,14 @@ export default function App() {
     return <MiniPostman />;
   }
 
+  if (windowLabel === "browser_window") {
+    return <BrowserWindow />;
+  }
+
+  if (windowLabel === "admin_window") {
+    return <AdminPanel />;
+  }
+
   // ── Render ──
   return (
     <div className="app-container">
@@ -679,7 +699,11 @@ export default function App() {
                   </div>
                 )}
                 {isSqliteFile && openFilePath ? (
-                  <SqliteEditor filePath={openFilePath} triggerConfirm={triggerConfirm} triggerToast={triggerToast} />
+                  <SqliteEditor
+                    filePath={openFilePath}
+                    triggerConfirm={triggerConfirm}
+                    triggerToast={triggerToast}
+                  />
                 ) : (
                   <CodeEditor
                     theme={theme}
@@ -937,16 +961,40 @@ export default function App() {
           >
             <Wifi size={14} />
           </button>
-          <button className="tool-btn tool-chrome" title="4. Chrome">
+          <button
+            className="tool-btn tool-chrome"
+            title="4. Browser"
+            onClick={async () => {
+              try {
+                await invoke("open_browser_window");
+              } catch (e) {
+                console.error("Failed to open Browser window:", e);
+                triggerToast("Failed to open Browser window.", "error");
+              }
+            }}
+          >
             <Chrome size={14} />
           </button>
-          <button className="tool-btn tool-env" title="5. Environment (Môi trường)">
+          <button
+            className="tool-btn tool-env"
+            title="5. Environment (Môi trường)"
+          >
             <Server size={14} />
           </button>
           <button className="tool-btn tool-build" title="6. Build">
             <Cpu size={14} />
           </button>
-          <button className="tool-btn tool-settings" title="7. Setting">
+          <button
+            className="tool-btn tool-settings"
+            title="7. Setting"
+            onClick={async () => {
+              try {
+                await invoke("open_admin_window");
+              } catch (e) {
+                triggerToast("Failed to open Admin panel.", "error");
+              }
+            }}
+          >
             <Settings size={14} />
           </button>
           <button className="tool-btn tool-help" title="8. Help">
@@ -1085,27 +1133,39 @@ export default function App() {
 
       {/* Custom Confirm Modal Dialog */}
       {confirmModal && (
-        <div className="app-confirm-overlay" onClick={() => {
-          if (confirmModal.onCancel) confirmModal.onCancel();
-          setConfirmModal(null);
-        }}>
-          <div className="app-confirm-modal" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="app-confirm-overlay"
+          onClick={() => {
+            if (confirmModal.onCancel) confirmModal.onCancel();
+            setConfirmModal(null);
+          }}
+        >
+          <div
+            className="app-confirm-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="app-confirm-header">
               <HelpCircle size={18} style={{ color: "var(--color-warning)" }} />
               <span className="app-confirm-title">Confirm Action</span>
             </header>
             <div className="app-confirm-body">{confirmModal.message}</div>
             <footer className="app-confirm-actions">
-              <button className="btn-confirm-cancel" onClick={() => {
-                if (confirmModal.onCancel) confirmModal.onCancel();
-                setConfirmModal(null);
-              }}>
+              <button
+                className="btn-confirm-cancel"
+                onClick={() => {
+                  if (confirmModal.onCancel) confirmModal.onCancel();
+                  setConfirmModal(null);
+                }}
+              >
                 Cancel
               </button>
-              <button className="btn-confirm-accept" onClick={() => {
-                confirmModal.onConfirm();
-                setConfirmModal(null);
-              }}>
+              <button
+                className="btn-confirm-accept"
+                onClick={() => {
+                  confirmModal.onConfirm();
+                  setConfirmModal(null);
+                }}
+              >
                 Confirm
               </button>
             </footer>
