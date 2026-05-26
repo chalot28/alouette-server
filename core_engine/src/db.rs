@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection};
-use crate::config::{ProjectConfig, SandboxConfig};
+use crate::config::{ProjectConfig, SandboxConfig, LanguageRuntime, LanguageTool};
 use crate::process::ProcessLog;
 
 /// A high-performance, thread-safe manager for the SQLite persistence layer.
@@ -93,6 +93,19 @@ impl DbManager {
             [],
         )
         .map_err(|e| format!("Failed to create sandbox_configs table: {}", e))?;
+
+        // 4. Create Language Runtimes Table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS language_runtimes (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                install_command TEXT NOT NULL,
+                versions TEXT NOT NULL DEFAULT '[]',
+                tools TEXT NOT NULL DEFAULT '[]'
+            );",
+            [],
+        )
+        .map_err(|e| format!("Failed to create language_runtimes table: {}", e))?;
 
         Ok(())
     }
@@ -411,6 +424,71 @@ impl DbManager {
         )
         .map_err(|e| format!("Failed to delete sandbox config: {}", e))?;
 
+        Ok(())
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Language Runtime CRUD
+    // ═══════════════════════════════════════════════════════════════
+
+    pub fn save_language_runtime(&self, runtime: &LanguageRuntime) -> Result<(), String> {
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        let versions_json = serde_json::to_string(&runtime.versions)
+            .map_err(|e| format!("Failed to serialize versions: {}", e))?;
+        let tools_json = serde_json::to_string(&runtime.tools)
+            .map_err(|e| format!("Failed to serialize tools: {}", e))?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO language_runtimes (id, name, install_command, versions, tools) VALUES (?1, ?2, ?3, ?4, ?5);",
+            rusqlite::params![runtime.id, runtime.name, runtime.install_command, versions_json, tools_json],
+        )
+        .map_err(|e| format!("Failed to save language runtime: {}", e))?;
+
+        Ok(())
+    }
+
+    pub fn load_all_language_runtimes(&self) -> Result<Vec<LanguageRuntime>, String> {
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        let mut stmt = conn
+            .prepare("SELECT id, name, install_command, versions, tools FROM language_runtimes;")
+            .map_err(|e| format!("Failed to prepare select: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                let name: String = row.get(1)?;
+                let install_command: String = row.get(2)?;
+                let versions_json: String = row.get(3)?;
+                let tools_json: String = row.get(4)?;
+                Ok((id, name, install_command, versions_json, tools_json))
+            })
+            .map_err(|e| format!("Failed to query: {}", e))?;
+
+        let mut runtimes = Vec::new();
+        for row in rows {
+            let (id, name, install_command, versions_json, tools_json) = row
+                .map_err(|e| format!("Failed to read row: {}", e))?;
+            let versions: Vec<String> = serde_json::from_str(&versions_json)
+                .map_err(|e| format!("Failed to parse versions: {}", e))?;
+            let tools: Vec<LanguageTool> = serde_json::from_str(&tools_json)
+                .map_err(|e| format!("Failed to parse tools: {}", e))?;
+            runtimes.push(LanguageRuntime { id, name, install_command, versions, tools });
+        }
+        Ok(runtimes)
+    }
+
+    pub fn delete_language_runtime(&self, runtime_id: &str) -> Result<(), String> {
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute(
+            "DELETE FROM language_runtimes WHERE id = ?1;",
+            rusqlite::params![runtime_id],
+        )
+        .map_err(|e| format!("Failed to delete language runtime: {}", e))?;
         Ok(())
     }
 

@@ -190,14 +190,14 @@ impl ProtoManager {
     /// It effectively isolates the process from system-wide tools.
     pub fn get_spoofed_env(&self) -> Vec<(String, String)> {
         let mut envs = Vec::new();
-        
+
         // Ensure PROTO_HOME is set for the process so proto works in isolated mode
         envs.push(("PROTO_HOME".to_string(), self.proto_home.to_string_lossy().to_string()));
 
         // We build the PATH string.
         let bin_dir = self.proto_home.join("bin");
         let shims_dir = self.proto_home.join("shims");
-        
+
         let mut paths = vec![
             shims_dir,
             bin_dir,
@@ -284,5 +284,40 @@ impl ProtoManager {
             return Err(format!("Proto install failed for {} {}", tool_name, resolved_version));
         }
         Ok(())
+    }
+
+    /// Scan PROTO_HOME/tools/ directory and return names of installed tools.
+    pub fn list_installed_tools(&self) -> Vec<String> {
+        let tools_dir = self.proto_home.join("tools");
+        let mut tools = Vec::new();
+
+        if let Ok(entries) = std::fs::read_dir(&tools_dir) {
+            for entry in entries.flatten() {
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    let tool_path = entry.path();
+                    // Only include if directory is non-empty (has at least one version installed)
+                    if let Ok(mut sub) = std::fs::read_dir(&tool_path) {
+                        if sub.next().is_some() {
+                            // Check for version subdirectories and collect them
+                            let versions: Vec<String> = std::fs::read_dir(&tool_path)
+                                .map(|entries| {
+                                    entries
+                                        .flatten()
+                                        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                                        .map(|e| e.file_name().to_string_lossy().to_string())
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            if !versions.is_empty() {
+                                tools.push(name);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        tools
     }
 }

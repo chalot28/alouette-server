@@ -128,6 +128,9 @@ fn main() {
             commands::sandbox::save_sandbox_config,
             commands::sandbox::save_all_sandbox_configs,
             commands::sandbox::delete_sandbox_config,
+            commands::language::get_language_runtimes,
+            commands::language::save_language_runtime,
+            commands::language::delete_language_runtime,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

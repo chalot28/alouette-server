@@ -58,6 +58,27 @@ pub struct SandboxConfig {
     pub max_file_size: String,
 }
 
+/// A language runtime managed by Proto (installable via `proto`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanguageRuntime {
+    pub id: String,
+    pub name: String,
+    /// The install command, e.g. "proto install node"
+    pub install_command: String,
+    /// JSON array of version strings, e.g. ["18.0.0", "20.11.0"]
+    pub versions: Vec<String>,
+    /// JSON array of LanguageTool objects
+    pub tools: Vec<LanguageTool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanguageTool {
+    pub name: String,
+    /// Command to install this tool, e.g. "npm install -g pnpm"
+    pub command: String,
+    pub version: String,
+}
+
 impl SandboxConfig {
     pub fn default_for(project_id: &str) -> Self {
         Self {

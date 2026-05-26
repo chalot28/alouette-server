@@ -1754,41 +1754,567 @@ function ThemeSection({
 }
 
 function LanguageSection() {
+  const [runtimes, setRuntimes] = useState<LanguageRuntime[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [editForm, setEditForm] = useState<LanguageRuntime>({
+    id: "",
+    name: "",
+    install_command: "",
+    versions: [],
+    tools: [],
+  });
+
+  useEffect(() => {
+    loadRuntimes();
+  }, []);
+
+  async function loadRuntimes() {
+    try {
+      const list = await invoke<LanguageRuntime[]>("get_language_runtimes");
+      setRuntimes(list);
+    } catch (e) {
+      console.error("Failed to load language runtimes:", e);
+    }
+  }
+
+  function handleSelect(id: string) {
+    setIsAdding(false);
+    setSelectedId(id);
+    const rt = runtimes.find((r) => r.id === id);
+    if (rt) setEditForm({ ...rt });
+  }
+
+  function handleNew() {
+    setSelectedId(null);
+    setIsAdding(true);
+    setEditForm({
+      id: "",
+      name: "",
+      install_command: "",
+      versions: [],
+      tools: [],
+    });
+  }
+
+  async function handleSave() {
+    if (!editForm.name.trim()) return;
+    const toSave = {
+      ...editForm,
+      id: editForm.id || editForm.name.toLowerCase().replace(/\s+/g, "-"),
+    };
+    try {
+      await invoke("save_language_runtime", { runtime: toSave });
+      setIsAdding(false);
+      setSelectedId(toSave.id);
+      await loadRuntimes();
+    } catch (e) {
+      console.error("Failed to save:", e);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await invoke("delete_language_runtime", { runtimeId: id });
+      if (selectedId === id) {
+        setSelectedId(null);
+        setIsAdding(false);
+      }
+      await loadRuntimes();
+    } catch (e) {
+      console.error("Failed to delete:", e);
+    }
+  }
+
+  function addVersion() {
+    setEditForm((prev) => ({
+      ...prev,
+      versions: [...prev.versions, ""],
+    }));
+  }
+
+  function updateVersion(idx: number, val: string) {
+    setEditForm((prev) => {
+      const v = [...prev.versions];
+      v[idx] = val;
+      return { ...prev, versions: v };
+    });
+  }
+
+  function removeVersion(idx: number) {
+    setEditForm((prev) => ({
+      ...prev,
+      versions: prev.versions.filter((_, i) => i !== idx),
+    }));
+  }
+
+  function addTool() {
+    setEditForm((prev) => ({
+      ...prev,
+      tools: [...prev.tools, { name: "", command: "", version: "" }],
+    }));
+  }
+
+  function updateTool(idx: number, field: keyof LanguageTool, val: string) {
+    setEditForm((prev) => {
+      const t = [...prev.tools];
+      t[idx] = { ...t[idx], [field]: val };
+      return { ...prev, tools: t };
+    });
+  }
+
+  function removeTool(idx: number) {
+    setEditForm((prev) => ({
+      ...prev,
+      tools: prev.tools.filter((_, i) => i !== idx),
+    }));
+  }
+
+  const selectedRuntime = runtimes.find((r) => r.id === selectedId);
+
   return (
-    <div className="admin-panel animate-fade-in">
-      <h2 className="admin-panel-title">Programming Language</h2>
-      <p className="admin-panel-desc">
-        Configure default language runtimes and toolchains.
-      </p>
-      <div className="admin-card-grid">
-        <div className="admin-card">
-          <div className="admin-card-header">Default Toolchain</div>
-          <select className="admin-select">
-            <option>Node.js</option>
-            <option>Go</option>
-            <option>Python</option>
-            <option>Rust</option>
-            <option>Java</option>
-          </select>
+    <div
+      className="admin-panel"
+      style={{
+        display: "flex",
+        height: "100%",
+        width: "100%",
+        maxWidth: "none",
+        padding: 0,
+        margin: 0,
+        overflow: "hidden",
+      }}
+    >
+      {/* ── LEFT: Language List ── */}
+      <div
+        style={{
+          flex: "5 5 0%",
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          padding: "20px",
+          overflowY: "auto",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "16px",
+          }}
+        >
+          <div>
+            <h2 className="admin-panel-title">Programming Languages</h2>
+            <p className="admin-panel-desc" style={{ margin: 0 }}>
+              Manage language runtimes, versions, and tools
+            </p>
+          </div>
         </div>
-        <div className="admin-card">
-          <div className="admin-card-header">Version</div>
-          <input
-            className="admin-input"
-            type="text"
-            placeholder="18.x"
-            defaultValue="20.11.0"
-          />
-        </div>
-        <div className="admin-card">
-          <div className="admin-card-header">Package Manager</div>
-          <select className="admin-select">
-            <option>npm</option>
-            <option>yarn</option>
-            <option>pnpm</option>
-          </select>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <button
+            className="admin-btn admin-btn-primary"
+            onClick={handleNew}
+            style={{
+              alignSelf: "flex-start",
+              marginBottom: "8px",
+              fontSize: "12px",
+            }}
+          >
+            + Add Language
+          </button>
+
+          {runtimes.length === 0 && !isAdding && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "40px",
+                color: "var(--text-secondary)",
+                fontSize: "13px",
+              }}
+            >
+              No languages configured. Click "+ Add Language" to get started.
+            </div>
+          )}
+
+          {runtimes.map((rt) => (
+            <div
+              key={rt.id}
+              onClick={() => handleSelect(rt.id)}
+              style={{
+                padding: "12px 14px",
+                borderRadius: "6px",
+                border:
+                  selectedId === rt.id
+                    ? "1px solid var(--text-primary)"
+                    : "1px solid var(--border-primary)",
+                background:
+                  selectedId === rt.id
+                    ? "rgba(255,255,255,0.08)"
+                    : "rgba(255,255,255,0.02)",
+                cursor: "pointer",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    fontSize: "14px",
+                    color: "var(--text-primary)",
+                    marginBottom: "4px",
+                  }}
+                >
+                  {rt.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-secondary)",
+                    display: "flex",
+                    gap: "12px",
+                  }}
+                >
+                  <span>{rt.versions.length} version(s)</span>
+                  <span>{rt.tools.length} tool(s)</span>
+                  <span
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "10px" }}
+                  >
+                    {rt.install_command}
+                  </span>
+                </div>
+              </div>
+              <button
+                className="admin-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(rt.id);
+                }}
+                style={{
+                  background: "none",
+                  border: "1px solid rgba(255,80,80,0.3)",
+                  color: "rgba(255,120,120,0.8)",
+                  fontSize: "11px",
+                  padding: "4px 10px",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          ))}
         </div>
       </div>
+
+      {/* ── RIGHT: Detail Dock ── */}
+      {(selectedRuntime || isAdding) && (
+        <div
+          style={{
+            flex: "7 7 0%",
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            padding: "20px",
+            borderLeft: "1px solid var(--border-primary)",
+            background: "var(--bg-admin-sidebar, rgba(15,23,42,0.25))",
+            overflowY: "auto",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "14px",
+              fontWeight: 600,
+              color: "var(--text-primary)",
+              marginBottom: "16px",
+            }}
+          >
+            {isAdding ? "Add Language" : `Edit: ${editForm.name}`}
+          </h3>
+
+          <div className="admin-card-grid">
+            {/* Name */}
+            <div className="admin-card">
+              <div className="admin-card-header">Language Name</div>
+              <input
+                className="admin-input"
+                type="text"
+                placeholder="e.g. Node.js"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, name: e.target.value }))
+                }
+              />
+            </div>
+
+            {/* Install Command */}
+            <div className="admin-card">
+              <div className="admin-card-header">Install Command</div>
+              <input
+                className="admin-input"
+                type="text"
+                placeholder="e.g. proto install node"
+                value={editForm.install_command}
+                onChange={(e) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    install_command: e.target.value,
+                  }))
+                }
+                style={{ fontFamily: "var(--font-mono)", fontSize: "12px" }}
+              />
+            </div>
+
+            {/* Versions */}
+            <div className="admin-card" style={{ gridColumn: "span 2" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "8px",
+                }}
+              >
+                <div className="admin-card-header" style={{ margin: 0 }}>
+                  Versions
+                </div>
+                <button
+                  className="admin-btn"
+                  onClick={addVersion}
+                  style={{
+                    fontSize: "11px",
+                    padding: "4px 10px",
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid var(--border-primary)",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  + Add Version
+                </button>
+              </div>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+              >
+                {editForm.versions.length === 0 && (
+                  <span
+                    style={{ fontSize: "12px", color: "var(--text-secondary)" }}
+                  >
+                    No versions yet
+                  </span>
+                )}
+                {editForm.versions.map((v, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <input
+                      className="admin-input"
+                      type="text"
+                      placeholder="e.g. 20.11.0"
+                      value={v}
+                      onChange={(e) => updateVersion(i, e.target.value)}
+                      style={{
+                        flex: 1,
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "12px",
+                      }}
+                    />
+                    <button
+                      onClick={() => removeVersion(i)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "rgba(255,80,80,0.7)",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        padding: "2px 6px",
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tools */}
+            <div className="admin-card" style={{ gridColumn: "span 2" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "8px",
+                }}
+              >
+                <div className="admin-card-header" style={{ margin: 0 }}>
+                  Tools / Package Managers
+                </div>
+                <button
+                  className="admin-btn"
+                  onClick={addTool}
+                  style={{
+                    fontSize: "11px",
+                    padding: "4px 10px",
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid var(--border-primary)",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  + Add Tool
+                </button>
+              </div>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+              >
+                {editForm.tools.length === 0 && (
+                  <span
+                    style={{ fontSize: "12px", color: "var(--text-secondary)" }}
+                  >
+                    No tools configured
+                  </span>
+                )}
+                {editForm.tools.map((tool, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: "10px",
+                      border: "1px solid var(--border-primary)",
+                      borderRadius: "6px",
+                      background: "rgba(255,255,255,0.03)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--text-secondary)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Tool #{i + 1}
+                      </span>
+                      <button
+                        onClick={() => removeTool(i)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "rgba(255,80,80,0.7)",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                        }}
+                      >
+                        ✕ Remove
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr 1fr",
+                        gap: "6px",
+                      }}
+                    >
+                      <input
+                        className="admin-input"
+                        type="text"
+                        placeholder="Tool name"
+                        value={tool.name}
+                        onChange={(e) => updateTool(i, "name", e.target.value)}
+                        style={{ fontSize: "12px" }}
+                      />
+                      <input
+                        className="admin-input"
+                        type="text"
+                        placeholder="Install command"
+                        value={tool.command}
+                        onChange={(e) =>
+                          updateTool(i, "command", e.target.value)
+                        }
+                        style={{
+                          fontSize: "12px",
+                          fontFamily: "var(--font-mono)",
+                        }}
+                      />
+                      <input
+                        className="admin-input"
+                        type="text"
+                        placeholder="Version"
+                        value={tool.version}
+                        onChange={(e) =>
+                          updateTool(i, "version", e.target.value)
+                        }
+                        style={{
+                          fontSize: "12px",
+                          fontFamily: "var(--font-mono)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Save / Cancel */}
+          <div
+            className="admin-actions-bar"
+            style={{ marginTop: "16px", display: "flex", gap: "8px" }}
+          >
+            <button
+              className="admin-btn admin-btn-secondary"
+              onClick={() => {
+                setIsAdding(false);
+                if (selectedId) {
+                  const rt = runtimes.find((r) => r.id === selectedId);
+                  if (rt) setEditForm({ ...rt });
+                }
+              }}
+              style={{ fontSize: "12px" }}
+            >
+              Cancel
+            </button>
+            <button
+              className="admin-btn admin-btn-primary"
+              onClick={handleSave}
+              style={{ fontSize: "12px" }}
+            >
+              <Save size={13} />
+              <span>Save Language</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+interface LanguageRuntime {
+  id: string;
+  name: string;
+  install_command: string;
+  versions: string[];
+  tools: LanguageTool[];
+}
+
+interface LanguageTool {
+  name: string;
+  command: string;
+  version: string;
 }
