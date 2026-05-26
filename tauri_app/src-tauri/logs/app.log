@@ -800,3 +800,4 @@
 [2026-05-26 16:29:09.649] Toolchains checked / verified stable.
 [2026-05-26 16:29:12.711] Cloudflared binary verified / updated successfully.
 [2026-05-26 16:29:12.713] Isolated environment initialized successfully!
+[2026-05-26 16:50:02.947] Reading file: D:/server_dvtn/.env

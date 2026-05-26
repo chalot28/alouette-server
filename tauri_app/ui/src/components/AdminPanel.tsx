@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, WebviewWindow } from "@tauri-apps/api/window";
-// ── Zen Browser Icon (inline SVG) ──
 function ZenIcon({ size = 16 }: { size?: number }) {
   return (
     <svg
@@ -9,26 +8,16 @@ function ZenIcon({ size = 16 }: { size?: number }) {
       height={size}
       viewBox="0 0 24 24"
       fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <circle cx="12" cy="12" r="10" fill="#3a86ff" />
-      <path
-        d="M7.5 8.5h4.2l-4.2 6h4.2l-1.2 1.5"
-        stroke="white"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <path
-        d="M16.5 8.5h-2.8l-1.4 2M12.3 14.5h2.8l-1.4-2"
-        stroke="white"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-        opacity="0.7"
-      />
+      {/* Vòng tròn hở nghệ thuật Zen Ensō */}
+      <path d="M12 3a9 9 0 1 0 9 9c0-1.5-.4-3-1.1-4.2" />
+      {/* Chữ Z cách điệu mềm mại thanh thoát ở tâm */}
+      <path d="M8.5 8.5h7L10 15.5h7" />
     </svg>
   );
 }
