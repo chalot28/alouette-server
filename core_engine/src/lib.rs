@@ -11,5 +11,5 @@ pub mod settings;
 pub use config::{ProjectConfig, ProjectsConfig};
 pub use db::DbManager;
 pub use monitor::{ResourceMonitor, ResourceStats};
-pub use process::{ProcessManager, ProcessState, ProcessLog, terminate_process_tree, TerminalOutput, TerminalWriteContext, process_and_send_terminal_input};
+pub use process::{ProcessManager, ProcessState, ProcessLog, terminate_process_tree, TerminalOutput, TerminalWriteContext, process_and_send_terminal_input, SandboxVerdict, check_command, is_os_sandbox_supported};
 pub use settings::AppSettings;

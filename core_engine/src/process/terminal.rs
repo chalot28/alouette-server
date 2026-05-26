@@ -1,11 +1,13 @@
 //! # Terminal
 
 use std::path::PathBuf;
+use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
 use super::models::{TerminalOutput, TerminalSession, TerminalWriteContext};
 use super::manager::ProcessManager;
+use super::sandbox;
 
 impl ProcessManager {
     pub fn subscribe_terminal(&self) -> broadcast::Receiver<TerminalOutput> {
@@ -24,6 +26,87 @@ impl ProcessManager {
             stdin_sender: session.stdin_sender.clone(),
             terminal_sender: self.terminal_sender.clone(),
         })
+    }
+
+    pub fn get_input_buf(&self, session_id: &str) -> Option<&String> {
+        self.input_buf.get(session_id)
+    }
+
+    pub fn append_input_buf(&mut self, session_id: &str, ch: &str) {
+        self.input_buf
+            .entry(session_id.to_string())
+            .or_default()
+            .push_str(ch);
+    }
+
+    pub fn clear_input_buf(&mut self, session_id: &str) {
+        self.input_buf.remove(session_id);
+    }
+
+    pub fn check_input_sandbox(&self, session_id: &str) -> Result<Option<String>, String> {
+        let buf = self.input_buf.get(session_id)
+            .ok_or_else(|| "No input buffer".to_string())?;
+        let trimmed = buf.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+
+        let cwd = self.sessions_cwd.get(session_id)
+            .cloned()
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        let ws = self.terminal_sessions.get(session_id)
+            .map(|s| s.workspace_root.clone())
+            .unwrap_or_else(|| cwd.clone());
+
+        let verdict = sandbox::check_command(trimmed, &cwd, &ws);
+        match verdict {
+            sandbox::Verdict::Allow => Ok(None),
+            sandbox::Verdict::Block { reason } => {
+                eprintln!("[sandbox] Blocked '{trimmed}': {reason}");
+                Ok(Some(reason))
+            }
+        }
+    }
+
+    /// Update tracked CWD for any command that changes directory.
+    /// Handles: cd, cd .., cd.., cd., cd subdir, etc.
+    pub fn update_cwd_for_cd(&mut self, session_id: &str, cmd: &str) {
+        let trimmed = cmd.trim();
+        if trimmed.len() < 2 || !trimmed.starts_with("cd") {
+            return;
+        }
+        // Must be "cd", "cd..." where ... is space/dot/slash/backslash
+        let rest = trimmed[2..].trim();
+        if rest.is_empty() {
+            // cd alone → workspace root
+            let root = self.terminal_sessions.get(session_id)
+                .map(|s| s.workspace_root.clone())
+                .or_else(|| self.sessions_cwd.get(session_id).cloned());
+            if let Some(r) = root {
+                self.sessions_cwd.insert(session_id.to_string(), r);
+            }
+            return;
+        }
+
+        let current = self.sessions_cwd.get(session_id)
+            .cloned()
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        let target = PathBuf::from(rest.trim_matches('"').trim_matches('\''));
+
+        let new_cwd = if rest == "~" || rest == "~/" {
+            self.terminal_sessions.get(session_id)
+                .map(|s| s.workspace_root.clone())
+                .unwrap_or(current)
+        } else if target.is_relative() {
+            let combined = current.join(&target);
+            std::fs::canonicalize(&combined).unwrap_or(combined)
+        } else {
+            std::fs::canonicalize(&target).unwrap_or(target)
+        };
+
+        self.sessions_cwd.insert(session_id.to_string(), new_cwd);
     }
 
     pub async fn spawn_terminal(
@@ -54,7 +137,6 @@ impl ProcessManager {
             envs.push(("PATH".into(), full.to_string_lossy().to_string()));
         }
 
-        // DEBUG: prompt shows full current path
         let prompt = r#"function global:prompt { "$((Get-Location).Path)> " }"#.to_string();
 
         let tmp_dir = std::env::temp_dir().join("alouette_term");
@@ -124,12 +206,16 @@ impl ProcessManager {
         let pty_ptr = Box::into_raw(Box::new(pty));
         self._pty_pairs.insert(sid.clone(), pty_ptr as usize);
 
+        let workspace_root = PathBuf::from(&abs_root);
         self.terminal_sessions.insert(sid.clone(), TerminalSession {
             stdin_sender: tx,
             pid,
-            workspace_root: PathBuf::from(&abs_root),
+            workspace_root: workspace_root.clone(),
             _child: Some(child),
         });
+
+        self.input_buf.insert(sid.clone(), String::new());
+        self.sessions_cwd.insert(sid.clone(), workspace_root);
 
         let hb_tx = self.terminal_sender.clone();
         tokio::spawn(async move {
@@ -145,6 +231,8 @@ impl ProcessManager {
             eprintln!("[terminal] Kill '{session_id}' PID {}", s.pid);
             super::tree::terminate_process_tree(s.pid).await;
         }
+        self.input_buf.remove(session_id);
+        self.sessions_cwd.remove(session_id);
         if let Some(ptr) = self._pty_pairs.remove(session_id) {
             let _ = unsafe { Box::from_raw(ptr as *mut portable_pty::PtyPair) };
         }
