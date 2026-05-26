@@ -160,6 +160,9 @@ export default function TerminalPanel({
 
       // Keyboard input → PTY
       const dataDisposer = term.onData((data) => {
+        // Ignore focus tracking sequences and null/empty signals that could leak during tab focus changes
+        if (!data || data === "\x1b[I" || data === "\x1b[O" || data === "\x00") return;
+
         invoke("write_to_terminal_session", { sessionId, input: data }).catch(
           (err) => console.warn("[term] write FAILED:", err),
         );
@@ -190,15 +193,24 @@ export default function TerminalPanel({
         }
       });
 
-      // Sync frontend terminal resize to backend PTY
+      // Sync frontend terminal resize to backend PTY with debouncing to prevent Windows ConPTY duplicate redraw spaces
+      let resizeTimeout: any = null;
       const resizeDisposer = term.onResize((size) => {
-        invoke("resize_terminal_session", {
-          sessionId,
-          rows: size.rows,
-          cols: size.cols,
-        }).catch((err) => console.warn("[term] resize FAILED:", err));
+        if (resizeTimeout) clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          invoke("resize_terminal_session", {
+            sessionId,
+            rows: size.rows,
+            cols: size.cols,
+          }).catch((err) => console.warn("[term] resize FAILED:", err));
+        }, 100);
       });
       inst.disposers.push(() => {
+        if (resizeTimeout) {
+          try {
+            clearTimeout(resizeTimeout);
+          } catch {}
+        }
         try {
           resizeDisposer.dispose();
         } catch {}
@@ -313,19 +325,10 @@ export default function TerminalPanel({
     if (activeTerminalId && instancesRef.current[activeTerminalId]) {
       const inst = instancesRef.current[activeTerminalId];
       inst.term.focus();
-
-      // Multi-stage fitting to guarantee correct dimensions as the active layout settles
-      const doFit = () => {
-        try {
-          inst.fit.fit();
-          inst.term.refresh(0, inst.term.rows - 1);
-        } catch {}
-      };
-
-      doFit();
-      requestAnimationFrame(doFit);
-      const timer = setTimeout(doFit, 80);
-      return () => clearTimeout(timer);
+      try {
+        // Redraw terminal grid without triggering a PTY resize
+        inst.term.refresh(0, inst.term.rows - 1);
+      } catch {}
     }
   }, [activeTerminalId]);
 
@@ -486,7 +489,11 @@ export default function TerminalPanel({
                   <div
                     key={t.id}
                     className={`sandbox-terminal-item ${isActive ? "active" : ""}`}
-                    onClick={() => setActiveTerminalId(t.id)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setActiveTerminalId(t.id);
+                    }}
                     onDoubleClick={() => startRename(t.id, t.name)}
                   >
                     {editingId === t.id ? (
