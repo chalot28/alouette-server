@@ -780,3 +780,23 @@
 [2026-05-26 12:29:13.176] Isolated environment initialized successfully!
 [2026-05-26 13:04:41.683] Tauri command received: start_project_process for project_id: backend
 [2026-05-26 13:04:41.688] Process successfully started for project_id: backend
+[2026-05-26 13:46:09.539] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-26 13:46:09.546] Proto CLI verified and active.
+[2026-05-26 13:46:09.565] Toolchains checked / verified stable.
+[2026-05-26 13:46:17.141] Cloudflared binary verified / updated successfully.
+[2026-05-26 13:46:17.143] Isolated environment initialized successfully!
+[2026-05-26 13:50:37.262] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-26 13:50:37.268] Proto CLI verified and active.
+[2026-05-26 13:50:37.272] Toolchains checked / verified stable.
+[2026-05-26 13:50:43.007] Cloudflared binary verified / updated successfully.
+[2026-05-26 13:50:43.009] Isolated environment initialized successfully!
+[2026-05-26 15:52:05.950] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-26 15:52:05.955] Proto CLI verified and active.
+[2026-05-26 15:52:06.230] Toolchains checked / verified stable.
+[2026-05-26 15:52:08.863] Cloudflared binary verified / updated successfully.
+[2026-05-26 15:52:08.875] Isolated environment initialized successfully!
+[2026-05-26 16:29:09.611] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-26 16:29:09.616] Proto CLI verified and active.
+[2026-05-26 16:29:09.649] Toolchains checked / verified stable.
+[2026-05-26 16:29:12.711] Cloudflared binary verified / updated successfully.
+[2026-05-26 16:29:12.713] Isolated environment initialized successfully!

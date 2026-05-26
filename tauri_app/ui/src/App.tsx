@@ -16,7 +16,6 @@ import {
   GitBranch,
   Sparkles,
   Wifi,
-  Chrome,
   Server,
   Cpu,
   Settings,
@@ -34,8 +33,40 @@ import AdminPanel from "./components/AdminPanel";
 import FileExplorer from "./components/FileExplorer";
 import SqliteEditor from "./components/SqliteEditor";
 import MiniPostman from "./components/MiniPostman";
-import BrowserWindow from "./components/browser";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+
+// ── Zen Browser Icon (inline SVG) ──
+function ZenIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Zen Browser circular logo - stylized fox/Z */}
+      <circle cx="12" cy="12" r="10" fill="#3a86ff" />
+      <path
+        d="M7.5 8.5h4.2l-4.2 6h4.2l-1.2 1.5"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <path
+        d="M16.5 8.5h-2.8l-1.4 2M12.3 14.5h2.8l-1.4-2"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+        opacity="0.7"
+      />
+    </svg>
+  );
+}
 
 // Types
 import { ResourceHistory, TerminalSessionItem, ProcessState } from "./types";
@@ -427,10 +458,6 @@ export default function App() {
 
   if (windowLabel === "ping_window") {
     return <MiniPostman />;
-  }
-
-  if (windowLabel === "browser_window") {
-    return <BrowserWindow />;
   }
 
   if (windowLabel === "admin_window") {
@@ -910,18 +937,18 @@ export default function App() {
             <Wifi size={14} />
           </button>
           <button
-            className="tool-btn tool-chrome"
-            title="4. Browser"
+            className="tool-btn tool-zen"
+            title="4. Zen Browser"
             onClick={async () => {
               try {
                 await invoke("open_browser_window");
               } catch (e) {
-                console.error("Failed to open Browser window:", e);
-                triggerToast("Failed to open Browser window.", "error");
+                console.error("Failed to open Zen Browser:", e);
+                triggerToast("Failed to open Zen Browser.", "error");
               }
             }}
           >
-            <Chrome size={14} />
+            <ZenIcon size={14} />
           </button>
           <button
             className="tool-btn tool-env"

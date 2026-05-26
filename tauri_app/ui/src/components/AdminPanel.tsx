@@ -1,6 +1,38 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, WebviewWindow } from "@tauri-apps/api/window";
+// ── Zen Browser Icon (inline SVG) ──
+function ZenIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle cx="12" cy="12" r="10" fill="#3a86ff" />
+      <path
+        d="M7.5 8.5h4.2l-4.2 6h4.2l-1.2 1.5"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <path
+        d="M16.5 8.5h-2.8l-1.4 2M12.3 14.5h2.8l-1.4-2"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+        opacity="0.7"
+      />
+    </svg>
+  );
+}
+
 import {
   // Dock icons
   Fingerprint,
@@ -8,7 +40,6 @@ import {
   GitBranch,
   Sparkles,
   Wifi,
-  Globe,
   Server,
   Cpu,
   Box,
@@ -46,7 +77,7 @@ const DOCK_ITEMS: DockItem[] = [
   { id: "git", label: "Git", icon: <GitBranch size={16} /> },
   { id: "ai", label: "Model AI", icon: <Sparkles size={16} /> },
   { id: "postman", label: "Post Mini", icon: <Wifi size={16} /> },
-  { id: "browser", label: "Browser", icon: <Globe size={16} /> },
+  { id: "browser", label: "Zen Browser", icon: <ZenIcon size={16} /> },
   { id: "environment", label: "Environment", icon: <Server size={16} /> },
   { id: "build", label: "Build", icon: <Cpu size={16} /> },
   { id: "sandbox", label: "Sandbox", icon: <Box size={16} /> },
@@ -131,7 +162,7 @@ export default function AdminPanel() {
     try {
       await invoke("open_browser_window");
     } catch (e) {
-      setToast({ message: "Failed to open Browser", type: "error" });
+      setToast({ message: "Failed to open Zen Browser", type: "error" });
     }
   };
 
