@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Plus,
   Trash2,
@@ -40,6 +40,9 @@ const XTERM_THEME = {
   background: "#050507",
   foreground: "#cbd5e1",
   cursor: "#528bff",
+  cursorAccent: "#050507",
+  selectionBackground: "rgba(82, 139, 255, 0.35)",
+  selectionInactiveBackground: "rgba(82, 139, 255, 0.15)",
   black: "#000000",
   red: "#ef4444",
   green: "#10b981",
@@ -58,6 +61,13 @@ const XTERM_THEME = {
   brightWhite: "#ffffff",
 };
 
+/** Each terminal session gets its own persistent xterm instance. */
+interface XtermInstance {
+  term: Terminal;
+  fit: FitAddon;
+  disposers: (() => void)[];
+}
+
 export default function TerminalPanel({
   activeProject,
   terminals,
@@ -73,10 +83,12 @@ export default function TerminalPanel({
   onDeleteAllTerminals,
   onRenameTerminal,
 }: TerminalPanelProps) {
-  const shellRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const [hasContent, setHasContent] = useState(false);
+  // ── Map of xterm instances, one per session ─────────────────────────
+  const instancesRef = useRef<{ [sessionId: string]: XtermInstance }>({});
+  // Container refs: sessionId → HTMLDivElement
+  const containerRefs = useRef<{ [sessionId: string]: HTMLDivElement | null }>(
+    {},
+  );
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -93,103 +105,273 @@ export default function TerminalPanel({
     setEditingId(null);
   };
 
-  // ── xterm.js lifecycle ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!activeTerminalId || !shellRef.current) {
-      console.log(
-        "[term] skip xterm create: id=%s shell=%o",
-        activeTerminalId,
-        !!shellRef.current,
-      );
-      return;
-    }
-    console.log("[term] CREATING xterm for session:", activeTerminalId);
+  // ── Helper to mount xterm into a container div ──────────────────────
+  const mountXterm = useCallback(
+    (sessionId: string, container: HTMLDivElement) => {
+      // Already mounted
+      if (instancesRef.current[sessionId]) return;
 
-    shellRef.current.innerHTML = "";
-    setHasContent(false);
+      console.log("[term] MOUNT xterm for session:", sessionId);
+      container.innerHTML = "";
 
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 13,
-      fontFamily:
-        "ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-      theme: XTERM_THEME,
-      convertEol: true,
-      rows: 24,
-    });
-    xtermRef.current = term;
+      const term = new Terminal({
+        cursorBlink: true,
+        cursorStyle: "bar",
+        cursorWidth: 2,
+        fontSize: 13,
+        fontFamily:
+          "'JetBrains Mono', Consolas, 'Courier New', monospace",
+        theme: XTERM_THEME,
+        convertEol: true,
+        rows: 24,
+        allowTransparency: false,
+        disableStdin: false,
+        screenReaderMode: false,
+        smoothScrollDuration: 0,
+      });
 
-    const fit = new FitAddon();
-    fitAddonRef.current = fit;
-    term.loadAddon(fit);
-    term.open(shellRef.current);
-    requestAnimationFrame(() => {
-      try {
-        fit.fit();
-      } catch {}
-    });
+      const fit = new FitAddon();
+      const inst: XtermInstance = {
+        term,
+        fit,
+        disposers: [],
+      };
+      instancesRef.current[sessionId] = inst;
 
-    const dataDisposer = term.onData((data) => {
-      invoke("write_to_terminal_session", {
-        sessionId: activeTerminalId,
-        input: data,
-      }).catch((err) => console.warn("[term] write FAILED:", err));
-    });
+      term.loadAddon(fit);
+      term.open(container);
 
-    const buf = terminalBufferRef.current[activeTerminalId];
-    if (buf) {
-      term.write(buf);
-      setHasContent(true);
-    }
+      const doFit = () => {
+        try {
+          fit.fit();
+          term.refresh(0, term.rows - 1);
+        } catch {}
+      };
 
-    const termListener = listen<any>("terminal-output", (event) => {
-      if (event.payload.session_id === activeTerminalId) {
-        const text = event.payload.text;
-        if (text) {
-          console.log("[term] RAW OUTPUT:", JSON.stringify(text));
-          term.write(text);
-          if (!hasContent) setHasContent(true);
+      doFit();
+      requestAnimationFrame(doFit);
+      setTimeout(doFit, 80);
+
+      // Replay buffered output
+      const buf = terminalBufferRef.current[sessionId];
+      if (buf) {
+        term.write(buf);
+      }
+
+      // Keyboard input → PTY
+      const dataDisposer = term.onData((data) => {
+        invoke("write_to_terminal_session", { sessionId, input: data }).catch(
+          (err) => console.warn("[term] write FAILED:", err),
+        );
+      });
+      inst.disposers.push(() => {
+        try {
+          dataDisposer.dispose();
+        } catch {}
+      });
+
+      // Listen for terminal-output events for THIS session
+      let unlistenTerm: (() => void) | null = null;
+      listen<any>("terminal-output", (event) => {
+        if (event.payload.session_id === sessionId) {
+          const text = event.payload.text;
+          if (text) {
+            term.write(text);
+          }
         }
+      }).then((u) => {
+        unlistenTerm = u;
+      });
+      inst.disposers.push(() => {
+        if (unlistenTerm) {
+          try {
+            unlistenTerm();
+          } catch {}
+        }
+      });
+
+      // Sync frontend terminal resize to backend PTY
+      const resizeDisposer = term.onResize((size) => {
+        invoke("resize_terminal_session", {
+          sessionId,
+          rows: size.rows,
+          cols: size.cols,
+        }).catch((err) => console.warn("[term] resize FAILED:", err));
+      });
+      inst.disposers.push(() => {
+        try {
+          resizeDisposer.dispose();
+        } catch {}
+      });
+
+      // ResizeObserver for fit
+      const ro = new ResizeObserver(() => {
+        try {
+          fit.fit();
+        } catch {}
+      });
+      ro.observe(container);
+      inst.disposers.push(() => ro.disconnect());
+
+      // Focus on mount
+      term.focus();
+
+      // Key handler: copy/paste
+      term.attachCustomKeyEventHandler((e) => {
+        if (e.key === "Backspace") {
+          const activeBuffer = term.buffer.active;
+          const lineIndex = activeBuffer.baseY + activeBuffer.cursorY;
+          const line =
+            activeBuffer.getLine(lineIndex)?.translateToString(true) || "";
+          const firstGreater = line.indexOf(">");
+
+          // Guard: If the line doesn't contain '>' yet (e.g. still replaying/loading),
+          // or if the cursor is at or before the prompt boundary (CWD> ), block Backspace!
+          if (firstGreater === -1 || activeBuffer.cursorX <= firstGreater + 2) {
+            return false;
+          }
+        }
+        if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "v") {
+          navigator.clipboard
+            .readText()
+            .then((text) => {
+              if (text) {
+                invoke("write_to_terminal_session", {
+                  sessionId,
+                  input: text,
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+          return false;
+        }
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "v") {
+          navigator.clipboard
+            .readText()
+            .then((text) => {
+              if (text) {
+                invoke("write_to_terminal_session", {
+                  sessionId,
+                  input: text,
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+          return false;
+        }
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "c") {
+          const sel = term.getSelection();
+          if (sel) {
+            navigator.clipboard.writeText(sel).catch(() => {});
+            return false;
+          }
+        }
+        if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "c") {
+          const sel = term.getSelection();
+          if (sel) {
+            navigator.clipboard.writeText(sel).catch(() => {});
+            return false;
+          }
+        }
+        return true;
+      });
+    },
+    [terminalBufferRef],
+  );
+
+  // ── Mount/unmount xterm instances when terminals list changes ─────
+  useEffect(() => {
+    const ids = new Set(terminals.map((t) => t.id));
+
+    // Mount any new terminals that don't have xterm yet
+    terminals.forEach((t) => {
+      const container = containerRefs.current[t.id];
+      if (container && !instancesRef.current[t.id]) {
+        mountXterm(t.id, container);
       }
     });
 
-    const ro = new ResizeObserver(() => {
-      try {
-        fit.fit();
-      } catch {}
+    // Destroy xterm for removed terminals
+    Object.keys(instancesRef.current).forEach((sid) => {
+      if (!ids.has(sid)) {
+        console.log("[term] DESTROY xterm for session:", sid);
+        const inst = instancesRef.current[sid];
+        inst.disposers.forEach((d) => {
+          try {
+            d();
+          } catch {}
+        });
+        inst.term.dispose();
+        delete instancesRef.current[sid];
+        delete containerRefs.current[sid];
+      }
     });
-    ro.observe(shellRef.current);
+  }, [terminals, mountXterm]);
 
-    const focusTerm = () => {
-      term.focus();
-      const ta = shellRef.current?.querySelector<HTMLTextAreaElement>(
-        ".xterm-helper-textarea",
-      );
-      if (ta && document.activeElement !== ta) ta.focus();
-    };
-    requestAnimationFrame(focusTerm);
-    const t1 = setTimeout(focusTerm, 200);
-    const t2 = setTimeout(focusTerm, 800);
+  // ── When activeTerminalId changes, focus the active one ────────────
+  useEffect(() => {
+    if (activeTerminalId && instancesRef.current[activeTerminalId]) {
+      const inst = instancesRef.current[activeTerminalId];
+      inst.term.focus();
 
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      dataDisposer.dispose();
-      termListener.then((u) => u());
-      ro.disconnect();
-      term.dispose();
-      xtermRef.current = null;
-      fitAddonRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      // Multi-stage fitting to guarantee correct dimensions as the active layout settles
+      const doFit = () => {
+        try {
+          inst.fit.fit();
+          inst.term.refresh(0, inst.term.rows - 1);
+        } catch {}
+      };
+
+      doFit();
+      requestAnimationFrame(doFit);
+      const timer = setTimeout(doFit, 80);
+      return () => clearTimeout(timer);
+    }
   }, [activeTerminalId]);
 
+  // ── Refit all when fonts are loaded to avoid overlapping characters ──
+  useEffect(() => {
+    if (typeof document !== "undefined" && "fonts" in document) {
+      const handleFontsLoaded = () => {
+        Object.keys(instancesRef.current).forEach((sid) => {
+          try {
+            instancesRef.current[sid].fit.fit();
+            instancesRef.current[sid].term.refresh(0, instancesRef.current[sid].term.rows - 1);
+          } catch {}
+        });
+      };
+      document.fonts.ready.then(handleFontsLoaded);
+    }
+  }, [terminals]);
+
+  // ── Debug: log status changes ──────────────────────────────────────
+  useEffect(() => {
+    console.log(
+      "[term] STATUS: id=%s status=%s error=%s",
+      activeTerminalId,
+      activeStatus,
+      activeError || "",
+    );
+  }, [activeTerminalId, activeStatus, activeError]);
+
+  // ── Clear screen ──────────────────────────────────────────────────
   const clearScreen = () => {
-    setHasContent(false);
-    xtermRef.current?.clear();
+    const inst = activeTerminalId
+      ? instancesRef.current[activeTerminalId]
+      : undefined;
+    inst?.term.clear();
+    invoke("write_to_terminal_session", {
+      sessionId: activeTerminalId,
+      input: "\x1b[2J\x1b[H",
+    }).catch((err) => console.warn("[term] clear PTY FAILED:", err));
   };
 
-  console.log("[term] RENDER: status=%s id=%s", activeStatus, activeTerminalId);
+  console.log(
+    "[term] RENDER: status=%s id=%s terminals=%d",
+    activeStatus,
+    activeTerminalId,
+    terminals.length,
+  );
   const workspacePath = activeProject?.cwd || "workspace";
 
   return (
@@ -197,15 +379,13 @@ export default function TerminalPanel({
       <header className="sandbox-terminal-header">
         <div className="sandbox-terminal-header-left">
           <span className="sandbox-badge">
-            <ShieldCheck size={11} />
-            SANDBOX
+            <ShieldCheck size={11} /> SANDBOX
           </span>
           {activeProject && (
             <span className="sandbox-project-name">{activeProject.name}</span>
           )}
           <span className="sandbox-workspace-path" title={workspacePath}>
-            <FolderRoot size={10} />
-            {workspacePath}
+            <FolderRoot size={10} /> {workspacePath}
           </span>
         </div>
         <div className="sandbox-terminal-header-right">
@@ -265,17 +445,19 @@ export default function TerminalPanel({
               )}
             </div>
           )}
-          <div
-            className="sandbox-xterm-wrapper"
-            onClick={() => {
-              xtermRef.current?.focus();
-              const ta = shellRef.current?.querySelector<HTMLTextAreaElement>(
-                ".xterm-helper-textarea",
-              );
-              if (ta && document.activeElement !== ta) ta.focus();
-            }}
-          >
-            <div ref={shellRef} className="sandbox-xterm-viewport" />
+
+          {/* Render a separate xterm container for each terminal session.
+              Only the active one is visible; others are hidden offscreen/via opacity to preserve layout measurements. */}
+          <div className="sandbox-xterm-wrapper">
+            {terminals.map((t) => (
+              <div
+                key={t.id}
+                ref={(el) => {
+                  containerRefs.current[t.id] = el;
+                }}
+                className={`sandbox-xterm-viewport ${t.id === activeTerminalId ? "active" : ""}`}
+              />
+            ))}
           </div>
         </div>
 

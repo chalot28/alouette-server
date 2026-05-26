@@ -30,6 +30,7 @@ pub async fn write_to_terminal_session(
     let mut allowed_cmd = String::new();
     let mut blocked_reason = String::new();
     let mut buf_len: usize = 0;
+    let mut echo_string = String::new();
     let out_tx;
     let stdin_tx;
 
@@ -53,16 +54,24 @@ pub async fn write_to_terminal_session(
                 }
             }
         } else {
-            let is_bs = input == "\u{7f}" || input == "\u{08}";
-            if is_bs {
-                let mut buf = pm.get_input_buf(&session_id).cloned().unwrap_or_default();
-                buf.pop();
-                pm.clear_input_buf(&session_id);
-                if !buf.is_empty() {
-                    pm.append_input_buf(&session_id, &buf);
+            for c in input.chars() {
+                let is_bs = c == '\u{7f}' || c == '\u{08}';
+                if is_bs {
+                    let mut buf = pm.get_input_buf(&session_id).cloned().unwrap_or_default();
+                    if !buf.is_empty() {
+                        buf.pop();
+                        pm.clear_input_buf(&session_id);
+                        if !buf.is_empty() {
+                            pm.append_input_buf(&session_id, &buf);
+                        }
+                        echo_string.push_str("\u{08} \u{08}");
+                    }
+                } else {
+                    let mut temp = String::new();
+                    temp.push(c);
+                    pm.append_input_buf(&session_id, &temp);
+                    echo_string.push(c);
                 }
-            } else {
-                pm.append_input_buf(&session_id, &input);
             }
         }
 
@@ -99,15 +108,10 @@ pub async fn write_to_terminal_session(
     }
 
     // Local echo for non-Enter keystrokes
-    if !is_enter {
-        let echo = if input == "\u{7f}" || input == "\u{08}" {
-            "\u{08} \u{08}".to_string()
-        } else {
-            input
-        };
+    if !is_enter && !echo_string.is_empty() {
         let _ = out_tx.send(TerminalOutput {
             session_id: session_id.clone(),
-            text: echo,
+            text: echo_string,
         });
     }
 
@@ -141,4 +145,16 @@ pub async fn check_terminal_session(
             pid: None,
         })
     }
+}
+
+#[tauri::command]
+pub async fn resize_terminal_session(
+    state: State<'_, AppState>,
+    session_id: String,
+    rows: u16,
+    cols: u16,
+) -> Result<(), String> {
+    let pm = state.process_manager.lock().await;
+    pm.resize_terminal(&session_id, rows, cols)?;
+    Ok(())
 }

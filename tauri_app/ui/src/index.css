@@ -6501,16 +6501,47 @@ body {
     overflow: hidden;
     cursor: text;
     outline: none;
-    padding: 6px;
+    padding: 0;
     background-color: #050507;
     position: relative;
 }
 
 .sandbox-xterm-viewport {
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 0;
+    padding: 8px 12px;
     overflow: hidden;
-    position: relative;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.sandbox-xterm-viewport.active {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ── Minimal xterm.js overrides ───────────────────────────────────── */
+/* Allow text selection inside xterm (override xterm.css user-select:none) */
+.sandbox-xterm-wrapper .xterm {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+
+.sandbox-xterm-wrapper .xterm-screen {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+
+.sandbox-xterm-wrapper .xterm-selection div {
+    background-color: rgba(82, 139, 255, 0.35) !important;
+}
+
+.sandbox-xterm-wrapper .xterm-rows {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 
 /* ── Sidebar ────────────────────────────────────────────────────────── */

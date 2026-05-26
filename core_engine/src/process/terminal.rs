@@ -297,6 +297,21 @@ impl ProcessManager {
         }
         Ok(())
     }
+
+    pub fn resize_terminal(&self, session_id: &str, rows: u16, cols: u16) -> Result<(), String> {
+        if let Some(&ptr) = self._pty_pairs.get(session_id) {
+            let pty = unsafe { &*(ptr as *const portable_pty::PtyPair) };
+            pty.master.resize(portable_pty::PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            }).map_err(|e| format!("Failed to resize PTY: {e}"))?;
+            Ok(())
+        } else {
+            Err(format!("PTY pair not found for session '{session_id}'"))
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════

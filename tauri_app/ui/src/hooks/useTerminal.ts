@@ -127,19 +127,17 @@ export function useTerminal(
   // ── Add terminal ─────────────────────────────────────────────────────
   const addTerminal = () => {
     const cwd = activeProject?.cwd || null;
-    setProjectTerminals((prev) => {
-      const list = prev[activeProjectId] || [];
-      const nid = `${activeProjectId}-term-${Date.now()}`;
-      setActiveTerminalIds((a) => ({ ...a, [activeProjectId]: nid }));
-      spawnTerminal(nid, cwd);
-      return {
-        ...prev,
-        [activeProjectId]: [
-          ...list,
-          { id: nid, name: `Terminal ${list.length + 1}` },
-        ],
-      };
-    });
+    const list = projectTerminals[activeProjectId] || [];
+    const nid = `${activeProjectId}-term-${Date.now()}`;
+    setActiveTerminalIds((prev) => ({ ...prev, [activeProjectId]: nid }));
+    setProjectTerminals((prev) => ({
+      ...prev,
+      [activeProjectId]: [
+        ...(prev[activeProjectId] || []),
+        { id: nid, name: `Terminal ${list.length + 1}` },
+      ],
+    }));
+    spawnTerminal(nid, cwd);
   };
 
   // ── Delete terminal ──────────────────────────────────────────────────
