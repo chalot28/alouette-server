@@ -168,6 +168,7 @@ export default function App() {
     activeProjectId,
     setActiveProjectId,
     projectStates,
+    projectLogs,
     activeProject,
     openFilePath,
     setOpenFilePath,
@@ -714,6 +715,7 @@ export default function App() {
               <div className="zone zone-4" style={{ flex: 1 }}>
                 <TerminalPanel
                   activeProject={activeProject}
+                  projectLogs={projectLogs}
                   terminals={terminals}
                   activeTerminalId={activeTerminalId}
                   setActiveTerminalId={setActiveTerminalId}

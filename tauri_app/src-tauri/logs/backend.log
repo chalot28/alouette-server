@@ -162,3 +162,13 @@
 [04:18:23.927] [stderr] operable program or batch file.
 [2026-05-25 04:18:23.987] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
 [2026-05-25 04:18:23.989] SYSTEM: --- Process exceeded maximum crash retries. Entering FATAL state. ---
+[2026-05-26 06:04:41.690] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-26 06:04:44.611] SYSTEM: --- Spawning Primary Command ---
+[06:04:53.800] [stdout] 
+[06:04:53.801] [stdout] > server-dvtn@1.0.0 dev
+[06:04:53.801] [stdout] > nodemon src/index.js
+[06:04:53.802] [stdout] 
+[06:04:54.000] [stderr] 'nodemon' is not recognized as an internal or external command,
+[06:04:54.001] [stderr] operable program or batch file.
+[2026-05-26 06:04:54.068] SYSTEM: --- Primary Command Exited with Code: Some(1) ---
+[2026-05-26 06:04:54.070] SYSTEM: --- Process exceeded maximum crash retries. Entering FATAL state. ---

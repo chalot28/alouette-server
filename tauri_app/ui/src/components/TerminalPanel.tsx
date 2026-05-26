@@ -6,8 +6,6 @@ import {
   X,
   Loader2,
   AlertTriangle,
-  ShieldCheck,
-  FolderRoot,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -18,10 +16,12 @@ import {
   TerminalSessionItem,
   TerminalConnectionStatus,
   Project,
+  LogLine,
 } from "../types";
 
 interface TerminalPanelProps {
   activeProject: Project | undefined | null;
+  projectLogs?: { [id: string]: LogLine[] };
   terminals: TerminalSessionItem[];
   activeTerminalId: string;
   setActiveTerminalId: (id: string) => void;
@@ -68,8 +68,250 @@ interface XtermInstance {
   disposers: (() => void)[];
 }
 
+function LogViewer({ logs }: { logs: LogLine[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  return (
+    <div 
+      ref={containerRef}
+      style={{
+        flex: 1,
+        background: "#050507",
+        color: "#cbd5e1",
+        fontFamily: "'JetBrains Mono', Consolas, monospace",
+        fontSize: "12px",
+        padding: "16px",
+        overflowY: "auto",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        gap: "6px"
+      }}
+    >
+      {logs && logs.length > 0 ? (
+        logs.map((log, idx) => {
+          const isErr = log.stream === "stderr";
+          const isSys = log.stream === "system";
+          let color = "#cbd5e1";
+          if (isErr) color = "#ef4444";
+          else if (isSys) color = "#a855f7";
+
+          return (
+            <div key={idx} style={{ display: "flex", gap: "8px", lineBreak: "anywhere" }}>
+              <span style={{ color: "#475569", flexShrink: 0, userSelect: "none" }}>[{log.timestamp}]</span>
+              <span style={{ color, whiteSpace: "pre-wrap" }}>{log.text}</span>
+            </div>
+          );
+        })
+      ) : (
+        <div style={{ color: "#475569", fontStyle: "italic", textAlign: "center", marginTop: "40px" }}>
+          No active system logs. Click "Start" in the header to execute the application.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SimplePing() {
+  const [method, setMethod] = useState("GET");
+  const [url, setUrl] = useState("http://localhost:3000");
+  const [reqBody, setReqBody] = useState("{\n  \"key\": \"value\"\n}");
+  const [loading, setLoading] = useState(false);
+  const [response, setResponse] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handlePing = async () => {
+    if (!url.trim()) return;
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+
+    let parsedBody = null;
+    let bodyType = "none";
+    let headers: any = {};
+
+    if (method !== "GET" && method !== "DELETE" && reqBody.trim()) {
+      parsedBody = reqBody.trim();
+      bodyType = "json";
+      headers["Content-Type"] = "application/json";
+    }
+
+    try {
+      const res = await invoke<any>("send_http_request", {
+        req: {
+          url: url.trim(),
+          method,
+          headers,
+          body: parsedBody,
+          body_type: bodyType,
+          timeout_ms: 10000,
+        }
+      });
+      setResponse(res);
+    } catch (err: any) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      height: "100%",
+      width: "100%",
+      background: "#08080c",
+      color: "#cbd5e1",
+      padding: "16px",
+      gap: "12px",
+      boxSizing: "border-box"
+    }}>
+      <div style={{ display: "flex", gap: "8px" }}>
+        <select
+          value={method}
+          onChange={(e) => setMethod(e.target.value)}
+          style={{
+            background: "#12121a",
+            color: "#fff",
+            border: "1px solid #27273a",
+            borderRadius: "4px",
+            padding: "8px 12px",
+            fontSize: "13px",
+            outline: "none"
+          }}
+        >
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="PATCH">PATCH</option>
+          <option value="DELETE">DELETE</option>
+        </select>
+
+        <input
+          type="text"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="http://localhost:3000/api/endpoint"
+          style={{
+            flex: 1,
+            background: "#12121a",
+            color: "#fff",
+            border: "1px solid #27273a",
+            borderRadius: "4px",
+            padding: "8px 12px",
+            fontSize: "13px",
+            outline: "none"
+          }}
+        />
+
+        <button
+          onClick={handlePing}
+          disabled={loading}
+          style={{
+            background: loading ? "#27273a" : "#2563eb",
+            color: "#fff",
+            border: "none",
+            borderRadius: "4px",
+            padding: "8px 16px",
+            fontSize: "13px",
+            fontWeight: "bold",
+            cursor: loading ? "not-allowed" : "pointer"
+          }}
+        >
+          {loading ? "Sending..." : "Send Request"}
+        </button>
+      </div>
+
+      {(method === "POST" || method === "PUT" || method === "PATCH") && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ color: "#64748b", fontSize: "12px" }}>Request Body (JSON):</div>
+          <textarea
+            value={reqBody}
+            onChange={(e) => setReqBody(e.target.value)}
+            style={{
+              background: "#12121a",
+              color: "#60a5fa",
+              border: "1px solid #27273a",
+              borderRadius: "4px",
+              padding: "8px 12px",
+              fontSize: "12px",
+              fontFamily: "'JetBrains Mono', Consolas, monospace",
+              outline: "none",
+              resize: "vertical",
+              minHeight: "80px"
+            }}
+            placeholder='{ "key": "value" }'
+          />
+        </div>
+      )}
+
+      <div style={{
+        flex: 1,
+        background: "#030305",
+        border: "1px solid #181824",
+        borderRadius: "6px",
+        padding: "12px",
+        fontFamily: "'JetBrains Mono', Consolas, monospace",
+        fontSize: "12px",
+        overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px"
+      }}>
+        {error && (
+          <div style={{ color: "#ef4444" }}>
+            <strong>Error:</strong> {error}
+          </div>
+        )}
+
+        {response && (
+          <>
+            <div style={{ display: "flex", gap: "16px", borderBottom: "1px solid #181824", paddingBottom: "8px", flexShrink: 0 }}>
+              <div>
+                <span style={{ color: "#64748b" }}>Status:</span>{" "}
+                <strong style={{ color: response.status >= 200 && response.status < 300 ? "#10b981" : "#ef4444" }}>
+                  {response.status} {response.status_text}
+                </strong>
+              </div>
+              <div>
+                <span style={{ color: "#64748b" }}>Time:</span>{" "}
+                <strong style={{ color: "#3b82f6" }}>{response.elapsed_ms} ms</strong>
+              </div>
+              <div>
+                <span style={{ color: "#64748b" }}>Size:</span>{" "}
+                <strong style={{ color: "#f59e0b" }}>{response.size_bytes} B</strong>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflow: "auto" }}>
+              <div style={{ color: "#64748b", marginBottom: "4px" }}>Response Body:</div>
+              <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: "#cbd5e1" }}>
+                {response.body}
+              </pre>
+            </div>
+          </>
+        )}
+
+        {!response && !error && !loading && (
+          <div style={{ color: "#475569", textAlign: "center", marginTop: "40px", fontStyle: "italic" }}>
+            Enter a URL and send request to view API response.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function TerminalPanel({
   activeProject,
+  projectLogs,
   terminals,
   activeTerminalId,
   setActiveTerminalId,
@@ -83,6 +325,7 @@ export default function TerminalPanel({
   onDeleteAllTerminals,
   onRenameTerminal,
 }: TerminalPanelProps) {
+  const [viewMode, setViewMode] = useState<"terminal" | "post" | "log">("terminal");
   // ── Map of xterm instances, one per session ─────────────────────────
   const instancesRef = useRef<{ [sessionId: string]: XtermInstance }>({});
   // Container refs: sessionId → HTMLDivElement
@@ -380,175 +623,198 @@ export default function TerminalPanel({
   return (
     <div className="sandbox-terminal">
       <header className="sandbox-terminal-header">
-        <div className="sandbox-terminal-header-left">
-          <span className="sandbox-badge">
-            <ShieldCheck size={11} /> SANDBOX
-          </span>
-          {activeProject && (
-            <span className="sandbox-project-name">{activeProject.name}</span>
-          )}
-          <span className="sandbox-workspace-path" title={workspacePath}>
-            <FolderRoot size={10} /> {workspacePath}
-          </span>
-        </div>
-        <div className="sandbox-terminal-header-right">
+        <div className="sandbox-terminal-header-left" style={{ display: "flex", gap: "4px" }}>
           <button
-            className="sandbox-btn"
-            onClick={() => onRespawnTerminal(activeTerminalId)}
-            title="Respawn shell"
+            className={`sandbox-btn ${viewMode === "terminal" ? "active" : ""}`}
+            onClick={() => setViewMode("terminal")}
           >
-            <RefreshCw size={11} /> Respawn
+            Terminal
           </button>
           <button
-            className="sandbox-btn"
-            onClick={clearScreen}
-            title="Clear screen"
+            className={`sandbox-btn ${viewMode === "post" ? "active" : ""}`}
+            onClick={() => setViewMode("post")}
           >
-            <Trash2 size={11} /> Clear
+            Post
+          </button>
+          <button
+            className={`sandbox-btn ${viewMode === "log" ? "active" : ""}`}
+            onClick={() => setViewMode("log")}
+          >
+            Log System
           </button>
         </div>
+        {viewMode === "terminal" && (
+          <div className="sandbox-terminal-header-right">
+            <button
+              className="sandbox-btn"
+              onClick={() => onRespawnTerminal(activeTerminalId)}
+              title="Respawn shell"
+            >
+              <RefreshCw size={11} /> Respawn
+            </button>
+            <button
+              className="sandbox-btn"
+              onClick={clearScreen}
+              title="Clear screen"
+            >
+              <Trash2 size={11} /> Clear
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="sandbox-terminal-body">
-        <div className="sandbox-terminal-main">
-          {activeStatus !== "connected" && (
-            <div className="sandbox-overlay">
-              {activeStatus === "connecting" && (
-                <>
-                  <Loader2 size={32} className="sandbox-spinner" />
-                  <span className="sandbox-overlay-title">
-                    Connecting sandbox shell...
-                  </span>
-                  <span className="sandbox-overlay-sub">
-                    Spawning PowerShell PTY at <code>{workspacePath}</code>
-                  </span>
-                </>
+        {viewMode === "terminal" ? (
+          <>
+            <div className="sandbox-terminal-main">
+              {activeStatus !== "connected" && (
+                <div className="sandbox-overlay">
+                  {activeStatus === "connecting" && (
+                    <>
+                      <Loader2 size={32} className="sandbox-spinner" />
+                      <span className="sandbox-overlay-title">
+                        Connecting sandbox shell...
+                      </span>
+                      <span className="sandbox-overlay-sub">
+                        Spawning PowerShell PTY at <code>{workspacePath}</code>
+                      </span>
+                    </>
+                  )}
+                  {activeStatus === "error" && (
+                    <>
+                      <AlertTriangle size={32} className="sandbox-error-icon" />
+                      <span className="sandbox-overlay-title sandbox-error-text">
+                        Connection failed
+                      </span>
+                      <span className="sandbox-overlay-sub sandbox-error-detail">
+                        {activeError || "Unknown error"}
+                      </span>
+                      <button
+                        className="sandbox-retry-btn"
+                        onClick={() => onRetrySpawn(activeTerminalId)}
+                      >
+                        <RefreshCw size={12} /> Retry
+                      </button>
+                    </>
+                  )}
+                  {activeStatus === "disconnected" && (
+                    <span className="sandbox-overlay-sub">
+                      No active terminal session
+                    </span>
+                  )}
+                </div>
               )}
-              {activeStatus === "error" && (
-                <>
-                  <AlertTriangle size={32} className="sandbox-error-icon" />
-                  <span className="sandbox-overlay-title sandbox-error-text">
-                    Connection failed
-                  </span>
-                  <span className="sandbox-overlay-sub sandbox-error-detail">
-                    {activeError || "Unknown error"}
-                  </span>
-                  <button
-                    className="sandbox-retry-btn"
-                    onClick={() => onRetrySpawn(activeTerminalId)}
-                  >
-                    <RefreshCw size={12} /> Retry
-                  </button>
-                </>
-              )}
-              {activeStatus === "disconnected" && (
-                <span className="sandbox-overlay-sub">
-                  No active terminal session
-                </span>
-              )}
-            </div>
-          )}
 
-          {/* Render a separate xterm container for each terminal session.
-              Only the active one is visible; others are hidden offscreen/via opacity to preserve layout measurements. */}
-          <div className="sandbox-xterm-wrapper">
-            {terminals.map((t) => (
-              <div
-                key={t.id}
-                ref={(el) => {
-                  containerRefs.current[t.id] = el;
-                }}
-                className={`sandbox-xterm-viewport ${t.id === activeTerminalId ? "active" : ""}`}
-              />
-            ))}
-          </div>
-        </div>
-
-        <aside className="sandbox-sidebar">
-          <div className="sandbox-sidebar-section">
-            <div className="sandbox-sidebar-actions">
-              <button
-                className="sandbox-sidebar-btn"
-                onClick={onAddTerminal}
-                title="New terminal"
-              >
-                <Plus size={13} />
-              </button>
-              <button
-                className="sandbox-sidebar-btn"
-                onClick={onDeleteAllTerminals}
-                title="Kill all terminals"
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-            <div className="sandbox-terminal-list">
-              {terminals.map((t) => {
-                const isActive = t.id === activeTerminalId;
-                return (
+              {/* Render a separate xterm container for each terminal session.
+                  Only the active one is visible; others are hidden offscreen/via opacity to preserve layout measurements. */}
+              <div className="sandbox-xterm-wrapper">
+                {terminals.map((t) => (
                   <div
                     key={t.id}
-                    className={`sandbox-terminal-item ${isActive ? "active" : ""}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setActiveTerminalId(t.id);
+                    ref={(el) => {
+                      containerRefs.current[t.id] = el;
                     }}
-                    onDoubleClick={() => startRename(t.id, t.name)}
+                    className={`sandbox-xterm-viewport ${t.id === activeTerminalId ? "active" : ""}`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <aside className="sandbox-sidebar">
+              <div className="sandbox-sidebar-section">
+                <div className="sandbox-sidebar-actions">
+                  <button
+                    className="sandbox-sidebar-btn"
+                    onClick={onAddTerminal}
+                    title="New terminal"
                   >
-                    {editingId === t.id ? (
-                      <input
-                        ref={renameRef}
-                        className="sandbox-rename-input"
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onBlur={submitRename}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") submitRename();
-                          if (e.key === "Escape") setEditingId(null);
+                    <Plus size={13} />
+                  </button>
+                  <button
+                    className="sandbox-sidebar-btn"
+                    onClick={onDeleteAllTerminals}
+                    title="Kill all terminals"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+                <div className="sandbox-terminal-list">
+                  {terminals.map((t) => {
+                    const isActive = t.id === activeTerminalId;
+                    return (
+                      <div
+                        key={t.id}
+                        className={`sandbox-terminal-item ${isActive ? "active" : ""}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActiveTerminalId(t.id);
                         }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      <>
-                        <div className="sandbox-terminal-item-left">
-                          <span className="sandbox-terminal-dot" />
-                          <span className="sandbox-terminal-name">
-                            {t.name}
-                          </span>
-                        </div>
-                        <button
-                          className="sandbox-terminal-close"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteTerminal(t.id);
-                          }}
-                        >
-                          <X size={11} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                        onDoubleClick={() => startRename(t.id, t.name)}
+                      >
+                        {editingId === t.id ? (
+                          <input
+                            ref={renameRef}
+                            className="sandbox-rename-input"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={submitRename}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") submitRename();
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <>
+                            <div className="sandbox-terminal-item-left">
+                              <span className="sandbox-terminal-dot" />
+                              <span className="sandbox-terminal-name">
+                                {t.name}
+                              </span>
+                            </div>
+                            <button
+                              className="sandbox-terminal-close"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteTerminal(t.id);
+                              }}
+                            >
+                              <X size={11} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="sandbox-sidebar-footer">
+                <div className="sandbox-status-row">
+                  <span className="sandbox-status-label">Shell</span>
+                  <span className={`sandbox-status-value ${activeStatus}`}>
+                    {activeStatus === "connected" && "Active"}
+                    {activeStatus === "connecting" && "Spawning..."}
+                    {activeStatus === "error" && "Error"}
+                    {activeStatus === "disconnected" && "Off"}
+                  </span>
+                </div>
+                <div className="sandbox-status-row">
+                  <span className="sandbox-status-label">PID</span>
+                  <span className="sandbox-status-value mono">&mdash;</span>
+                </div>
+              </div>
+            </aside>
+          </>
+        ) : viewMode === "log" ? (
+          <div style={{ flex: 1, height: "100%", display: "flex" }}>
+            <LogViewer logs={activeProject ? (projectLogs?.[activeProject.id] || []) : []} />
           </div>
-          <div className="sandbox-sidebar-footer">
-            <div className="sandbox-status-row">
-              <span className="sandbox-status-label">Shell</span>
-              <span className={`sandbox-status-value ${activeStatus}`}>
-                {activeStatus === "connected" && "Active"}
-                {activeStatus === "connecting" && "Spawning..."}
-                {activeStatus === "error" && "Error"}
-                {activeStatus === "disconnected" && "Off"}
-              </span>
-            </div>
-            <div className="sandbox-status-row">
-              <span className="sandbox-status-label">PID</span>
-              <span className="sandbox-status-value mono">&mdash;</span>
-            </div>
+        ) : (
+          <div style={{ flex: 1, height: "100%", display: "flex" }}>
+            <SimplePing />
           </div>
-        </aside>
+        )}
       </div>
     </div>
   );

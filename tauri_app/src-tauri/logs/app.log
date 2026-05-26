@@ -778,3 +778,5 @@
 [2026-05-26 12:29:09.721] Toolchains checked / verified stable.
 [2026-05-26 12:29:13.174] Cloudflared binary verified / updated successfully.
 [2026-05-26 12:29:13.176] Isolated environment initialized successfully!
+[2026-05-26 13:04:41.683] Tauri command received: start_project_process for project_id: backend
+[2026-05-26 13:04:41.688] Process successfully started for project_id: backend
