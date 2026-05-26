@@ -705,3 +705,8 @@
 [2026-05-26 07:57:16.448] Toolchains checked / verified stable.
 [2026-05-26 07:57:19.175] Cloudflared binary verified / updated successfully.
 [2026-05-26 07:57:19.177] Isolated environment initialized successfully!
+[2026-05-26 10:31:04.160] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-26 10:31:04.164] Proto CLI verified and active.
+[2026-05-26 10:31:04.191] Toolchains checked / verified stable.
+[2026-05-26 10:31:06.951] Cloudflared binary verified / updated successfully.
+[2026-05-26 10:31:06.952] Isolated environment initialized successfully!

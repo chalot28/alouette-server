@@ -1,7 +1,6 @@
 //! # Terminal
 
 use std::path::PathBuf;
-use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
@@ -59,33 +58,42 @@ impl ProcessManager {
             .map(|s| s.workspace_root.clone())
             .unwrap_or_else(|| cwd.clone());
 
+        eprintln!("[sandbox] Checking command: '{}' (cwd: {}, ws: {})", trimmed, cwd.display(), ws.display());
+
         let verdict = sandbox::check_command(trimmed, &cwd, &ws);
         match verdict {
             sandbox::Verdict::Allow => Ok(None),
             sandbox::Verdict::Block { reason } => {
-                eprintln!("[sandbox] Blocked '{trimmed}': {reason}");
+                eprintln!("[sandbox] BLOCKED '{}': {}", trimmed, reason);
                 Ok(Some(reason))
             }
         }
     }
 
-    /// Update tracked CWD for any command that changes directory.
-    /// Handles: cd, cd .., cd.., cd., cd subdir, etc.
+    /// Update tracked CWD cho mọi loại navigation command.
+    /// Bao gồm: cd, sl, pushd, popd, set-location, và cả tên viết tắt.
+    /// Sử dụng interpolation thông minh để resolve ~, $env:VAR, $HOME.
     pub fn update_cwd_for_cd(&mut self, session_id: &str, cmd: &str) {
         let trimmed = cmd.trim();
-        if trimmed.len() < 2 || !trimmed.starts_with("cd") {
+        if trimmed.is_empty() {
             return;
         }
-        // Must be "cd", "cd..." where ... is space/dot/slash/backslash
-        let rest = trimmed[2..].trim();
-        if rest.is_empty() {
-            // cd alone → workspace root
-            let root = self.terminal_sessions.get(session_id)
-                .map(|s| s.workspace_root.clone())
-                .or_else(|| self.sessions_cwd.get(session_id).cloned());
-            if let Some(r) = root {
-                self.sessions_cwd.insert(session_id.to_string(), r);
-            }
+
+        // Chuẩn hóa: lowercase để so sánh
+        let lower = trimmed.to_lowercase();
+
+        // Navigation commands: cd, sl, pushd, popd, set-location
+        let is_nav = lower.starts_with("cd ")
+            || lower.starts_with("sl ")
+            || lower.starts_with("pushd ")
+            || lower.starts_with("popd")
+            || lower.starts_with("set-location ")
+            || lower == "cd"
+            || lower == "sl"
+            || lower == "popd"
+            || lower.starts_with("set-location");
+
+        if !is_nav {
             return;
         }
 
@@ -93,20 +101,68 @@ impl ProcessManager {
             .cloned()
             .unwrap_or_else(|| PathBuf::from("."));
 
-        let target = PathBuf::from(rest.trim_matches('"').trim_matches('\''));
+        let workspace_root = self.terminal_sessions.get(session_id)
+            .map(|s| s.workspace_root.clone())
+            .unwrap_or_else(|| current.clone());
 
-        let new_cwd = if rest == "~" || rest == "~/" {
-            self.terminal_sessions.get(session_id)
-                .map(|s| s.workspace_root.clone())
-                .unwrap_or(current)
-        } else if target.is_relative() {
-            let combined = current.join(&target);
-            std::fs::canonicalize(&combined).unwrap_or(combined)
+        // Trích xuất path argument (nếu có)
+        let rest = if lower.starts_with("set-location") {
+            trimmed["set-location".len()..].trim()
+        } else if lower.starts_with("pushd") {
+            trimmed["pushd".len()..].trim()
+        } else if lower.starts_with("popd") {
+            // popd: về lại directory trước, không có argument
+            // Cách đơn giản: giữ nguyên CWD (thực tế cần stack, nhưng tạm thế)
+            return;
         } else {
-            std::fs::canonicalize(&target).unwrap_or(target)
+            trimmed[2..].trim() // cd, sl
         };
 
-        self.sessions_cwd.insert(session_id.to_string(), new_cwd);
+        if rest.is_empty() {
+            // cd/sl alone → workspace root
+            self.sessions_cwd.insert(session_id.to_string(), workspace_root.clone());
+            return;
+        }
+
+        // Bỏ quotes
+        let target_raw = rest.trim_matches('"').trim_matches('\'');
+
+        // Sử dụng interpolation giống hệt interceptor
+        let interpolated = if target_raw.starts_with('~') {
+            if let Some(home) = get_home_dir_for_cwd() {
+                if target_raw.len() == 1 {
+                    home
+                } else if target_raw.as_bytes().get(1) == Some(&b'/')
+                    || target_raw.as_bytes().get(1) == Some(&b'\\')
+                {
+                    format!("{}{}", home, &target_raw[1..])
+                } else {
+                    format!(r"{}\{}", home, &target_raw[1..])
+                }
+            } else {
+                target_raw.to_string()
+            }
+        } else {
+            // Resolve env vars
+            resolve_env_vars_for_cwd(target_raw)
+        };
+
+        let target_path = PathBuf::from(&interpolated);
+
+        let new_cwd = if target_path.is_relative() {
+            let combined = current.join(&target_path);
+            std::fs::canonicalize(&combined).unwrap_or(combined)
+        } else {
+            std::fs::canonicalize(&target_path).unwrap_or(target_path)
+        };
+
+        // Chỉ update nếu path mới nằm trong workspace
+        // Nếu out-of-workspace, giữ nguyên CWD cũ (sandbox sẽ block)
+        if new_cwd.starts_with(&workspace_root) {
+            self.sessions_cwd.insert(session_id.to_string(), new_cwd);
+        } else {
+            eprintln!("[sandbox] CWD update blocked: '{}' is outside workspace", new_cwd.display());
+        }
     }
 
     pub async fn spawn_terminal(
@@ -241,6 +297,58 @@ impl ProcessManager {
         }
         Ok(())
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Helper functions cho CWD tracking (tương thích với interceptor)
+// ═══════════════════════════════════════════════════════════════════
+
+/// Lấy home directory, tương thích cross-platform
+fn get_home_dir_for_cwd() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    { std::env::var("USERPROFILE").ok() }
+    #[cfg(not(target_os = "windows"))]
+    { std::env::var("HOME").ok() }
+}
+
+/// Resolve environment variables trong path string
+fn resolve_env_vars_for_cwd(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '$' {
+            if chars.peek() == Some(&'{') {
+                chars.next();
+                let mut var_name = String::new();
+                while let Some(&next) = chars.peek() {
+                    if next == '}' { chars.next(); break; }
+                    var_name.push(chars.next().unwrap());
+                }
+                let val = if let Some(e) = var_name.strip_prefix("env:") {
+                    std::env::var(e).unwrap_or_default()
+                } else {
+                    std::env::var(&var_name).unwrap_or_default()
+                };
+                result.push_str(&val);
+            } else {
+                let mut var_name = String::new();
+                while let Some(&next) = chars.peek() {
+                    if next.is_alphanumeric() || next == '_' || next == ':' {
+                        var_name.push(chars.next().unwrap());
+                    } else { break; }
+                }
+                let val = if let Some(e) = var_name.strip_prefix("env:") {
+                    std::env::var(e).unwrap_or_default()
+                } else {
+                    std::env::var(&var_name).unwrap_or_default()
+                };
+                result.push_str(&val);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 pub async fn process_and_send_terminal_input(
