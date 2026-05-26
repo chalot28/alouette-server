@@ -98,3 +98,23 @@ pub async fn delete_language_runtime(
     db.delete_language_runtime(&runtime_id)?;
     Ok(())
 }
+
+#[tauri::command]
+pub async fn install_proto_tool(
+    state: State<'_, AppState>,
+    tool_name: String,
+    version: String,
+) -> Result<(), String> {
+    let pm = state.process_manager.lock().await;
+    let app_data_dir = std::env::current_dir().unwrap_or_default().join("app_data");
+    let bin_dir = app_data_dir.join("bin");
+    let proto_exe_name = if cfg!(target_os = "windows") { "proto.exe" } else { "proto" };
+    let proto_bin = bin_dir.join(proto_exe_name);
+
+    if !proto_bin.exists() {
+        return Err("Proto CLI binary is not installed yet".to_string());
+    }
+
+    pm.proto_manager.install_tool(&proto_bin, &tool_name, &version).await?;
+    Ok(())
+}

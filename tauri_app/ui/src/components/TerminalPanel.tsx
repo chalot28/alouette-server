@@ -237,7 +237,7 @@ function SimplePing() {
             onChange={(e) => setReqBody(e.target.value)}
             style={{
               background: "#12121a",
-              color: "#60a5fa",
+              color: "#ffffff",
               border: "1px solid #27273a",
               borderRadius: "4px",
               padding: "8px 12px",
@@ -282,7 +282,7 @@ function SimplePing() {
               </div>
               <div>
                 <span style={{ color: "#64748b" }}>Time:</span>{" "}
-                <strong style={{ color: "#3b82f6" }}>{response.elapsed_ms} ms</strong>
+                <strong style={{ color: "#ffffff" }}>{response.elapsed_ms} ms</strong>
               </div>
               <div>
                 <span style={{ color: "#64748b" }}>Size:</span>{" "}

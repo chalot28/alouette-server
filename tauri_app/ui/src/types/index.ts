@@ -70,4 +70,14 @@ export interface AppSettings {
   default_tab_list_height: number;
   default_monitor_height: number;
   default_config_height: number;
+
+  // ── Build ──
+  desktop_single_exe: boolean;
+  desktop_upx: boolean;
+  android_build_tool: string;
+  build_type: string;
+  build_output_dir: string;
+  build_output_name: string;
+  build_source_dir: string;
+  build_target: string;
 }

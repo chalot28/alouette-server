@@ -131,6 +131,7 @@ fn main() {
             commands::language::get_language_runtimes,
             commands::language::save_language_runtime,
             commands::language::delete_language_runtime,
+            commands::language::install_proto_tool,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

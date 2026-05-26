@@ -26,6 +26,16 @@ pub struct AppSettings {
     pub default_tab_list_height: u32,
     pub default_monitor_height: u32,
     pub default_config_height: u32,
+
+    // ── Build ──
+    pub desktop_single_exe: bool,
+    pub desktop_upx: bool,
+    pub android_build_tool: String, // "Gradle" | "Bazel"
+    pub build_type: String, // "Release" | "Debug"
+    pub build_output_dir: String,
+    pub build_output_name: String,
+    pub build_source_dir: String,
+    pub build_target: String, // "Desktop" | "Android"
 }
 
 impl Default for AppSettings {
@@ -45,6 +55,14 @@ impl Default for AppSettings {
             default_tab_list_height: 250,
             default_monitor_height: 250,
             default_config_height: 300,
+            desktop_single_exe: true,
+            desktop_upx: true,
+            android_build_tool: "Gradle".to_string(),
+            build_type: "Release".to_string(),
+            build_output_dir: "target/release".to_string(),
+            build_output_name: "alouette-server".to_string(),
+            build_source_dir: ".".to_string(),
+            build_target: "Desktop".to_string(),
         }
     }
 }

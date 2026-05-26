@@ -48,6 +48,8 @@ import {
   Settings,
   Search,
   Check,
+  Monitor,
+  Smartphone,
 } from "lucide-react";
 import type { AppSettings } from "../types";
 
@@ -80,6 +82,48 @@ const DOCK_ITEMS: DockItem[] = [
 interface ToastState {
   message: string;
   type: "success" | "error" | "info";
+}
+
+// Sleek Monochromatic Custom Checkbox
+export function CustomCheckbox({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (val: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!disabled) onChange(!checked);
+      }}
+      disabled={disabled}
+      style={{
+        width: "16px",
+        height: "16px",
+        borderRadius: "4px",
+        border: `1px solid ${checked ? "var(--text-primary)" : "var(--border-primary)"}`,
+        background: checked ? "rgba(255, 255, 255, 0.08)" : "transparent",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: disabled ? "not-allowed" : "pointer",
+        padding: 0,
+        opacity: disabled ? 0.5 : 1,
+        outline: "none",
+      }}
+    >
+      {checked && (
+        <Check
+          size={11}
+          style={{ strokeWidth: 3, color: "var(--text-primary)" }}
+        />
+      )}
+    </button>
+  );
 }
 
 export default function AdminPanel() {
@@ -454,31 +498,179 @@ function EnvironmentSection() {
 }
 
 function BuildSection() {
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await invoke<AppSettings>("get_settings");
+        setSettings(s);
+      } catch {}
+    })();
+  }, []);
+
+  function update<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
+    setSettings((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  async function handleSave() {
+    if (!settings) return;
+    try {
+      await invoke("save_settings", { settings });
+    } catch (e) {
+      console.error("Save failed:", e);
+    }
+  }
+
   return (
     <div className="admin-panel animate-fade-in">
       <h2 className="admin-panel-title">Build</h2>
-      <p className="admin-panel-desc">Build and compilation settings.</p>
-      <div className="admin-card-grid">
-        <div className="admin-card">
-          <div className="admin-card-header">Build Command</div>
-          <input
-            className="admin-input"
-            type="text"
-            defaultValue="npm run build"
-          />
-        </div>
-        <div className="admin-card">
-          <div className="admin-card-header">Output Directory</div>
-          <input className="admin-input" type="text" defaultValue="dist" />
-        </div>
-        <div className="admin-card">
-          <div className="admin-card-header">Auto-build on save</div>
-          <label className="admin-toggle">
-            <input type="checkbox" />
-            <span>Enable auto build</span>
-          </label>
-        </div>
-      </div>
+      <p className="admin-panel-desc">Configure compile pipeline, compression, and platform-specific build tooling.</p>
+
+      {settings && (
+        <>
+          <div className="admin-card-grid">
+            {/* ── Desktop ── */}
+            <div className="admin-card">
+              <div className="admin-card-header" style={{ display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--border-primary)", paddingBottom: "10px", marginBottom: "14px" }}>
+                <Monitor size={15} style={{ color: "var(--color-accent)" }} />
+                <span style={{ fontWeight: 600, letterSpacing: "0.5px" }}>Desktop Build</span>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <CustomCheckbox
+                      checked={settings.desktop_single_exe}
+                      onChange={(val) => update("desktop_single_exe", val)}
+                    />
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--text-primary)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Single Executable
+                    </span>
+                  </div>
+                  <span style={{ fontSize: "11px", color: "var(--text-secondary)", paddingLeft: "26px", lineHeight: "1.4" }}>
+                    Compile and package all resources into a single standalone binary.
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <CustomCheckbox
+                      checked={settings.desktop_upx}
+                      onChange={(val) => update("desktop_upx", val)}
+                    />
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--text-primary)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      UPX Compression
+                    </span>
+                  </div>
+                  <span style={{ fontSize: "11px", color: "var(--text-secondary)", paddingLeft: "26px", lineHeight: "1.4" }}>
+                    Compress the executable payload (default active) to minimize file size.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Android ── */}
+            <div className="admin-card">
+              <div className="admin-card-header" style={{ display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--border-primary)", paddingBottom: "10px", marginBottom: "14px" }}>
+                <Smartphone size={15} style={{ color: "var(--color-accent)" }} />
+                <span style={{ fontWeight: 600, letterSpacing: "0.5px" }}>Android Build</span>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    Build Toolchain
+                  </span>
+                  <select
+                    className="admin-select"
+                    style={{ width: "100%" }}
+                    value={settings.android_build_tool}
+                    onChange={(e) =>
+                      update("android_build_tool", e.target.value)
+                    }
+                  >
+                    <option value="Gradle">Gradle (bin)</option>
+                    <option value="Bazel">Bazel</option>
+                  </select>
+                  <span style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                    Select build system to compile, run tests, and package Android binaries.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="admin-actions-bar" style={{ marginTop: 24 }}>
+            <button
+              className="admin-btn admin-btn-primary"
+              onClick={handleSave}
+              style={{ padding: "8px 18px", display: "flex", alignItems: "center", gap: "8px" }}
+            >
+              <Save size={14} />
+              <span>Save Build Settings</span>
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -723,47 +915,7 @@ function SandboxSection() {
     }
   };
 
-  // Sleek Monochromatic Custom Checkbox
-  function CustomCheckbox({
-    checked,
-    onChange,
-    disabled,
-  }: {
-    checked: boolean;
-    onChange: (val: boolean) => void;
-    disabled?: boolean;
-  }) {
-    return (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!disabled) onChange(!checked);
-        }}
-        disabled={disabled}
-        style={{
-          width: "16px",
-          height: "16px",
-          borderRadius: "4px",
-          border: `1px solid ${checked ? "var(--text-primary)" : "var(--border-primary)"}`,
-          background: checked ? "rgba(255, 255, 255, 0.08)" : "transparent",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: disabled ? "not-allowed" : "pointer",
-          padding: 0,
-          opacity: disabled ? 0.5 : 1,
-          outline: "none",
-        }}
-      >
-        {checked && (
-          <Check
-            size={11}
-            style={{ strokeWidth: 3, color: "var(--text-primary)" }}
-          />
-        )}
-      </button>
-    );
-  }
+
 
   return (
     <div

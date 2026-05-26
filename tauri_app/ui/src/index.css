@@ -517,8 +517,8 @@ body {
 }
 
 .zone5-tab-btn.active {
-    color: var(--color-accent);
-    border-bottom: 2px solid var(--color-accent);
+    color: #ffffff;
+    border-bottom: 2px solid #ffffff;
 }
 
 .zone5-content {
@@ -1994,8 +1994,8 @@ body {
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.5;
-    color: #38bdf8;
-    /* Retro Terminal Sky-Blue */
+    color: #ffffff;
+    /* White text */
     white-space: pre-wrap;
     word-break: break-all;
 }
@@ -2426,7 +2426,7 @@ body {
 }
 
 .header-meta-capsule .value.text-success {
-    color: var(--color-success);
+    color: #ffffff;
 }
 
 .btn-header-start,
@@ -2444,12 +2444,12 @@ body {
 }
 
 .btn-header-start {
-    background-color: var(--color-success);
+    background-color: var(--color-accent);
     color: #ffffff;
 }
 
 .btn-header-start:hover {
-    background-color: #059669;
+    background-color: var(--color-accent-hover);
 }
 
 .btn-header-stop {
@@ -6633,7 +6633,7 @@ body {
     width: 5px;
     height: 5px;
     border-radius: 50% !important;
-    background-color: var(--color-success);
+    background-color: #ffffff;
     flex-shrink: 0;
 }
 
@@ -6706,7 +6706,7 @@ body {
 }
 
 .sandbox-status-value.connected {
-    color: var(--color-success);
+    color: #ffffff;
 }
 
 .sandbox-status-value.connecting {

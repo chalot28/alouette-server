@@ -28,7 +28,7 @@ import ConfigSetup from "./components/ConfigSetup";
 import TabList from "./components/TabList";
 import TerminalPanel from "./components/TerminalPanel";
 import ProcessManager from "./components/ProcessManager";
-import DiagnosticsPanel from "./components/DiagnosticsPanel";
+import BuildPanel from "./components/BuildPanel";
 import AdminPanel from "./components/AdminPanel";
 import FileExplorer from "./components/FileExplorer";
 import SqliteEditor from "./components/SqliteEditor";
@@ -119,8 +119,8 @@ export default function App() {
   const [settingMenuOpen, setSettingMenuOpen] = useState(false);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
 
-  // Bottom nav tab (for right-bottom panel between manager / user)
-  const [rightBottomTab, setRightBottomTab] = useState<"manager" | "user">(
+  // Bottom nav tab (for right-bottom panel between manager / build)
+  const [rightBottomTab, setRightBottomTab] = useState<"manager" | "build">(
     "manager",
   );
 
@@ -823,15 +823,13 @@ export default function App() {
                 className={`zone5-tab-btn ${rightBottomTab === "manager" ? "active" : ""}`}
                 onClick={() => setRightBottomTab("manager")}
               >
-                <Activity size={11} />
                 <span>Manager</span>
               </button>
               <button
-                className={`zone5-tab-btn ${rightBottomTab === "user" ? "active" : ""}`}
-                onClick={() => setRightBottomTab("user")}
+                className={`zone5-tab-btn ${rightBottomTab === "build" ? "active" : ""}`}
+                onClick={() => setRightBottomTab("build")}
               >
-                <User size={11} />
-                <span>Diagnostics</span>
+                <span>Build Setup</span>
               </button>
             </div>
             <div className="zone5-content">
@@ -849,15 +847,14 @@ export default function App() {
                   triggerToast={triggerToast}
                 />
               )}
-              {rightBottomTab === "user" && (
-                <DiagnosticsPanel uptimeSeconds={uptimeSeconds} />
+              {rightBottomTab === "build" && (
+                <BuildPanel uptimeSeconds={uptimeSeconds} />
               )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 3. Bottom Navigation Bar */}
       <footer className="global-footer-navbar">
         <div className="navbar-nav-tabs">
           <button
@@ -867,9 +864,9 @@ export default function App() {
                 setActiveProjectId(filteredProjects[0].id);
               }
             }}
+            title="Tab"
           >
-            <Layers size={13} />
-            <span>Tab</span>
+            <Layers size={16} />
           </button>
 
           <button
@@ -881,25 +878,25 @@ export default function App() {
                   terminalRef.current.scrollHeight;
               }
             }}
+            title="Terminal"
           >
-            <TerminalIcon size={13} />
-            <span>Terminal</span>
+            <TerminalIcon size={16} />
           </button>
 
           <button
             className={`nav-tab-btn ${rightBottomTab === "manager" ? "active" : ""}`}
             onClick={() => setRightBottomTab("manager")}
+            title="Manager"
           >
-            <Activity size={13} />
-            <span>Manager</span>
+            <Activity size={16} />
           </button>
 
           <button
-            className={`nav-tab-btn ${rightBottomTab === "user" ? "active" : ""}`}
-            onClick={() => setRightBottomTab("user")}
+            className={`nav-tab-btn ${rightBottomTab === "build" ? "active" : ""}`}
+            onClick={() => setRightBottomTab("build")}
+            title="Build"
           >
-            <User size={13} />
-            <span>User</span>
+            <Cpu size={16} />
           </button>
         </div>
 
