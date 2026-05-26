@@ -124,6 +124,10 @@ fn main() {
             commands::sqlite::insert_sqlite_row,
             commands::sqlite::delete_sqlite_row,
             commands::sqlite::add_sqlite_column,
+            commands::sandbox::load_sandbox_configs,
+            commands::sandbox::save_sandbox_config,
+            commands::sandbox::save_all_sandbox_configs,
+            commands::sandbox::delete_sandbox_config,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

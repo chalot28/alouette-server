@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection};
-use crate::config::ProjectConfig;
+use crate::config::{ProjectConfig, SandboxConfig};
 use crate::process::ProcessLog;
 
 /// A high-performance, thread-safe manager for the SQLite persistence layer.
@@ -83,6 +83,16 @@ impl DbManager {
             [],
         )
         .map_err(|e| format!("Failed to create logs index: {}", e))?;
+
+        // 3. Create Sandbox Configurations Table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS sandbox_configs (
+                project_id TEXT PRIMARY KEY,
+                config TEXT NOT NULL
+            );",
+            [],
+        )
+        .map_err(|e| format!("Failed to create sandbox_configs table: {}", e))?;
 
         Ok(())
     }
@@ -304,17 +314,102 @@ impl DbManager {
             .map_err(|e| format!("Failed to open database: {}", e))?;
 
         conn.execute(
-            "DELETE FROM logs 
-             WHERE project_id = ?1 
+            "DELETE FROM logs
+             WHERE project_id = ?1
                AND id NOT IN (
-                   SELECT id FROM logs 
-                   WHERE project_id = ?1 
-                   ORDER BY timestamp DESC, id DESC 
+                   SELECT id FROM logs
+                   WHERE project_id = ?1
+                   ORDER BY timestamp DESC, id DESC
                    LIMIT ?2
                );",
             params![project_id, keep_limit as i64],
         )
         .map_err(|e| format!("Failed to prune logs: {}", e))?;
+
+        Ok(())
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Sandbox Config CRUD
+    // ═══════════════════════════════════════════════════════════════
+
+    /// Save a sandbox configuration for a project.
+    pub fn save_sandbox_config(&self, config: &SandboxConfig) -> Result<(), String> {
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        let config_json = serde_json::to_string(config)
+            .map_err(|e| format!("Failed to serialize sandbox config: {}", e))?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO sandbox_configs (project_id, config) VALUES (?1, ?2);",
+            params![config.project_id, config_json],
+        )
+        .map_err(|e| format!("Failed to save sandbox config: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Load a sandbox config for a specific project.
+    pub fn load_sandbox_config(&self, project_id: &str) -> Result<Option<SandboxConfig>, String> {
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        let mut stmt = conn
+            .prepare("SELECT config FROM sandbox_configs WHERE project_id = ?1;")
+            .map_err(|e| format!("Failed to prepare select: {}", e))?;
+
+        let mut rows = stmt
+            .query(params![project_id])
+            .map_err(|e| format!("Failed to query sandbox config: {}", e))?;
+
+        if let Some(row) = rows.next().map_err(|e| format!("Failed to read row: {}", e))? {
+            let config_json: String = row.get(0).map_err(|e| format!("Failed to get config: {}", e))?;
+            let config: SandboxConfig = serde_json::from_str(&config_json)
+                .map_err(|e| format!("Failed to parse sandbox config: {}", e))?;
+            Ok(Some(config))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Load all sandbox configs.
+    pub fn load_all_sandbox_configs(&self) -> Result<Vec<SandboxConfig>, String> {
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        let mut stmt = conn
+            .prepare("SELECT config FROM sandbox_configs;")
+            .map_err(|e| format!("Failed to prepare select all: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let config_json: String = row.get(0)?;
+                Ok(config_json)
+            })
+            .map_err(|e| format!("Failed to query all sandbox configs: {}", e))?;
+
+        let mut configs = Vec::new();
+        for row in rows {
+            let json = row.map_err(|e| format!("Failed to read row: {}", e))?;
+            let config: SandboxConfig = serde_json::from_str(&json)
+                .map_err(|e| format!("Failed to parse sandbox config: {}", e))?;
+            configs.push(config);
+        }
+
+        Ok(configs)
+    }
+
+    /// Delete a sandbox configuration for a project.
+    pub fn delete_sandbox_config(&self, project_id: &str) -> Result<(), String> {
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        conn.execute(
+            "DELETE FROM sandbox_configs WHERE project_id = ?1;",
+            params![project_id],
+        )
+        .map_err(|e| format!("Failed to delete sandbox config: {}", e))?;
 
         Ok(())
     }
@@ -326,10 +421,10 @@ impl DbManager {
 
         let mut stmt = conn
             .prepare(
-                "SELECT project_id, stream, text, timestamp 
-                 FROM logs 
-                 WHERE project_id = ?1 
-                 ORDER BY timestamp DESC, id DESC 
+                "SELECT project_id, stream, text, timestamp
+                 FROM logs
+                 WHERE project_id = ?1
+                 ORDER BY timestamp DESC, id DESC
                  LIMIT ?2;",
             )
             .map_err(|e| format!("Failed to prepare logs query: {}", e))?;

@@ -31,6 +31,7 @@ pub struct TerminalSession {
     pub stdin_sender: mpsc::Sender<String>,
     pub pid: u32,
     pub workspace_root: PathBuf,
+    pub block_internet: bool,
     /// MUST keep child alive or portable-pty kills the process on drop.
     pub _child: Option<Box<dyn portable_pty::Child + Send>>,
 }

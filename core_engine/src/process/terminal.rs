@@ -169,6 +169,7 @@ impl ProcessManager {
         &mut self,
         session_id: &str,
         cwd: Option<&str>,
+        block_internet: bool,
     ) -> Result<(), String> {
         let sid = session_id.to_string();
         let _ = self.kill_terminal(&sid).await;
@@ -267,8 +268,16 @@ impl ProcessManager {
             stdin_sender: tx,
             pid,
             workspace_root: workspace_root.clone(),
+            block_internet,
             _child: Some(child),
         });
+
+        // Apply network isolation if requested
+        if block_internet {
+            if let Err(e) = super::network_isolate::block_pid(&sid, pid) {
+                eprintln!("[terminal] Failed to block internet for '{sid}': {e}");
+            }
+        }
 
         self.input_buf.insert(sid.clone(), String::new());
         self.sessions_cwd.insert(sid.clone(), workspace_root);
@@ -285,6 +294,11 @@ impl ProcessManager {
     pub async fn kill_terminal(&mut self, session_id: &str) -> Result<(), String> {
         if let Some(s) = self.terminal_sessions.remove(session_id) {
             eprintln!("[terminal] Kill '{session_id}' PID {}", s.pid);
+
+            // Clean up network isolation if was active
+            if s.block_internet {
+                let _ = super::network_isolate::unblock_session(session_id);
+            }
             super::tree::terminate_process_tree(s.pid).await;
         }
         self.input_buf.remove(session_id);

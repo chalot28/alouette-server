@@ -801,3 +801,18 @@
 [2026-05-26 16:29:12.711] Cloudflared binary verified / updated successfully.
 [2026-05-26 16:29:12.713] Isolated environment initialized successfully!
 [2026-05-26 16:50:02.947] Reading file: D:/server_dvtn/.env
+[2026-05-26 18:23:24.024] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-26 18:23:24.028] Proto CLI verified and active.
+[2026-05-26 18:23:24.085] Toolchains checked / verified stable.
+[2026-05-26 18:23:27.355] Cloudflared binary verified / updated successfully.
+[2026-05-26 18:23:27.377] Isolated environment initialized successfully!
+[2026-05-26 18:30:22.798] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-26 18:30:22.803] Proto CLI verified and active.
+[2026-05-26 18:30:22.899] Toolchains checked / verified stable.
+[2026-05-26 18:30:26.572] Cloudflared binary verified / updated successfully.
+[2026-05-26 18:30:26.574] Isolated environment initialized successfully!
+[2026-05-26 18:43:05.405] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-26 18:43:05.408] Proto CLI verified and active.
+[2026-05-26 18:43:05.489] Toolchains checked / verified stable.
+[2026-05-26 18:43:09.980] Cloudflared binary verified / updated successfully.
+[2026-05-26 18:43:09.982] Isolated environment initialized successfully!

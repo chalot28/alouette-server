@@ -14,9 +14,11 @@ pub async fn spawn_terminal_session(
     state: State<'_, AppState>,
     session_id: String,
     cwd: Option<String>,
+    block_internet: Option<bool>,
 ) -> Result<(), String> {
     let mut pm = state.process_manager.lock().await;
-    pm.spawn_terminal(&session_id, cwd.as_deref()).await?;
+    pm.spawn_terminal(&session_id, cwd.as_deref(), block_internet.unwrap_or(false))
+        .await?;
     Ok(())
 }
 

@@ -25,6 +25,66 @@ pub struct ProjectConfig {
     pub max_log_lines: Option<u32>,
 }
 
+/// Sandbox configuration per project (persisted in SQLite as JSON)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxConfig {
+    pub project_id: String,
+
+    // ── Terminal tab ──
+    pub term_buffer: String,
+    pub block_system_commands: bool,
+    pub allow_pipe_operators: bool,
+    pub block_internet: bool,
+    pub skill_agent_enabled: bool,
+
+    // ── Browser tab ──
+    pub cookie_isolation: bool,
+    pub isolate_webview: bool,
+    pub bypass_cors: bool,
+    pub browser_mode: String,
+
+    // ── Engine tab ──
+    pub semantic_enabled: bool,
+    pub risk_level: String,
+    pub strict_boundary: bool,
+    pub ps_parsing: bool,
+    pub homoglyph_norm: bool,
+    pub block_iex: bool,
+
+    // ── Setup tab ──
+    pub memory_limit: String,
+    pub timeout: String,
+    pub cpu_limit: String,
+    pub max_file_size: String,
+}
+
+impl SandboxConfig {
+    pub fn default_for(project_id: &str) -> Self {
+        Self {
+            project_id: project_id.to_string(),
+            term_buffer: "1000".to_string(),
+            block_system_commands: true,
+            allow_pipe_operators: false,
+            block_internet: false,
+            skill_agent_enabled: false,
+            cookie_isolation: true,
+            isolate_webview: true,
+            bypass_cors: false,
+            browser_mode: "Isolated".to_string(),
+            semantic_enabled: true,
+            risk_level: "Medium".to_string(),
+            strict_boundary: true,
+            ps_parsing: true,
+            homoglyph_norm: true,
+            block_iex: true,
+            memory_limit: "512MB".to_string(),
+            timeout: "30s".to_string(),
+            cpu_limit: "1.0 Core".to_string(),
+            max_file_size: "50MB".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectsConfig {
     pub projects: Vec<ProjectConfig>,
@@ -162,11 +222,11 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let malformed_file = temp_dir.join("alouette_malformed.toml");
         let _ = fs::write(&malformed_file, "this is not valid toml = = {");
-        
+
         let res = ProjectsConfig::load_from_file(&malformed_file);
         assert!(res.is_err());
         assert!(res.unwrap_err().contains("Failed to parse TOML config"));
-        
+
         let _ = fs::remove_file(&malformed_file);
     }
 
@@ -179,7 +239,7 @@ mod tests {
             command = "echo"
             args = []
         "#;
-        
+
         let config_res: Result<ProjectsConfig, _> = toml::from_str(toml_str);
         assert!(config_res.is_ok());
         let config = config_res.unwrap();
