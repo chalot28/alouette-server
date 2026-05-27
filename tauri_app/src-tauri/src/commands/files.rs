@@ -20,12 +20,7 @@ pub fn get_project_files(dir_path: Option<String>) -> Result<Vec<FileNode>, Stri
             .to_string()
     });
 
-    let path = Path::new(&path_str);
-    if !path.exists() {
-        return Err("Directory does not exist".to_string());
-    }
-
-    read_dir_recursive(path, 0)
+    get_directory_contents(path_str)
 }
 
 #[tauri::command]
@@ -33,12 +28,10 @@ pub async fn read_file_content(path: String) -> Result<String, String> {
     log_to_app_file(&format!("Reading file: {}", path));
     let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
 
-    // Tăng giới hạn lên 10MB vì Base64 xử lý rất tốt dữ liệu lớn
     if bytes.len() > 10 * 1024 * 1024 {
         return Err("File quá lớn để mở trong trình soạn thảo. Vui lòng sử dụng terminal.".to_string());
     }
 
-    // Chuyển sang Base64 để truyền tải qua IPC cực nhanh và an toàn
     Ok(general_purpose::STANDARD.encode(bytes))
 }
 
@@ -48,9 +41,36 @@ pub async fn write_file_content(path: String, content: String) -> Result<(), Str
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
-pub fn read_dir_recursive(path: &Path, depth: usize) -> Result<Vec<FileNode>, String> {
-    if depth > 4 {
-        return Ok(Vec::new());
+#[tauri::command]
+pub async fn create_file(path: String) -> Result<(), String> {
+    log_to_app_file(&format!("Creating file: {}", path));
+    let path = Path::new(&path);
+    if path.exists() {
+        return Err("File already exists".to_string());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::write(path, "").map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn create_folder(path: String) -> Result<(), String> {
+    log_to_app_file(&format!("Creating folder: {}", path));
+    let path = Path::new(&path);
+    if path.exists() {
+        return Err("Folder already exists".to_string());
+    }
+    fs::create_dir_all(path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_directory_contents(dir_path: String) -> Result<Vec<FileNode>, String> {
+    let path = Path::new(&dir_path);
+    if !path.exists() {
+        return Err("Directory does not exist".to_string());
     }
 
     let mut entries = Vec::new();
@@ -61,22 +81,16 @@ pub fn read_dir_recursive(path: &Path, depth: usize) -> Result<Vec<FileNode>, St
             let entry_path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
 
-            if name == ".git" || name == "node_modules" || name == "target" || name == "gen" {
+            if name == ".git" {
                 continue;
             }
 
             let is_dir = entry_path.is_dir();
-            let children = if is_dir {
-                Some(read_dir_recursive(&entry_path, depth + 1)?)
-            } else {
-                None
-            };
-
             entries.push(FileNode {
                 name,
                 path: entry_path.to_string_lossy().to_string(),
                 is_dir,
-                children,
+                children: None,
             });
         }
     }
@@ -91,3 +105,5 @@ pub fn read_dir_recursive(path: &Path, depth: usize) -> Result<Vec<FileNode>, St
 
     Ok(entries)
 }
+
+

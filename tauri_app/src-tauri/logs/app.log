@@ -1066,3 +1066,19 @@
 [2026-05-28 06:11:47.614] Process successfully started for project_id: backend
 [2026-05-28 06:12:45.690] Tauri command received: stop_project_process for project_id: backend
 [2026-05-28 06:12:45.691] Process successfully stopped for project_id: backend
+[2026-05-28 06:16:22.870] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 06:16:22.876] Proto CLI verified and active.
+[2026-05-28 06:16:22.896] Toolchains checked / verified stable.
+[2026-05-28 06:16:25.600] Cloudflared binary verified / updated successfully.
+[2026-05-28 06:16:25.601] Isolated environment initialized successfully!
+[2026-05-28 06:16:59.973] Reading file: D:/server_dvtn/jest.config.js
+[2026-05-28 06:21:36.559] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 06:21:36.563] Proto CLI verified and active.
+[2026-05-28 06:21:36.593] Toolchains checked / verified stable.
+[2026-05-28 06:21:42.291] Cloudflared binary verified / updated successfully.
+[2026-05-28 06:21:42.292] Isolated environment initialized successfully!
+[2026-05-28 06:23:26.260] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 06:23:26.263] Proto CLI verified and active.
+[2026-05-28 06:23:26.292] Toolchains checked / verified stable.
+[2026-05-28 06:23:29.601] Cloudflared binary verified / updated successfully.
+[2026-05-28 06:23:29.602] Isolated environment initialized successfully!
