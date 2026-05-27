@@ -58,6 +58,43 @@ function ZenIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function LayoutLeftIcon({ active, size = 15 }: { active: boolean; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="5.5" y1="1.5" x2="5.5" y2="14.5" stroke="currentColor" strokeWidth="1.2" />
+      {active && (
+        <rect x="2.1" y="2.1" width="2.8" height="11.8" fill="currentColor" opacity="0.8" />
+      )}
+    </svg>
+  );
+}
+
+function LayoutBottomIcon({ active, size = 15 }: { active: boolean; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="1.5" y1="10.5" x2="14.5" y2="10.5" stroke="currentColor" strokeWidth="1.2" />
+      {active && (
+        <rect x="2.1" y="11.1" width="11.8" height="2.8" fill="currentColor" opacity="0.8" />
+      )}
+    </svg>
+  );
+}
+
+function LayoutRightIcon({ active, size = 15 }: { active: boolean; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="10.5" y1="1.5" x2="10.5" y2="14.5" stroke="currentColor" strokeWidth="1.2" />
+      {active && (
+        <rect x="11.1" y="2.1" width="2.8" height="11.8" fill="currentColor" opacity="0.8" />
+      )}
+    </svg>
+  );
+}
+
+
 // Types
 import { ResourceHistory, TerminalSessionItem, ProcessState } from "./types";
 
@@ -142,6 +179,12 @@ export default function App() {
   const [tabListHeight, setTabListHeight] = useState(250);
   const [monitorHeight, setMonitorHeight] = useState(250);
   const [configHeight, setConfigHeight] = useState(300);
+
+  // Layout toggle states
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+
 
   // Refs for dragging math
   const tabListRef = useRef<HTMLDivElement>(null);
@@ -481,7 +524,7 @@ export default function App() {
       <div
         className="workspace-grid"
         style={{
-          gridTemplateColumns: `${leftSidebarWidth}px 1fr ${rightSidebarWidth}px`,
+          gridTemplateColumns: `${isLeftSidebarOpen ? leftSidebarWidth : 0}px 1fr ${isRightSidebarOpen ? rightSidebarWidth : 0}px`,
           position: "relative",
         }}
       >
@@ -493,6 +536,8 @@ export default function App() {
             height: "100%",
             display: "flex",
             flexDirection: "column",
+            overflow: "hidden",
+            borderRight: isLeftSidebarOpen ? "" : "none",
           }}
         >
           {/* Zone 1: Tab List */}
@@ -624,8 +669,8 @@ export default function App() {
                 ref={monitorRef}
                 className="zone zone-2"
                 style={{
-                  flex: `0 0 ${monitorHeight}px`,
-                  borderBottom: "1px solid var(--border-primary)",
+                  flex: isBottomPanelOpen ? `0 0 ${monitorHeight}px` : 1,
+                  borderBottom: isBottomPanelOpen ? "1px solid var(--border-primary)" : "none",
                   position: "relative",
                 }}
               >
@@ -721,33 +766,37 @@ export default function App() {
                     cursorPositionsRef={editorCursorPositionsRef}
                   />
                 )}
-                <div
-                  className={`resizer-h ${isDraggingMonitor ? "dragging" : ""}`}
-                  style={{ position: "absolute", bottom: "-2px", left: 0 }}
-                  onMouseDown={handleMonitorResizeStart}
-                />
+                {isBottomPanelOpen && (
+                  <div
+                    className={`resizer-h ${isDraggingMonitor ? "dragging" : ""}`}
+                    style={{ position: "absolute", bottom: "-2px", left: 0 }}
+                    onMouseDown={handleMonitorResizeStart}
+                  />
+                )}
               </div>
 
               {/* Zone 4: Terminal */}
-              <div className="zone zone-4" style={{ flex: 1 }}>
-                <TerminalPanel
-                  theme={theme}
-                  activeProject={activeProject}
-                  projectLogs={projectLogs}
-                  terminals={terminals}
-                  activeTerminalId={activeTerminalId}
-                  setActiveTerminalId={setActiveTerminalId}
-                  activeStatus={activeStatus}
-                  activeError={activeError}
-                  terminalBufferRef={terminalBufferRef}
-                  onRespawnTerminal={respawnTerminal}
-                  onRetrySpawn={retrySpawn}
-                  onAddTerminal={addTerminal}
-                  onDeleteTerminal={deleteTerminal}
-                  onDeleteAllTerminals={deleteAllTerminals}
-                  onRenameTerminal={renameTerminal}
-                />
-              </div>
+              {isBottomPanelOpen && (
+                <div className="zone zone-4" style={{ flex: 1 }}>
+                  <TerminalPanel
+                    theme={theme}
+                    activeProject={activeProject}
+                    projectLogs={projectLogs}
+                    terminals={terminals}
+                    activeTerminalId={activeTerminalId}
+                    setActiveTerminalId={setActiveTerminalId}
+                    activeStatus={activeStatus}
+                    activeError={activeError}
+                    terminalBufferRef={terminalBufferRef}
+                    onRespawnTerminal={respawnTerminal}
+                    onRetrySpawn={retrySpawn}
+                    onAddTerminal={addTerminal}
+                    onDeleteTerminal={deleteTerminal}
+                    onDeleteAllTerminals={deleteAllTerminals}
+                    onRenameTerminal={renameTerminal}
+                  />
+                </div>
+              )}
             </>
           )}
         </div>
@@ -760,6 +809,7 @@ export default function App() {
             height: "100%",
             display: "flex",
             flexDirection: "column",
+            overflow: "hidden",
           }}
         >
           <div
@@ -900,6 +950,59 @@ export default function App() {
             title="Build"
           >
             <Hammer size={16} />
+          </button>
+
+          {/* Divider line before premium layout toggles */}
+          <div
+            style={{
+              height: "16px",
+              width: "1px",
+              backgroundColor: "var(--border-primary)",
+              margin: "0 8px",
+            }}
+          />
+
+          {/* Premium Layout Toggles */}
+          <button
+            className={`nav-tab-btn ${isLeftSidebarOpen ? "active" : ""}`}
+            onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
+            title="Toggle Left Sidebar"
+            style={{
+              padding: "0 8px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <LayoutLeftIcon active={isLeftSidebarOpen} size={15} />
+          </button>
+
+          <button
+            className={`nav-tab-btn ${isBottomPanelOpen ? "active" : ""}`}
+            onClick={() => setIsBottomPanelOpen(!isBottomPanelOpen)}
+            title="Toggle Bottom Panel"
+            style={{
+              padding: "0 8px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <LayoutBottomIcon active={isBottomPanelOpen} size={15} />
+          </button>
+
+          <button
+            className={`nav-tab-btn ${isRightSidebarOpen ? "active" : ""}`}
+            onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+            title="Toggle Right Sidebar"
+            style={{
+              padding: "0 8px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <LayoutRightIcon active={isRightSidebarOpen} size={15} />
           </button>
         </div>
 
