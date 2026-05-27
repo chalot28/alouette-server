@@ -20,6 +20,7 @@ import {
 } from "../types";
 
 interface TerminalPanelProps {
+  theme?: "dark" | "light";
   activeProject: Project | undefined | null;
   projectLogs?: { [id: string]: LogLine[] };
   terminals: TerminalSessionItem[];
@@ -36,7 +37,7 @@ interface TerminalPanelProps {
   onRenameTerminal: (id: string, name: string) => void;
 }
 
-const XTERM_THEME = {
+const XTERM_DARK_THEME = {
   background: "#050507",
   foreground: "#cbd5e1",
   cursor: "#528bff",
@@ -61,6 +62,31 @@ const XTERM_THEME = {
   brightWhite: "#ffffff",
 };
 
+const XTERM_LIGHT_THEME = {
+  background: "#f5f5f7",
+  foreground: "#1e293b",
+  cursor: "#0056e0",
+  cursorAccent: "#f5f5f7",
+  selectionBackground: "rgba(0, 86, 224, 0.2)",
+  selectionInactiveBackground: "rgba(0, 86, 224, 0.08)",
+  black: "#0f172a",
+  red: "#dc2626",
+  green: "#15803d",
+  yellow: "#b45309",
+  blue: "#1d4ed8",
+  magenta: "#a21caf",
+  cyan: "#0369a1",
+  white: "#334155",
+  brightBlack: "#475569",
+  brightRed: "#b91c1c",
+  brightGreen: "#166534",
+  brightYellow: "#9a3412",
+  brightBlue: "#1e40af",
+  brightMagenta: "#86198f",
+  brightCyan: "#075985",
+  brightWhite: "#0f172a",
+};
+
 /** Each terminal session gets its own persistent xterm instance. */
 interface XtermInstance {
   term: Terminal;
@@ -82,8 +108,8 @@ function LogViewer({ logs }: { logs: LogLine[] }) {
       ref={containerRef}
       style={{
         flex: 1,
-        background: "#050507",
-        color: "#cbd5e1",
+        background: "var(--terminal-bg)",
+        color: "var(--text-primary)",
         fontFamily: "'JetBrains Mono', Consolas, monospace",
         fontSize: "12px",
         padding: "16px",
@@ -98,19 +124,19 @@ function LogViewer({ logs }: { logs: LogLine[] }) {
         logs.map((log, idx) => {
           const isErr = log.stream === "stderr";
           const isSys = log.stream === "system";
-          let color = "#cbd5e1";
-          if (isErr) color = "#ef4444";
-          else if (isSys) color = "#a855f7";
+          let color = "var(--text-primary)";
+          if (isErr) color = "var(--color-danger)";
+          else if (isSys) color = "var(--color-setup)";
 
           return (
             <div key={idx} style={{ display: "flex", gap: "8px", lineBreak: "anywhere" }}>
-              <span style={{ color: "#475569", flexShrink: 0, userSelect: "none" }}>[{log.timestamp}]</span>
+              <span style={{ color: "var(--text-muted)", flexShrink: 0, userSelect: "none" }}>[{log.timestamp}]</span>
               <span style={{ color, whiteSpace: "pre-wrap" }}>{log.text}</span>
             </div>
           );
         })
       ) : (
-        <div style={{ color: "#475569", fontStyle: "italic", textAlign: "center", marginTop: "40px" }}>
+        <div style={{ color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", marginTop: "40px" }}>
           No active system logs. Click "Start" in the header to execute the application.
         </div>
       )}
@@ -167,8 +193,8 @@ function SimplePing() {
       flexDirection: "column",
       height: "100%",
       width: "100%",
-      background: "#08080c",
-      color: "#cbd5e1",
+      background: "var(--bg-primary)",
+      color: "var(--text-primary)",
       padding: "16px",
       gap: "12px",
       boxSizing: "border-box"
@@ -178,9 +204,9 @@ function SimplePing() {
           value={method}
           onChange={(e) => setMethod(e.target.value)}
           style={{
-            background: "#12121a",
-            color: "#fff",
-            border: "1px solid #27273a",
+            background: "var(--bg-tertiary)",
+            color: "var(--text-primary)",
+            border: "1px solid var(--border-primary)",
             borderRadius: "4px",
             padding: "8px 12px",
             fontSize: "13px",
@@ -201,9 +227,9 @@ function SimplePing() {
           placeholder="http://localhost:3000/api/endpoint"
           style={{
             flex: 1,
-            background: "#12121a",
-            color: "#fff",
-            border: "1px solid #27273a",
+            background: "var(--bg-tertiary)",
+            color: "var(--text-primary)",
+            border: "1px solid var(--border-primary)",
             borderRadius: "4px",
             padding: "8px 12px",
             fontSize: "13px",
@@ -215,7 +241,7 @@ function SimplePing() {
           onClick={handlePing}
           disabled={loading}
           style={{
-            background: loading ? "#27273a" : "#2563eb",
+            background: loading ? "var(--bg-tertiary)" : "var(--color-accent)",
             color: "#fff",
             border: "none",
             borderRadius: "4px",
@@ -231,14 +257,14 @@ function SimplePing() {
 
       {(method === "POST" || method === "PUT" || method === "PATCH") && (
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <div style={{ color: "#64748b", fontSize: "12px" }}>Request Body (JSON):</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>Request Body (JSON):</div>
           <textarea
             value={reqBody}
             onChange={(e) => setReqBody(e.target.value)}
             style={{
-              background: "#12121a",
-              color: "#ffffff",
-              border: "1px solid #27273a",
+              background: "var(--bg-tertiary)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-primary)",
               borderRadius: "4px",
               padding: "8px 12px",
               fontSize: "12px",
@@ -254,8 +280,8 @@ function SimplePing() {
 
       <div style={{
         flex: 1,
-        background: "#030305",
-        border: "1px solid #181824",
+        background: "var(--bg-secondary)",
+        border: "1px solid var(--border-primary)",
         borderRadius: "6px",
         padding: "12px",
         fontFamily: "'JetBrains Mono', Consolas, monospace",
@@ -266,33 +292,33 @@ function SimplePing() {
         gap: "10px"
       }}>
         {error && (
-          <div style={{ color: "#ef4444" }}>
+          <div style={{ color: "var(--color-danger)" }}>
             <strong>Error:</strong> {error}
           </div>
         )}
 
         {response && (
           <>
-            <div style={{ display: "flex", gap: "16px", borderBottom: "1px solid #181824", paddingBottom: "8px", flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: "16px", borderBottom: "1px solid var(--border-primary)", paddingBottom: "8px", flexShrink: 0 }}>
               <div>
-                <span style={{ color: "#64748b" }}>Status:</span>{" "}
-                <strong style={{ color: response.status >= 200 && response.status < 300 ? "#10b981" : "#ef4444" }}>
+                <span style={{ color: "var(--text-secondary)" }}>Status:</span>{" "}
+                <strong style={{ color: response.status >= 200 && response.status < 300 ? "var(--color-success)" : "var(--color-danger)" }}>
                   {response.status} {response.status_text}
                 </strong>
               </div>
               <div>
-                <span style={{ color: "#64748b" }}>Time:</span>{" "}
-                <strong style={{ color: "#ffffff" }}>{response.elapsed_ms} ms</strong>
+                <span style={{ color: "var(--text-secondary)" }}>Time:</span>{" "}
+                <strong style={{ color: "var(--text-primary)" }}>{response.elapsed_ms} ms</strong>
               </div>
               <div>
-                <span style={{ color: "#64748b" }}>Size:</span>{" "}
-                <strong style={{ color: "#f59e0b" }}>{response.size_bytes} B</strong>
+                <span style={{ color: "var(--text-secondary)" }}>Size:</span>{" "}
+                <strong style={{ color: "var(--color-warning)" }}>{response.size_bytes} B</strong>
               </div>
             </div>
 
             <div style={{ flex: 1, overflow: "auto" }}>
-              <div style={{ color: "#64748b", marginBottom: "4px" }}>Response Body:</div>
-              <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: "#cbd5e1" }}>
+              <div style={{ color: "var(--text-secondary)", marginBottom: "4px" }}>Response Body:</div>
+              <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: "var(--text-primary)" }}>
                 {response.body}
               </pre>
             </div>
@@ -300,7 +326,7 @@ function SimplePing() {
         )}
 
         {!response && !error && !loading && (
-          <div style={{ color: "#475569", textAlign: "center", marginTop: "40px", fontStyle: "italic" }}>
+          <div style={{ color: "var(--text-muted)", textAlign: "center", marginTop: "40px", fontStyle: "italic" }}>
             Enter a URL and send request to view API response.
           </div>
         )}
@@ -310,6 +336,7 @@ function SimplePing() {
 }
 
 export default function TerminalPanel({
+  theme,
   activeProject,
   projectLogs,
   terminals,
@@ -357,14 +384,18 @@ export default function TerminalPanel({
       console.log("[term] MOUNT xterm for session:", sessionId);
       container.innerHTML = "";
 
+      const activeTheme = theme === "light" ? XTERM_LIGHT_THEME : XTERM_DARK_THEME;
+
       const term = new Terminal({
         cursorBlink: true,
         cursorStyle: "bar",
         cursorWidth: 2,
         fontSize: 13,
+        lineHeight: 1.2,
+        letterSpacing: 0.5,
         fontFamily:
           "'JetBrains Mono', Consolas, 'Courier New', monospace",
-        theme: XTERM_THEME,
+        theme: activeTheme,
         convertEol: true,
         rows: 24,
         allowTransparency: false,
@@ -531,8 +562,20 @@ export default function TerminalPanel({
         return true;
       });
     },
-    [terminalBufferRef],
+    [terminalBufferRef, theme],
   );
+
+  // ── Sync terminal theme dynamically when light/dark theme changes ──
+  useEffect(() => {
+    const activeTheme = theme === "light" ? XTERM_LIGHT_THEME : XTERM_DARK_THEME;
+    Object.keys(instancesRef.current).forEach((sid) => {
+      try {
+        instancesRef.current[sid].term.options.set("theme", activeTheme);
+      } catch (err) {
+        console.warn("[term] update theme FAILED:", err);
+      }
+    });
+  }, [theme]);
 
   // ── Mount/unmount xterm instances when terminals list changes ─────
   useEffect(() => {

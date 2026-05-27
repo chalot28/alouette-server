@@ -729,6 +729,7 @@ export default function App() {
               {/* Zone 4: Terminal */}
               <div className="zone zone-4" style={{ flex: 1 }}>
                 <TerminalPanel
+                  theme={theme}
                   activeProject={activeProject}
                   projectLogs={projectLogs}
                   terminals={terminals}

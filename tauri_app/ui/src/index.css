@@ -6502,7 +6502,7 @@ body {
     cursor: text;
     outline: none;
     padding: 0;
-    background-color: #050507;
+    background-color: var(--terminal-bg);
     position: relative;
 }
 
@@ -6543,6 +6543,20 @@ body {
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
 }
+
+/* Force correct monospace font-family on xterm instances to fix character overlapping/squishing */
+.xterm,
+.xterm * {
+    font-family: var(--font-mono) !important;
+}
+
+/* Force dynamic theme background on xterm internal containers to override hardcoded xterm.css defaults */
+.sandbox-xterm-wrapper .xterm,
+.sandbox-xterm-wrapper .xterm-screen,
+.sandbox-xterm-wrapper .xterm-viewport {
+    background-color: var(--terminal-bg) !important;
+}
+
 
 /* ── Sidebar ────────────────────────────────────────────────────────── */
 
