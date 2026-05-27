@@ -35,6 +35,7 @@ import AdminPanel from "./components/AdminPanel";
 import FileExplorer from "./components/FileExplorer";
 import SqliteEditor from "./components/SqliteEditor";
 import MiniPostman from "./components/MiniPostman";
+import AiAgent from "./components/AiAgent";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 function ZenIcon({ size = 14 }: { size?: number }) {
@@ -184,6 +185,7 @@ export default function App() {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(true);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  const [isAiViewActive, setIsAiViewActive] = useState(false);
 
 
   // Refs for dragging math
@@ -818,93 +820,99 @@ export default function App() {
             onMouseDown={handleRightResizeStart}
           />
 
-          {/* Zone 3: Configuration & Watchdog Setup */}
-          {activeProjectId && activeProjectId !== "__create_project__" && (
-            <div
-              ref={configRef}
-              className="zone zone-3"
-              style={{
-                flex: `0 0 ${configHeight}px`,
-                borderBottom: "1px solid var(--border-primary)",
-                position: "relative",
-              }}
-            >
-              <ConfigSetup
-                newProjName={newProjName}
-                setNewProjName={setNewProjName}
-                newProjRestart={newProjRestart}
-                setNewProjRestart={setNewProjRestart}
-                newProjCmd={newProjCmd}
-                setNewProjCmd={setNewProjCmd}
-                newProjArgs={newProjArgs}
-                setNewProjArgs={setNewProjArgs}
-                newProjCwd={newProjCwd}
-                setNewProjCwd={setNewProjCwd}
-                newProjPort={newProjPort}
-                setNewProjPort={setNewProjPort}
-                newProjCpu={newProjCpu}
-                setNewProjCpu={setNewProjCpu}
-                newProjRam={newProjRam}
-                setNewProjRam={setNewProjRam}
-                newProjSource={newProjSource}
-                setNewProjSource={setNewProjSource}
-                newProjTerminalMode={newProjTerminalMode}
-                setNewProjTerminalMode={setNewProjTerminalMode}
-                newProjToolchain={newProjToolchain}
-                setNewProjToolchain={setNewProjToolchain}
-                newProjToolchainVersion={newProjToolchainVersion}
-                setNewProjToolchainVersion={setNewProjToolchainVersion}
-                newProjEnableTunnel={newProjEnableTunnel}
-                setNewProjEnableTunnel={setNewProjEnableTunnel}
-                newProjMaxLogLines={newProjMaxLogLines}
-                setNewProjMaxLogLines={setNewProjMaxLogLines}
-                handleResetSetupForm={handleResetSetupForm}
-                handleAddProject={handleAddProject}
-              />
-              <div
-                className={`resizer-h ${isDraggingConfig ? "dragging" : ""}`}
-                style={{ position: "absolute", bottom: "-2px", left: 0 }}
-                onMouseDown={handleConfigResizeStart}
-              />
-            </div>
-          )}
+          {isAiViewActive ? (
+            <AiAgent onBack={() => setIsAiViewActive(false)} />
+          ) : (
+            <>
+              {/* Zone 3: Configuration & Watchdog Setup */}
+              {activeProjectId && activeProjectId !== "__create_project__" && (
+                <div
+                  ref={configRef}
+                  className="zone zone-3"
+                  style={{
+                    flex: `0 0 ${configHeight}px`,
+                    borderBottom: "1px solid var(--border-primary)",
+                    position: "relative",
+                  }}
+                >
+                  <ConfigSetup
+                    newProjName={newProjName}
+                    setNewProjName={setNewProjName}
+                    newProjRestart={newProjRestart}
+                    setNewProjRestart={setNewProjRestart}
+                    newProjCmd={newProjCmd}
+                    setNewProjCmd={setNewProjCmd}
+                    newProjArgs={newProjArgs}
+                    setNewProjArgs={setNewProjArgs}
+                    newProjCwd={newProjCwd}
+                    setNewProjCwd={setNewProjCwd}
+                    newProjPort={newProjPort}
+                    setNewProjPort={setNewProjPort}
+                    newProjCpu={newProjCpu}
+                    setNewProjCpu={setNewProjCpu}
+                    newProjRam={newProjRam}
+                    setNewProjRam={setNewProjRam}
+                    newProjSource={newProjSource}
+                    setNewProjSource={setNewProjSource}
+                    newProjTerminalMode={newProjTerminalMode}
+                    setNewProjTerminalMode={setNewProjTerminalMode}
+                    newProjToolchain={newProjToolchain}
+                    setNewProjToolchain={setNewProjToolchain}
+                    newProjToolchainVersion={newProjToolchainVersion}
+                    setNewProjToolchainVersion={setNewProjToolchainVersion}
+                    newProjEnableTunnel={newProjEnableTunnel}
+                    setNewProjEnableTunnel={setNewProjEnableTunnel}
+                    newProjMaxLogLines={newProjMaxLogLines}
+                    setNewProjMaxLogLines={setNewProjMaxLogLines}
+                    handleResetSetupForm={handleResetSetupForm}
+                    handleAddProject={handleAddProject}
+                  />
+                  <div
+                    className={`resizer-h ${isDraggingConfig ? "dragging" : ""}`}
+                    style={{ position: "absolute", bottom: "-2px", left: 0 }}
+                    onMouseDown={handleConfigResizeStart}
+                  />
+                </div>
+              )}
 
-          {/* Zone 5: Running Processes / Diagnostics — with tab switcher */}
-          <div className="zone zone-5" style={{ flex: 1 }}>
-            <div className="zone5-tab-bar">
-              <button
-                className={`zone5-tab-btn ${rightBottomTab === "manager" ? "active" : ""}`}
-                onClick={() => setRightBottomTab("manager")}
-              >
-                <span>Manager</span>
-              </button>
-              <button
-                className={`zone5-tab-btn ${rightBottomTab === "build" ? "active" : ""}`}
-                onClick={() => setRightBottomTab("build")}
-              >
-                <span>Build Setup</span>
-              </button>
-            </div>
-            <div className="zone5-content">
-              {rightBottomTab === "manager" && (
-                <ProcessManager
-                  projects={projects}
-                  activeProjectId={activeProjectId}
-                  setActiveProjectId={setActiveProjectId}
-                  projectStates={projectStates}
-                  resourceHistory={resourceHistory}
-                  handleStartProject={handleStartProject}
-                  handleStopProject={handleStopProject}
-                  forceKillProcess={forceKillProcess}
-                  triggerConfirm={triggerConfirm}
-                  triggerToast={triggerToast}
-                />
-              )}
-              {rightBottomTab === "build" && (
-                <BuildPanel uptimeSeconds={uptimeSeconds} />
-              )}
-            </div>
-          </div>
+              {/* Zone 5: Running Processes / Diagnostics — with tab switcher */}
+              <div className="zone zone-5" style={{ flex: 1 }}>
+                <div className="zone5-tab-bar">
+                  <button
+                    className={`zone5-tab-btn ${rightBottomTab === "manager" ? "active" : ""}`}
+                    onClick={() => setRightBottomTab("manager")}
+                  >
+                    <span>Manager</span>
+                  </button>
+                  <button
+                    className={`zone5-tab-btn ${rightBottomTab === "build" ? "active" : ""}`}
+                    onClick={() => setRightBottomTab("build")}
+                  >
+                    <span>Build Setup</span>
+                  </button>
+                </div>
+                <div className="zone5-content">
+                  {rightBottomTab === "manager" && (
+                    <ProcessManager
+                      projects={projects}
+                      activeProjectId={activeProjectId}
+                      setActiveProjectId={setActiveProjectId}
+                      projectStates={projectStates}
+                      resourceHistory={resourceHistory}
+                      handleStartProject={handleStartProject}
+                      handleStopProject={handleStopProject}
+                      forceKillProcess={forceKillProcess}
+                      triggerConfirm={triggerConfirm}
+                      triggerToast={triggerToast}
+                    />
+                  )}
+                  {rightBottomTab === "build" && (
+                    <BuildPanel uptimeSeconds={uptimeSeconds} />
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1010,7 +1018,18 @@ export default function App() {
           <button className="tool-btn tool-git" title="1. Git">
             <GitBranch size={14} />
           </button>
-          <button className="tool-btn tool-ai" title="2. AI">
+          <button
+            className={`tool-btn tool-ai ${isAiViewActive && isRightSidebarOpen ? "active" : ""}`}
+            title="2. AI"
+            onClick={() => {
+              if (!isRightSidebarOpen) {
+                setIsRightSidebarOpen(true);
+                setIsAiViewActive(true);
+              } else {
+                setIsAiViewActive(!isAiViewActive);
+              }
+            }}
+          >
             <Sparkles size={14} />
           </button>
           <button
