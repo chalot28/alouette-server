@@ -504,6 +504,20 @@ export default function TerminalPanel({
 
       // Key handler: copy/paste
       term.attachCustomKeyEventHandler((e) => {
+        if (e.key === "ArrowUp" && e.type === "keydown") {
+          invoke("write_to_terminal_session", {
+            sessionId,
+            input: "\x1b[A",
+          }).catch(() => {});
+          return false;
+        }
+        if (e.key === "ArrowDown" && e.type === "keydown") {
+          invoke("write_to_terminal_session", {
+            sessionId,
+            input: "\x1b[B",
+          }).catch(() => {});
+          return false;
+        }
         if (e.key === "Backspace") {
           const activeBuffer = term.buffer.active;
           const lineIndex = activeBuffer.baseY + activeBuffer.cursorY;

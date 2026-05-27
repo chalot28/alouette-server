@@ -187,6 +187,17 @@ pub async fn write_to_terminal_session(
                 pm.update_cwd_for_cd(&session_id, &allowed_cmd);
             }
         }
+        
+        // Erase the locally-echoed characters from the screen first,
+        // because ConPTY will automatically echo the entire stdin string when it receives it.
+        if !allowed_cmd.is_empty() {
+            let erase = "\x08 \x08".repeat(allowed_cmd.len());
+            let _ = out_tx.send(TerminalOutput {
+                session_id: session_id.clone(),
+                text: erase,
+            });
+        }
+
         let full = allowed_cmd + "\r";
         let _ = stdin_tx.send(full).await;
         return Ok(());

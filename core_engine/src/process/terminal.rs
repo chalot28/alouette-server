@@ -156,12 +156,12 @@ impl ProcessManager {
             std::fs::canonicalize(&target_path).unwrap_or(target_path)
         };
 
-        // Chỉ update nếu path mới nằm trong workspace
-        // Nếu out-of-workspace, giữ nguyên CWD cũ (sandbox sẽ block)
-        if new_cwd.starts_with(&workspace_root) {
+        // Chỉ update nếu path mới tồn tại, là thư mục và nằm trong workspace
+        // Nếu out-of-workspace hoặc thư mục không tồn tại, giữ nguyên CWD cũ (để tránh desync bypass)
+        if new_cwd.is_dir() && new_cwd.starts_with(&workspace_root) {
             self.sessions_cwd.insert(session_id.to_string(), new_cwd);
         } else {
-            eprintln!("[sandbox] CWD update blocked: '{}' is outside workspace", new_cwd.display());
+            eprintln!("[sandbox] CWD update blocked or path invalid: '{}' (outside workspace or not a directory)", new_cwd.display());
         }
     }
 
@@ -281,6 +281,11 @@ impl ProcessManager {
 
         self.input_buf.insert(sid.clone(), String::new());
         self.sessions_cwd.insert(sid.clone(), workspace_root);
+
+        // Áp dụng Tầng 2: OS-level sandbox (Job Object)
+        if let Err(e) = super::sandbox::windows::apply_sandbox_to_process(pid) {
+            eprintln!("[terminal] Failed to apply OS sandbox: {e}");
+        }
 
         let hb_tx = self.terminal_sender.clone();
         tokio::spawn(async move {
