@@ -282,6 +282,7 @@ export default function MiniPostmanScripts({
               automaticLayout: true,
               scrollBeyondLastLine: false,
               cursorBlinking: "smooth",
+              lineNumbers: "on",
               lineNumbersMinChars: 3,
               tabSize: 2,
               insertSpaces: true,

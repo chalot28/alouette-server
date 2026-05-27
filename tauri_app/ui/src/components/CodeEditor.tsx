@@ -278,12 +278,13 @@ export default function CodeEditor({
             onMount={handleEditorDidMount}
             options={{
               fontSize: 12,
-              fontFamily: "var(--font-mono)",
+              fontFamily: "'JetBrains Mono', Consolas, 'Courier New', monospace",
               minimap: { enabled: false },
               automaticLayout: true,
               scrollBeyondLastLine: false,
               cursorBlinking: "smooth",
-              lineNumbersMinChars: 3,
+              lineNumbers: "on",
+              lineNumbersMinChars: 5,
               tabSize: 4,
               insertSpaces: true,
               wordWrap: "on",
