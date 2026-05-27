@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, Send, RefreshCw, Layers, History, ArrowLeft } from "lucide-react";
+import { Plus, Send, RefreshCw, Layers, History, ArrowLeft, Shield, Terminal, Database, Globe, Cpu, Activity, Hammer, Chrome, Lock, Unlock, Zap, GitBranch, Sliders } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
 interface ChatItem {
@@ -18,15 +18,7 @@ interface AiAgentProps {
 }
 
 export default function AiAgent({ onBack }: AiAgentProps) {
-  const [chatHistory, setChatHistory] = useState<ChatItem[]>([
-    {
-      id: "1",
-      type: "text",
-      sender: "agent",
-      text: "Xin chào! Tôi là AI Agent hoạt động trên nền tảng Harness Core nâng cao. Mọi tiến trình tự trị, kế hoạch tác vụ và yêu cầu cấp quyền chạy công cụ sẽ được ghi nhận và phê duyệt trực tiếp ngay trong luồng hội thoại này.",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    }
-  ]);
+  const [chatHistory, setChatHistory] = useState<ChatItem[]>([]);
 
   const [inputVal, setInputVal] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -39,6 +31,38 @@ export default function AiAgent({ onBack }: AiAgentProps) {
     { id: "claude", name: "Claude" },
     { id: "gemini", name: "Gemini" }
   ]);
+
+  const [capabilities, setCapabilities] = useState(() => {
+    const saved = localStorage.getItem("alouette_capabilities");
+    return saved ? JSON.parse(saved) : {
+      sandbox: true,
+      terminal: true,
+      localData: true,
+      internet: false,
+      environment: true,
+      logSystem: true,
+      build: true,
+      browser: false,
+      interaction: "full", // "readonly" or "full"
+      postMini: false,
+      git: true
+    };
+  });
+
+  const toggleCapability = (key: string) => {
+    setCapabilities((prev: any) => {
+      const next = { ...prev };
+      if (key === "interaction") {
+        next.interaction = prev.interaction === "full" ? "readonly" : "full";
+      } else {
+        next[key] = !prev[key];
+      }
+      localStorage.setItem("alouette_capabilities", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const [capsOpen, setCapsOpen] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -285,15 +309,7 @@ export default function AiAgent({ onBack }: AiAgentProps) {
   const handleNewChat = async () => {
     try {
       await invoke("agent_reset_session");
-      setChatHistory([
-        {
-          id: Date.now().toString(),
-          type: "text",
-          sender: "agent",
-          text: "Timeline đã được làm mới sạch sẽ. Hãy đặt câu hỏi hoặc ra lệnh để Agent bắt đầu quy trình làm việc tự trị.",
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        }
-      ]);
+      setChatHistory([]);
       setSessionTitle(`Agent Active Session #${Math.floor(Math.random() * 100) + 1}`);
       setMenuOpen(false);
     } catch (err: any) {
@@ -308,6 +324,25 @@ export default function AiAgent({ onBack }: AiAgentProps) {
     }
   };
 
+
+  const capList = [
+    { key: "sandbox", label: "Sandbox", icon: Shield, isActive: capabilities.sandbox },
+    { key: "terminal", label: "Terminal", icon: Terminal, isActive: capabilities.terminal },
+    { key: "localData", label: "Local Data", icon: Database, isActive: capabilities.localData },
+    { key: "internet", label: "Internet", icon: Globe, isActive: capabilities.internet },
+    { key: "environment", label: "Môi trường", icon: Cpu, isActive: capabilities.environment },
+    { key: "logSystem", label: "Log System", icon: Activity, isActive: capabilities.logSystem },
+    { key: "build", label: "Build", icon: Hammer, isActive: capabilities.build },
+    { key: "browser", label: "Browser", icon: Chrome, isActive: capabilities.browser },
+    {
+      key: "interaction",
+      label: capabilities.interaction === "full" ? "Quyền: Ghi" : "Quyền: Đọc",
+      icon: capabilities.interaction === "full" ? Unlock : Lock,
+      isActive: capabilities.interaction === "full"
+    },
+    { key: "postMini", label: "Post Mini", icon: Zap, isActive: capabilities.postMini },
+    { key: "git", label: "Git", icon: GitBranch, isActive: capabilities.git }
+  ];
 
   return (
     <div style={{
@@ -624,6 +659,65 @@ export default function AiAgent({ onBack }: AiAgentProps) {
         flexDirection: "column",
         gap: "8px"
       }}>
+        {/* Capabilities Panel */}
+        {capsOpen && (
+          <div style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "5px",
+            paddingBottom: "8px",
+            borderBottom: "1px solid var(--border-primary)",
+            marginBottom: "2px"
+          }}>
+            {capList.map((item) => {
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => toggleCapability(item.key)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "3px 8px",
+                    fontSize: "10px",
+                    borderRadius: "3px",
+                    border: item.isActive 
+                      ? "1px solid var(--text-primary)" 
+                      : "1px solid var(--border-primary)",
+                    backgroundColor: item.isActive 
+                      ? "var(--bg-tertiary)" 
+                      : "transparent",
+                    color: item.isActive ? "var(--text-primary)" : "var(--text-secondary)",
+                    cursor: "pointer",
+                    transition: "all 0.1s ease-in-out",
+                    outline: "none",
+                    boxSizing: "border-box"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = item.isActive 
+                      ? "var(--border-primary)" 
+                      : "rgba(255, 255, 255, 0.04)";
+                    if (!item.isActive) {
+                      e.currentTarget.style.borderColor = "var(--text-muted)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = item.isActive 
+                      ? "var(--bg-tertiary)" 
+                      : "transparent";
+                    e.currentTarget.style.borderColor = item.isActive 
+                      ? "var(--text-primary)" 
+                      : "var(--border-primary)";
+                  }}
+                >
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Dynamic Auto-Resizing Textarea Row */}
         <form onSubmit={handleSend} style={{
           display: "flex",
@@ -682,6 +776,31 @@ export default function AiAgent({ onBack }: AiAgentProps) {
           paddingTop: "4px",
           borderTop: "1px solid rgba(255,255,255,0.02)"
         }}>
+          {/* Capabilities toggle button */}
+          <button
+            type="button"
+            title="Thiết lập quyền và môi trường chạy"
+            onClick={() => setCapsOpen(!capsOpen)}
+            style={{
+              backgroundColor: capsOpen ? "var(--bg-tertiary)" : "var(--bg-primary)",
+              border: "1px solid var(--border-primary)",
+              color: capsOpen ? "var(--text-primary)" : "var(--text-secondary)",
+              width: "20.5px",
+              height: "20.5px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.12s ease-in-out",
+              outline: "none",
+              boxSizing: "border-box",
+              padding: "0"
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--border-primary)"}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = capsOpen ? "var(--bg-tertiary)" : "var(--bg-primary)"}
+          >
+            <Sliders size={11} style={{ transform: capsOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s ease", color: capsOpen ? "var(--text-primary)" : "var(--text-secondary)" }} />
+          </button>
           {/* Model Selector dropdown */}
           <select
             value={selectedModel}

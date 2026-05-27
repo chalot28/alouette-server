@@ -495,6 +495,7 @@ interface CustomModel {
   apiKey: string;
   contextLimit: string;
   supportsVision: boolean;
+  apiStandard: string; // "openai" | "claude"
 }
 
 function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
@@ -547,6 +548,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
   const [custApiKey, setCustApiKey] = useState("");
   const [custLimit, setCustLimit] = useState("128k");
   const [custVision, setCustVision] = useState(false);
+  const [custStandard, setCustStandard] = useState("openai");
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Load configurations
@@ -565,6 +567,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
           supports_vision: boolean;
           temperature: number;
           top_p: number;
+          api_standard?: string;
         }
         interface RustCustomAiConfig {
           active_model: string;
@@ -580,7 +583,8 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
             endpoint: item.api_url,
             apiKey: item.api_key,
             contextLimit: `${Math.round(item.context_limit / 1000)}k`,
-            supportsVision: item.supports_vision
+            supportsVision: item.supports_vision,
+            apiStandard: item.api_standard || "openai"
           }));
           setCustomModels(loadedCustoms);
           
@@ -616,6 +620,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
         supports_vision: boolean;
         temperature: number;
         top_p: number;
+        api_standard: string;
       }
       const modelsMap: { [key: string]: RustModelConfig } = {};
       newCustoms.forEach(m => {
@@ -634,7 +639,8 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
           context_limit: limit,
           supports_vision: !!m.supportsVision,
           temperature: 0.2,
-          top_p: 0.95
+          top_p: 0.95,
+          api_standard: m.apiStandard || "openai"
         };
       });
 
@@ -676,6 +682,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
       apiKey: custApiKey,
       contextLimit: custLimit,
       supportsVision: custVision,
+      apiStandard: custStandard,
     };
 
     const updatedCustoms = [...customModels, newModel];
@@ -692,6 +699,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
     setCustApiKey("");
     setCustLimit("128k");
     setCustVision(false);
+    setCustStandard("openai");
     setShowAddForm(false);
 
     setToast({
@@ -823,6 +831,27 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
                   onChange={(e) => setCustLimit(e.target.value)}
                 />
               </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Chuẩn hóa API (API Standard)</label>
+                <select
+                  value={custStandard}
+                  onChange={(e) => setCustStandard(e.target.value)}
+                  style={{
+                    backgroundColor: "var(--bg-primary)",
+                    border: "1px solid var(--border-primary)",
+                    color: "var(--text-primary)",
+                    fontSize: "12px",
+                    padding: "6px 10px",
+                    height: "32px",
+                    outline: "none",
+                    cursor: "pointer"
+                  }}
+                >
+                  <option value="openai">OpenAI Standard (deepseek, ollama, groq...)</option>
+                  <option value="claude">Claude Standard (anthropic, bedrock...)</option>
+                </select>
+              </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -916,6 +945,17 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
                         {model.name}
                       </span>
                       
+                      <span style={{
+                        fontSize: "9px",
+                        padding: "1px 5px",
+                        backgroundColor: "var(--bg-tertiary)",
+                        color: "var(--text-secondary)",
+                        border: "1px solid var(--border-primary)",
+                        fontWeight: 600
+                      }}>
+                        Standard: {model.apiStandard === "claude" ? "Claude" : "OpenAI"}
+                      </span>
+
                       <span style={{
                         fontSize: "9px",
                         padding: "1px 5px",

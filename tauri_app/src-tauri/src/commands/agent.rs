@@ -69,6 +69,7 @@ pub async fn agent_send_message(
         supports_vision: true,
         temperature: 0.2,
         top_p: 0.95,
+        api_standard: Some("gemini".to_string()),
     });
 
     // Apply context limit to compact history if needed
@@ -93,15 +94,42 @@ pub async fn agent_send_message(
 
     let llm_reply = match api_key {
         Some(key) => {
-            call_gemini_api(
-                &key,
-                &model_to_use,
-                &model_config.api_url,
-                model_config.temperature,
-                model_config.top_p,
-                &system_prompt,
-                &session.history,
-            ).await
+            let standard = model_config.api_standard.clone().unwrap_or_else(|| "gemini".to_string());
+            match standard.as_str() {
+                "openai" => {
+                    call_openai_api(
+                        &key,
+                        &model_to_use,
+                        &model_config.api_url,
+                        model_config.temperature,
+                        model_config.top_p,
+                        &system_prompt,
+                        &session.history,
+                    ).await
+                }
+                "claude" => {
+                    call_claude_api(
+                        &key,
+                        &model_to_use,
+                        &model_config.api_url,
+                        model_config.temperature,
+                        model_config.top_p,
+                        &system_prompt,
+                        &session.history,
+                    ).await
+                }
+                _ => {
+                    call_gemini_api(
+                        &key,
+                        &model_to_use,
+                        &model_config.api_url,
+                        model_config.temperature,
+                        model_config.top_p,
+                        &system_prompt,
+                        &session.history,
+                    ).await
+                }
+            }
             .unwrap_or_else(|e| format!("<thought>API Error occurred: {}. Falling back to Harness simulation.</thought>\n<call:check_port>{{\"port\": 3000}}</call:check_port>", e))
         }
         None => {
@@ -291,6 +319,7 @@ pub struct ModelConfig {
     pub supports_vision: bool,
     pub temperature: f32,
     pub top_p: f32,
+    pub api_standard: Option<String>,
 }
 
 fn default_active_model() -> String {
@@ -341,6 +370,7 @@ fn load_custom_ai_config() -> CustomAiConfig {
             supports_vision: true,
             temperature: 0.2,
             top_p: 0.95,
+            api_standard: Some("gemini".to_string()),
         },
     );
 
@@ -411,6 +441,135 @@ async fn call_gemini_api(
     } else {
         let error_body = resp.text().await.unwrap_or_default();
         Err(format!("Gemini API returned error: {}", error_body))
+    }
+}
+
+/// Dynamic OpenAI API caller using reqwest
+async fn call_openai_api(
+    api_key: &str,
+    model: &str,
+    api_url: &str,
+    temperature: f32,
+    top_p: f32,
+    system_prompt: &str,
+    history: &[ChatMessage],
+) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let model_name = if model.is_empty() { "gpt-4o" } else { model };
+    
+    let url = if api_url.contains("/chat/completions") {
+        api_url.to_string()
+    } else {
+        format!("{}/chat/completions", api_url.trim_end_matches('/'))
+    };
+
+    let mut messages = Vec::new();
+    
+    // Add system prompt first
+    messages.push(json!({
+        "role": "system",
+        "content": system_prompt
+    }));
+
+    // Add history
+    for msg in history {
+        let role = if msg.role == "user" { "user" } else { "assistant" };
+        messages.push(json!({
+            "role": role,
+            "content": msg.content
+        }));
+    }
+
+    let payload = json!({
+        "model": model_name,
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": top_p
+    });
+
+    let mut req = client.post(&url)
+        .json(&payload);
+
+    if !api_key.is_empty() && api_key != "none" {
+        req = req.header("Authorization", format!("Bearer {}", api_key));
+    }
+
+    let resp = req.send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if resp.status().is_success() {
+        let json_val: Value = resp.json().await.map_err(|e| e.to_string())?;
+        let text = json_val["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| "Failed to parse text from OpenAI response".to_string())?;
+        Ok(text.to_string())
+    } else {
+        let error_body = resp.text().await.unwrap_or_default();
+        Err(format!("OpenAI API returned error: {}", error_body))
+    }
+}
+
+/// Dynamic Claude API caller using reqwest
+async fn call_claude_api(
+    api_key: &str,
+    model: &str,
+    api_url: &str,
+    temperature: f32,
+    top_p: f32,
+    system_prompt: &str,
+    history: &[ChatMessage],
+) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let model_name = if model.is_empty() { "claude-3-5-sonnet" } else { model };
+    
+    let url = if api_url.contains("/v1/messages") {
+        api_url.to_string()
+    } else {
+        format!("{}/v1/messages", api_url.trim_end_matches('/'))
+    };
+
+    let mut messages = Vec::new();
+    
+    // Add history
+    for msg in history {
+        let role = if msg.role == "user" { "user" } else { "assistant" };
+        messages.push(json!({
+            "role": role,
+            "content": msg.content
+        }));
+    }
+
+    let payload = json!({
+        "model": model_name,
+        "system": system_prompt,
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": top_p,
+        "max_tokens": 4096
+    });
+
+    let mut req = client.post(&url)
+        .json(&payload);
+
+    if !api_key.is_empty() && api_key != "none" {
+        req = req.header("x-api-key", api_key);
+    }
+    req = req.header("anthropic-version", "2023-06-01");
+
+    let resp = req.send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if resp.status().is_success() {
+        let json_val: Value = resp.json().await.map_err(|e| e.to_string())?;
+        let text = json_val["content"][0]["text"]
+            .as_str()
+            .ok_or_else(|| "Failed to parse text from Claude response".to_string())?;
+        Ok(text.to_string())
+    } else {
+        let error_body = resp.text().await.unwrap_or_default();
+        Err(format!("Claude API returned error: {}", error_body))
     }
 }
 
