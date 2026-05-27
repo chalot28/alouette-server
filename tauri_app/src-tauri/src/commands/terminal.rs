@@ -28,16 +28,15 @@ pub async fn write_to_terminal_session(
     session_id: String,
     input: String,
 ) -> Result<(), String> {
-    // 1. Immediately handle Ctrl+C to interrupt executing commands
+    // 1. Immediately handle Ctrl+C to interrupt executing commands safely
     if input.contains('\x03') {
         let mut pm = state.process_manager.lock().await;
         pm.clear_input_buf(&session_id);
-        let ctx = pm.get_terminal_write_context(&session_id)?;
-        let stdin_tx = ctx.stdin_sender.clone();
-        drop(pm);
-
-        let _ = stdin_tx.send("\x03".to_string()).await
-            .map_err(|e| format!("Terminal send Ctrl+C: {e}"))?;
+        if let Ok(ctx) = pm.get_terminal_write_context(&session_id) {
+            let stdin_tx = ctx.stdin_sender.clone();
+            drop(pm);
+            let _ = stdin_tx.send("\x03".to_string()).await;
+        }
         return Ok(());
     }
 
@@ -90,7 +89,10 @@ pub async fn write_to_terminal_session(
             }
         }
 
-        let ctx = pm.get_terminal_write_context(&session_id)?;
+        let ctx = match pm.get_terminal_write_context(&session_id) {
+            Ok(c) => c,
+            Err(_) => return Ok(()), // Return gracefully if session no longer exists
+        };
         out_tx = ctx.terminal_sender.clone();
         stdin_tx = ctx.stdin_sender.clone();
     }
@@ -119,8 +121,7 @@ pub async fn write_to_terminal_session(
             }
         }
         let full = allowed_cmd + "\r";
-        let _ = stdin_tx.send(full).await
-            .map_err(|e| format!("Terminal send: {e}"))?;
+        let _ = stdin_tx.send(full).await;
         return Ok(());
     }
 
