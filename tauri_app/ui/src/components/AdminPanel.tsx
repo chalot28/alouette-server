@@ -850,6 +850,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
                 >
                   <option value="openai">OpenAI Standard (deepseek, ollama, groq...)</option>
                   <option value="claude">Claude Standard (anthropic, bedrock...)</option>
+                  <option value="gemini">Gemini Standard (Google AI Studio)</option>
                 </select>
               </div>
             </div>
@@ -953,7 +954,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
                         border: "1px solid var(--border-primary)",
                         fontWeight: 600
                       }}>
-                        Standard: {model.apiStandard === "claude" ? "Claude" : "OpenAI"}
+                        Standard: {model.apiStandard === "claude" ? "Claude" : model.apiStandard === "gemini" ? "Gemini" : "OpenAI"}
                       </span>
 
                       <span style={{

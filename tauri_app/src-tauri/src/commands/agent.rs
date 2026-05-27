@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{State, WebviewWindow, Emitter};
 use serde::{Serialize, Deserialize};
 use serde_json::{json, Value};
 use core_engine::{AgentHarness, ChatMessage, AgentSession};
@@ -30,9 +30,13 @@ pub async fn agent_send_message(
     message: String,
     model: String,
     mode: String,
+    active_cwd: Option<String>,
+    window: WebviewWindow,
     _app_state: State<'_, AppState>,
 ) -> Result<AgentResponse, String> {
-    let workspace = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let workspace = active_cwd
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
     let harness = AgentHarness::new(&workspace);
 
     // Initialize or load session (in a short scope to release MutexGuard before async awaits)
@@ -129,12 +133,10 @@ pub async fn agent_send_message(
                         &session.history,
                     ).await
                 }
-            }
-            .unwrap_or_else(|e| format!("<thought>API Error occurred: {}. Falling back to Harness simulation.</thought>\n<call:check_port>{{\"port\": 3000}}</call:check_port>", e))
+            }?
         }
         None => {
-            // Intelligent Harness Simulator if no API key is specified
-            simulate_harness_response(&message)
+            return Err("API Key chưa được thiết lập. Vui lòng vào phần Setting (Cài đặt) để cấu hình API Key trước khi sử dụng AI Agent.".to_string());
         }
     };
 
@@ -160,8 +162,20 @@ pub async fn agent_send_message(
             // Autonomous execute and continue
             let activity_text = format!("🔍 Harness executing tool [自主运行]: {} with arguments: {}", tool.name, tool.arguments);
             
+            // Emit executing activity
+            let _ = window.emit("agent-activity", serde_json::json!({
+                "status": "executing",
+                "tool_name": tool.name.clone(),
+                "args": tool.arguments.to_string(),
+            }));
+            
             // Execute tool (Awaiting here is safe since MutexGuard is released)
             let result = harness.execute_tool(&session.session_id, &tool).await.unwrap_or_else(|e| e);
+            
+            // Emit idle activity
+            let _ = window.emit("agent-activity", serde_json::json!({
+                "status": "idle",
+            }));
             
             // Push observation to history and save
             session.history.push(ChatMessage {
@@ -208,9 +222,13 @@ pub async fn agent_send_message(
 #[tauri::command]
 pub async fn agent_approve_tool(
     approved: bool,
+    active_cwd: Option<String>,
+    window: WebviewWindow,
     _app_state: State<'_, AppState>,
 ) -> Result<AgentResponse, String> {
-    let workspace = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let workspace = active_cwd
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
     let harness = AgentHarness::new(&workspace);
 
     let session_store = get_session_store();
@@ -231,8 +249,20 @@ pub async fn agent_approve_tool(
     };
 
     if approved {
+        // Emit executing activity
+        let _ = window.emit("agent-activity", serde_json::json!({
+            "status": "executing",
+            "tool_name": tool.name.clone(),
+            "args": tool.arguments.to_string(),
+        }));
+
         // Execute tool (Awaiting here is safe since MutexGuard is released)
         let result = harness.execute_tool(&session.session_id, &tool).await.unwrap_or_else(|e| e);
+        
+        // Emit idle activity
+        let _ = window.emit("agent-activity", serde_json::json!({
+            "status": "idle",
+        }));
 
         // Add to history as observation
         session.history.push(ChatMessage {

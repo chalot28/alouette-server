@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Plus, Send, RefreshCw, Layers, History, ArrowLeft, Shield, Terminal, Database, Globe, Cpu, Activity, Hammer, Chrome, Lock, Unlock, Zap, GitBranch, Sliders } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 interface ChatItem {
   id: string;
@@ -15,10 +16,12 @@ interface ChatItem {
 
 interface AiAgentProps {
   onBack: () => void;
+  activeProjectCwd?: string;
 }
 
-export default function AiAgent({ onBack }: AiAgentProps) {
+export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
   const [chatHistory, setChatHistory] = useState<ChatItem[]>([]);
+  const [activeTool, setActiveTool] = useState<{ status: "executing" | "idle"; tool_name?: string; args?: string }>({ status: "idle" });
 
   const [inputVal, setInputVal] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -147,6 +150,20 @@ export default function AiAgent({ onBack }: AiAgentProps) {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory, isTyping]);
 
+  // Listen to agent tool execution activity
+  useEffect(() => {
+    let unlistenFn;
+    const setupListener = async () => {
+      unlistenFn = await listen("agent-activity", (event) => {
+        setActiveTool(event.payload);
+      });
+    };
+    setupListener();
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  }, []);
+
   // Auto-resize textarea height
   useEffect(() => {
     if (textareaRef.current) {
@@ -199,6 +216,7 @@ export default function AiAgent({ onBack }: AiAgentProps) {
         message: messageText,
         model: selectedModel,
         mode: selectedMode,
+        activeCwd: activeProjectCwd,
       });
 
       setIsTyping(false);
@@ -258,7 +276,7 @@ export default function AiAgent({ onBack }: AiAgentProps) {
     try {
       const response: {
         text?: string;
-      } = await invoke("agent_approve_tool", { approved: true });
+      } = await invoke("agent_approve_tool", { approved: true, activeCwd: activeProjectCwd });
 
       setIsTyping(false);
 
@@ -288,7 +306,7 @@ export default function AiAgent({ onBack }: AiAgentProps) {
     try {
       const response: {
         text?: string;
-      } = await invoke("agent_approve_tool", { approved: false });
+      } = await invoke("agent_approve_tool", { approved: false, activeCwd: activeProjectCwd });
 
       setIsTyping(false);
 
@@ -643,8 +661,31 @@ export default function AiAgent({ onBack }: AiAgentProps) {
         })}
 
         {isTyping && (
-          <div style={{ display: "flex", gap: "4px", fontSize: "10px", color: "var(--text-muted)" }}>
-            <span>Agent đang xử lý...</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {activeTool.status === "executing" ? (
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 12px",
+                backgroundColor: "rgba(255, 255, 255, 0.03)",
+                border: "1px solid var(--border-primary)",
+                fontSize: "11px",
+                fontFamily: "var(--font-mono)",
+                color: "var(--text-primary)",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
+              }}>
+                <RefreshCw size={12} className="animate-spin" style={{ color: "var(--text-secondary)", marginRight: "4px" }} />
+                <span>AI đang chạy công cụ: <strong style={{ color: "var(--text-primary)" }}>{activeTool.tool_name}</strong></span>
+                <span style={{ fontSize: "10px", color: "var(--text-muted)", wordBreak: "break-all" }}>
+                  ({activeTool.args})
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: "4px", fontSize: "10px", color: "var(--text-muted)" }}>
+                <span>Agent đang xử lý...</span>
+              </div>
+            )}
           </div>
         )}
         <div ref={chatEndRef} />

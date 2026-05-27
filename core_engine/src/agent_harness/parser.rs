@@ -50,10 +50,27 @@ pub fn parse_model_response(response: &str) -> ParsedResponse {
         }
     }
 
+    // Fallback: Parse ReAct/LangChain JSON action block if no XML tool call was found
+    if tool_call.is_none() {
+        if let Some(json_tool) = parse_json_action_block(response) {
+            tool_call = Some(json_tool);
+        }
+    }
+
     // 3. Extract plain text (any conversational content outside <thought> and <call> blocks)
-    let clean_text = strip_tags(response);
-    if !clean_text.is_empty() {
-        plain_text = Some(clean_text);
+    let mut clean_text = strip_tags(response);
+    if let Some(ref tc) = tool_call {
+        // If the tool call was parsed as a JSON fallback block, strip it from the conversational response
+        if let Some(idx) = clean_text.find(&tc.raw_arguments) {
+            clean_text.drain(idx..(idx + tc.raw_arguments.len()));
+        }
+        // Remove markdown block backticks if they are leaking
+        clean_text = clean_text.replace("```json", "").replace("```", "");
+    }
+    
+    let clean_text_trimmed = clean_text.trim().to_string();
+    if !clean_text_trimmed.is_empty() {
+        plain_text = Some(clean_text_trimmed);
     }
 
     ParsedResponse {
@@ -157,4 +174,83 @@ fn strip_tags(content: &str) -> String {
     }
 
     stripped.trim().to_string()
+}
+
+/// Defensive fallback scanner to parse ReAct/LangChain style JSON action blocks
+fn parse_json_action_block(content: &str) -> Option<ToolCall> {
+    let cleaned = content.trim();
+    let mut json_candidates = Vec::new();
+    let mut start = 0;
+    
+    // Scan for markdown code blocks
+    while let Some(block_start) = cleaned[start..].find("```") {
+        let abs_start = start + block_start + 3;
+        let actual_start = if let Some(newline_idx) = cleaned[abs_start..].find('\n') {
+            abs_start + newline_idx + 1
+        } else {
+            abs_start
+        };
+        if let Some(block_end) = cleaned[actual_start..].find("```") {
+            let abs_end = actual_start + block_end;
+            json_candidates.push(cleaned[actual_start..abs_end].trim().to_string());
+            start = abs_end + 3;
+        } else {
+            break;
+        }
+    }
+    
+    // If no markdown blocks, try finding matching curly braces
+    if json_candidates.is_empty() {
+        if let Some(first_brace) = cleaned.find('{') {
+            if let Some(last_brace) = cleaned.rfind('}') {
+                if last_brace > first_brace {
+                    json_candidates.push(cleaned[first_brace..=last_brace].trim().to_string());
+                }
+            }
+        }
+    }
+
+    for candidate in json_candidates {
+        let repaired = repair_json_content(&candidate);
+        if let Ok(parsed_json) = serde_json::from_str::<Value>(&repaired) {
+            if let Some(action) = parsed_json.get("action").and_then(|v| v.as_str()) {
+                if let Some(action_input) = parsed_json.get("action_input") {
+                    let tool_name = action.to_string();
+                    let mut arguments = action_input.clone();
+                    
+                    // Translate arguments structure from LangChain/ReAct string inputs to system specs
+                    if tool_name == "read_file" || tool_name == "write_file" {
+                        if let Some(path_str) = action_input.as_str() {
+                            arguments = serde_json::json!({ "path": path_str });
+                        }
+                    } else if tool_name == "execute_command" {
+                        if let Some(cmd_str) = action_input.as_str() {
+                            let parts: Vec<&str> = cmd_str.split_whitespace().collect();
+                            if !parts.is_empty() {
+                                let command = parts[0].to_string();
+                                let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+                                arguments = serde_json::json!({
+                                    "command": command,
+                                    "args": args
+                                });
+                            }
+                        }
+                    } else if tool_name == "get_project_files" {
+                        if let Some(path_str) = action_input.as_str() {
+                            arguments = serde_json::json!({ "path": path_str });
+                        } else if action_input.is_null() {
+                            arguments = serde_json::json!({ "path": "." });
+                        }
+                    }
+                    
+                    return Some(ToolCall {
+                        name: tool_name,
+                        arguments,
+                        raw_arguments: candidate,
+                    });
+                }
+            }
+        }
+    }
+    None
 }

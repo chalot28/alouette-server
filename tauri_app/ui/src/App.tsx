@@ -821,7 +821,10 @@ export default function App() {
           />
 
           {isAiViewActive ? (
-            <AiAgent onBack={() => setIsAiViewActive(false)} />
+            <AiAgent 
+              onBack={() => setIsAiViewActive(false)} 
+              activeProjectCwd={activeProject?.cwd}
+            />
           ) : (
             <>
               {/* Zone 3: Configuration & Watchdog Setup */}
