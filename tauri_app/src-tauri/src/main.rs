@@ -132,7 +132,11 @@ fn main() {
             commands::language::save_language_runtime,
             commands::language::delete_language_runtime,
             commands::language::install_proto_tool,
+            commands::agent::agent_send_message,
+            commands::agent::agent_approve_tool,
+            commands::agent::agent_reset_session,
         ])
+
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(move |app_handle, event| {

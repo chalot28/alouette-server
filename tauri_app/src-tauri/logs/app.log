@@ -913,3 +913,8 @@
 [2026-05-27 12:24:46.283] Reading file: D:/server_dvtn/README.md
 [2026-05-27 12:30:57.124] Reading file: D:/server_dvtn/models.json
 [2026-05-27 13:11:13.939] Reading file: D:/server_dvtn/.eslintrc.json
+[2026-05-27 18:13:18.510] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-27 18:13:18.515] Proto CLI verified and active.
+[2026-05-27 18:13:18.565] Toolchains checked / verified stable.
+[2026-05-27 18:13:21.850] Cloudflared binary verified / updated successfully.
+[2026-05-27 18:13:21.851] Isolated environment initialized successfully!

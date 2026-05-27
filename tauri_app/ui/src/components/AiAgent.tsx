@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Plus, Send, RefreshCw, Layers, History, ArrowLeft } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 
 interface ChatItem {
   id: string;
@@ -22,23 +23,7 @@ export default function AiAgent({ onBack }: AiAgentProps) {
       id: "1",
       type: "text",
       sender: "agent",
-      text: "Xin chào! Tôi là AI Agent đồng hành cùng dự án. Mọi tiến trình tự trị, kế hoạch tác vụ và yêu cầu cấp quyền chạy công cụ sẽ được ghi nhận và phê duyệt trực tiếp ngay trong luồng hội thoại này.",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-    {
-      id: "2",
-      type: "agent_activity",
-      sender: "agent",
-      text: "🔍 Đang khởi chạy quy trình quét d:\\alouette-server...\n📄 Phân tích cấu trúc thư mục và quy tắc AI.json thành công.",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-    {
-      id: "3",
-      type: "tool_request",
-      sender: "agent",
-      toolName: "port_scanner::check_port",
-      args: "{ port: 3000, host: '127.0.0.1' }",
-      toolStatus: "waiting",
+      text: "Xin chào! Tôi là AI Agent hoạt động trên nền tảng Harness Core nâng cao. Mọi tiến trình tự trị, kế hoạch tác vụ và yêu cầu cấp quyền chạy công cụ sẽ được ghi nhận và phê duyệt trực tiếp ngay trong luồng hội thoại này.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }
   ]);
@@ -78,7 +63,7 @@ export default function AiAgent({ onBack }: AiAgentProps) {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputVal.trim()) return;
 
@@ -91,6 +76,7 @@ export default function AiAgent({ onBack }: AiAgentProps) {
     };
 
     setChatHistory((prev) => [...prev, userMsg]);
+    const messageText = inputVal;
     setInputVal("");
     setIsTyping(true);
 
@@ -98,60 +84,142 @@ export default function AiAgent({ onBack }: AiAgentProps) {
       textareaRef.current.style.height = "auto";
     }
 
-    setTimeout(() => {
+    try {
+      const response: {
+        session_id: string;
+        reply_type: "text" | "tool_request" | "agent_activity";
+        text?: string;
+        tool_name?: string;
+        args?: string;
+        pending_id?: string;
+      } = await invoke("agent_send_message", {
+        message: messageText,
+        model: selectedModel,
+        mode: selectedMode,
+      });
+
       setIsTyping(false);
-      const agentReply: ChatItem = {
-        id: (Date.now() + 1).toString(),
+
+      if (response.reply_type === "tool_request") {
+        const toolMsg: ChatItem = {
+          id: response.pending_id || Date.now().toString(),
+          type: "tool_request",
+          sender: "agent",
+          toolName: response.tool_name,
+          args: response.args,
+          toolStatus: "waiting",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setChatHistory((prev) => [...prev, toolMsg]);
+      } else if (response.reply_type === "agent_activity") {
+        const activityMsg: ChatItem = {
+          id: Date.now().toString(),
+          type: "agent_activity",
+          sender: "agent",
+          text: response.text,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setChatHistory((prev) => [...prev, activityMsg]);
+      } else {
+        const agentMsg: ChatItem = {
+          id: Date.now().toString(),
+          type: "text",
+          sender: "agent",
+          text: response.text || "Tôi đã ghi nhận yêu cầu.",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setChatHistory((prev) => [...prev, agentMsg]);
+      }
+    } catch (err: any) {
+      setIsTyping(false);
+      const errorMsg: ChatItem = {
+        id: Date.now().toString(),
         type: "text",
         sender: "agent",
-        text: `Đã ghi nhận yêu cầu chạy ở chế độ [${selectedMode === "autonomous" ? "Tự trị (Autonomous)" : "Hỏi trước (Interactive)"}] bằng mô hình [${selectedModel.toUpperCase()}]. Hệ thống đang liên tục giám sát an toàn.`,
+        text: `Lỗi kết nối Harness Backend: ${err?.message || err}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
-      setChatHistory((prev) => [...prev, agentReply]);
-    }, 1000);
+      setChatHistory((prev) => [...prev, errorMsg]);
+    }
   };
 
-  const handleApproveTool = (id: string) => {
+  const handleApproveTool = async (id: string) => {
     setChatHistory((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, toolStatus: "approved" as const } : item
       )
     );
 
-    const approvedItem = chatHistory.find((item) => item.id === id);
-    
-    setTimeout(() => {
-      const toolSuccessMsg: ChatItem = {
+    setIsTyping(true);
+
+    try {
+      const response: {
+        text?: string;
+      } = await invoke("agent_approve_tool", { approved: true });
+
+      setIsTyping(false);
+
+      const successMsg: ChatItem = {
         id: Date.now().toString(),
         type: "agent_activity",
         sender: "agent",
-        text: `✓ Đã chạy thành công công cụ: ${approvedItem?.toolName}\nKết quả: Port 3000 đang được liên kết sạch sẽ bởi PID 8420.`,
+        text: response.text || "✓ Đã chạy công cụ thành công.",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
-      setChatHistory((prev) => [...prev, toolSuccessMsg]);
-    }, 400);
+      setChatHistory((prev) => [...prev, successMsg]);
+    } catch (err: any) {
+      setIsTyping(false);
+      alert(`Lỗi khi phê duyệt tool: ${err?.message || err}`);
+    }
   };
 
-  const handleRejectTool = (id: string) => {
+  const handleRejectTool = async (id: string) => {
     setChatHistory((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, toolStatus: "rejected" as const } : item
       )
     );
+
+    setIsTyping(true);
+
+    try {
+      const response: {
+        text?: string;
+      } = await invoke("agent_approve_tool", { approved: false });
+
+      setIsTyping(false);
+
+      const rejectMsg: ChatItem = {
+        id: Date.now().toString(),
+        type: "agent_activity",
+        sender: "agent",
+        text: response.text || "✕ Từ chối thực thi công cụ.",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setChatHistory((prev) => [...prev, rejectMsg]);
+    } catch (err: any) {
+      setIsTyping(false);
+      alert(`Lỗi khi từ chối tool: ${err?.message || err}`);
+    }
   };
 
-  const handleNewChat = () => {
-    setChatHistory([
-      {
-        id: Date.now().toString(),
-        type: "text",
-        sender: "agent",
-        text: "Timeline đã được làm mới sạch sẽ. Hãy đặt câu hỏi hoặc ra lệnh để Agent bắt đầu quy trình làm việc tự trị.",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      }
-    ]);
-    setSessionTitle(`Agent Active Session #${Math.floor(Math.random() * 100) + 1}`);
-    setMenuOpen(false);
+  const handleNewChat = async () => {
+    try {
+      await invoke("agent_reset_session");
+      setChatHistory([
+        {
+          id: Date.now().toString(),
+          type: "text",
+          sender: "agent",
+          text: "Timeline đã được làm mới sạch sẽ. Hãy đặt câu hỏi hoặc ra lệnh để Agent bắt đầu quy trình làm việc tự trị.",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }
+      ]);
+      setSessionTitle(`Agent Active Session #${Math.floor(Math.random() * 100) + 1}`);
+      setMenuOpen(false);
+    } catch (err: any) {
+      alert(`Lỗi khi reset session: ${err?.message || err}`);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -160,6 +228,7 @@ export default function AiAgent({ onBack }: AiAgentProps) {
       handleSend(e);
     }
   };
+
 
   return (
     <div style={{
