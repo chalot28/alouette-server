@@ -61,10 +61,10 @@ function ZenIcon({ size = 14 }: { size?: number }) {
 function LayoutLeftIcon({ active, size = 15 }: { active: boolean; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" />
-      <line x1="5.5" y1="1.5" x2="5.5" y2="14.5" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" opacity="0.4" />
+      <line x1="5.5" y1="1.5" x2="5.5" y2="14.5" stroke="currentColor" strokeWidth="1.2" opacity="0.4" />
       {active && (
-        <rect x="2.1" y="2.1" width="2.8" height="11.8" fill="currentColor" opacity="0.8" />
+        <rect x="2.1" y="2.1" width="2.8" height="11.8" fill="currentColor" />
       )}
     </svg>
   );
@@ -73,10 +73,10 @@ function LayoutLeftIcon({ active, size = 15 }: { active: boolean; size?: number 
 function LayoutBottomIcon({ active, size = 15 }: { active: boolean; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" />
-      <line x1="1.5" y1="10.5" x2="14.5" y2="10.5" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" opacity="0.4" />
+      <line x1="1.5" y1="10.5" x2="14.5" y2="10.5" stroke="currentColor" strokeWidth="1.2" opacity="0.4" />
       {active && (
-        <rect x="2.1" y="11.1" width="11.8" height="2.8" fill="currentColor" opacity="0.8" />
+        <rect x="2.1" y="11.1" width="11.8" height="2.8" fill="currentColor" />
       )}
     </svg>
   );
@@ -85,10 +85,10 @@ function LayoutBottomIcon({ active, size = 15 }: { active: boolean; size?: numbe
 function LayoutRightIcon({ active, size = 15 }: { active: boolean; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" />
-      <line x1="10.5" y1="1.5" x2="10.5" y2="14.5" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" opacity="0.4" />
+      <line x1="10.5" y1="1.5" x2="10.5" y2="14.5" stroke="currentColor" strokeWidth="1.2" opacity="0.4" />
       {active && (
-        <rect x="11.1" y="2.1" width="2.8" height="11.8" fill="currentColor" opacity="0.8" />
+        <rect x="11.1" y="2.1" width="2.8" height="11.8" fill="currentColor" />
       )}
     </svg>
   );

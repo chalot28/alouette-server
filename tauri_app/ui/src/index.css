@@ -1421,6 +1421,7 @@ body {
 .nav-tab-btn {
     background: none;
     border: none;
+    outline: none;
     color: var(--text-secondary);
     padding: 0 12px;
     font-size: 11px;
@@ -1431,6 +1432,12 @@ body {
     align-items: center;
     gap: 5px;
     transition: all var(--transition-fast);
+}
+
+.nav-tab-btn:focus,
+.nav-tab-btn:focus-visible {
+    outline: none !important;
+    border: none !important;
 }
 
 .nav-tab-btn:hover {
