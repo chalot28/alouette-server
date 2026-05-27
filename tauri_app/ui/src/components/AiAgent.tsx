@@ -30,14 +30,93 @@ export default function AiAgent({ onBack }: AiAgentProps) {
 
   const [inputVal, setInputVal] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("gemini-1.5-pro");
+  const [selectedModel, setSelectedModel] = useState("deepseek");
   const [selectedMode, setSelectedMode] = useState("interactive");
   const [menuOpen, setMenuOpen] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("Agent Active Session #1");
+  const [availableModels, setAvailableModels] = useState<{ id: string; name: string }[]>([
+    { id: "deepseek", name: "DeepSeek" },
+    { id: "claude", name: "Claude" },
+    { id: "gemini", name: "Gemini" }
+  ]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Dynamically load active models from localStorage
+  useEffect(() => {
+    const loadActiveModels = () => {
+      const savedActive = localStorage.getItem("alouette_active_models");
+      const activeIds: string[] = savedActive ? JSON.parse(savedActive) : ["deepseek", "claude", "gemini"];
+      
+      const savedCustom = localStorage.getItem("alouette_custom_models");
+      const customs: any[] = savedCustom ? JSON.parse(savedCustom) : [];
+
+      const list: { id: string; name: string }[] = [];
+      
+      // Full lists of the strongest 2026 models mapped to active providers
+      const providerModelsMapping: { [providerId: string]: { id: string; name: string }[] } = {
+        deepseek: [
+          { id: "deepseek-v4-pro", name: "DeepSeek-V4 Pro (2026)" },
+          { id: "deepseek-v4", name: "DeepSeek-V4" },
+          { id: "deepseek-r1", name: "DeepSeek-R1 (Reasoning)" }
+        ],
+        "gpt-chatgpt": [
+          { id: "gpt-5.5", name: "GPT-5.5 (2026)" },
+          { id: "o1-pro", name: "o1-Pro (Reasoning)" },
+          { id: "o3-mini", name: "o3-Mini (Coding)" },
+          { id: "gpt-4o", name: "GPT-4o (Vision)" }
+        ],
+        gemini: [
+          { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash (2026)" },
+          { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro" }
+        ],
+        claude: [
+          { id: "claude-opus-4.7", name: "Claude Opus 4.7 (2026)" },
+          { id: "claude-sonnet-5", name: "Claude Sonnet 5" }
+        ],
+        qwen: [
+          { id: "qwen-3.7-max", name: "Qwen 3.7 Max (2026)" }
+        ]
+      };
+
+      // Populate predefined models if the specific model ID is active in activeIds
+      Object.keys(providerModelsMapping).forEach(provId => {
+        providerModelsMapping[provId].forEach(m => {
+          if (activeIds.includes(m.id)) {
+            list.push(m);
+          }
+        });
+      });
+
+      // Populate custom models
+      customs.forEach(c => {
+        if (activeIds.includes(c.id)) {
+          list.push({ id: c.id, name: `${c.provider} - ${c.name}` });
+        }
+      });
+
+      if (list.length > 0) {
+        setAvailableModels(list);
+        setSelectedModel(prev => {
+          if (list.some(m => m.id === prev)) return prev;
+          return list[0].id;
+        });
+      }
+    };
+
+    loadActiveModels();
+    
+    // Listening for instant saves from Admin panel
+    window.addEventListener("storage", loadActiveModels);
+    const interval = setInterval(loadActiveModels, 1000);
+
+    return () => {
+      window.removeEventListener("storage", loadActiveModels);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Auto scroll
   useEffect(() => {
@@ -617,10 +696,9 @@ export default function AiAgent({ onBack }: AiAgentProps) {
               cursor: "pointer"
             }}
           >
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-            <option value="claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-            <option value="gpt-4o">GPT-4o</option>
+            {availableModels.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
           </select>
 
           {/* Agent Mode selector dropdown */}

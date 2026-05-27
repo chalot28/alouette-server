@@ -50,6 +50,8 @@ import {
   Check,
   Monitor,
   Smartphone,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import type { AppSettings } from "../types";
 
@@ -292,7 +294,7 @@ export default function AdminPanel() {
           {activeDock === "project" && <ProjectIdentifierSection />}
           {activeDock === "user" && <UserSection />}
           {activeDock === "git" && <GitSection />}
-          {activeDock === "ai" && <AISection />}
+          {activeDock === "ai" && <AISection setToast={setToast} />}
           {activeDock === "environment" && <EnvironmentSection />}
           {activeDock === "build" && <BuildSection />}
           {activeDock === "sandbox" && <SandboxSection />}
@@ -428,40 +430,575 @@ function GitSection() {
   );
 }
 
-function AISection() {
+interface PredefinedModel {
+  provider: string;
+  id: string;
+  models: {
+    id: string;
+    name: string;
+    context: string;
+    vision?: boolean;
+    desc: string;
+  }[];
+}
+
+const PREDEFINED_MODELS: PredefinedModel[] = [
+  {
+    provider: "DeepSeek",
+    id: "deepseek",
+    models: [
+      { id: "deepseek-v4-pro", name: "DeepSeek-V4 Pro", context: "1000k", desc: "Mô hình nguồn mở hàng đầu năm 2026, tối ưu hóa suy luận logic vượt bậc." },
+      { id: "deepseek-v4", name: "DeepSeek-V4", context: "1000k", desc: "Mô hình suy luận tốc độ nhanh và tối ưu hóa chi phí." },
+      { id: "deepseek-r1", name: "DeepSeek-R1 (Reasoning)", context: "1000k", desc: "Mô hình suy luận sâu chuyên biệt cho toán học và code." }
+    ]
+  },
+  {
+    provider: "Claude",
+    id: "claude",
+    models: [
+      { id: "claude-opus-4.7", name: "Claude Opus 4.7", context: "200k", vision: true, desc: "Flagship tối tân nhất của Anthropic năm 2026, lập trình tự trị và lập luận đỉnh cao." },
+      { id: "claude-sonnet-5", name: "Claude Sonnet 5", context: "200k", vision: true, desc: "Mô hình cân bằng hoàn hảo giữa tốc độ và trí tuệ." }
+    ]
+  },
+  {
+    provider: "ChatGPT",
+    id: "gpt-chatgpt",
+    models: [
+      { id: "gpt-5.5", name: "GPT-5.5", context: "200k", vision: true, desc: "Thế hệ siêu trí tuệ mới của OpenAI năm 2026, suy luận đa phương thức chính xác tuyệt đối." },
+      { id: "o1-pro", name: "o1-Pro (Reasoning)", context: "200k", desc: "Mô hình suy luận chuỗi ý nghĩ chuyên sâu cho toán học và lý thuyết." },
+      { id: "o3-mini", name: "o3-Mini (Coding)", context: "200k", desc: "Mô hình suy luận nhanh tối ưu cho lập trình phần mềm." },
+      { id: "gpt-4o", name: "GPT-4o (Vision)", context: "128k", vision: true, desc: "Mô hình đa phương thức linh hoạt cho các tác vụ tổng quát." }
+    ]
+  },
+  {
+    provider: "Gemini",
+    id: "gemini",
+    models: [
+      { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", context: "1000k", vision: true, desc: "Mô hình tốc độ ánh sáng năm 2026 của Google, context cực rộng và tối ưu DEV agent." },
+      { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", context: "1000k", vision: true, desc: "Mô hình thông minh cao cấp của Google cho phân tích phức tạp." }
+    ]
+  },
+  {
+    provider: "Qwen",
+    id: "qwen",
+    models: [
+      { id: "qwen-3.7-max", name: "Qwen 3.7 Max", context: "128k", desc: "Siêu mô hình thế hệ mới từ Alibaba, vô địch về toán học và suy luận logic." }
+    ]
+  }
+];
+
+interface CustomModel {
+  id: string;
+  provider: string;
+  name: string;
+  endpoint: string;
+  apiKey: string;
+  contextLimit: string;
+  supportsVision: boolean;
+}
+
+function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
+  const [activeModels, setActiveModels] = useState<string[]>(["deepseek-v4-pro", "claude-opus-4.7", "gemini-3.5-flash"]);
+  const [customModels, setCustomModels] = useState<CustomModel[]>([]);
+  const [expandedProviders, setExpandedProviders] = useState<string[]>([]);
+
+  const toggleExpandProvider = (provId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedProviders((prev) =>
+      prev.includes(provId) ? prev.filter((id) => id !== provId) : [...prev, provId]
+    );
+  };
+
+  const handleToggleProvider = (providerId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const provider = PREDEFINED_MODELS.find(p => p.id === providerId);
+    if (!provider) return;
+
+    const modelIds = provider.models.map(m => m.id);
+    const anyActive = modelIds.some(id => activeModels.includes(id));
+
+    let updatedActive: string[];
+    if (anyActive) {
+      // Turn off all models for this provider
+      updatedActive = activeModels.filter(id => !modelIds.includes(id));
+    } else {
+      // Turn on all models for this provider
+      updatedActive = [...activeModels, ...modelIds];
+    }
+
+    setActiveModels(updatedActive);
+    autoSave(updatedActive, customModels);
+  };
+
+  const handleToggleModel = (modelId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updatedActive = activeModels.includes(modelId)
+      ? activeModels.filter((id) => id !== modelId)
+      : [...activeModels, modelId];
+    
+    setActiveModels(updatedActive);
+    autoSave(updatedActive, customModels);
+  };
+
+  // Custom model form fields
+  const [custProvider, setCustProvider] = useState("");
+  const [custName, setCustName] = useState("");
+  const [custEndpoint, setCustEndpoint] = useState("");
+  const [custApiKey, setCustApiKey] = useState("");
+  const [custLimit, setCustLimit] = useState("128k");
+  const [custVision, setCustVision] = useState(false);
+
+  // Load configurations
+  useEffect(() => {
+    const savedActive = localStorage.getItem("alouette_active_models");
+    if (savedActive) setActiveModels(JSON.parse(savedActive));
+
+    const savedCustom = localStorage.getItem("alouette_custom_models");
+    if (savedCustom) setCustomModels(JSON.parse(savedCustom));
+  }, []);
+
+  // Instant Auto-Save Helper
+  const autoSave = (newActive: string[], newCustoms: CustomModel[]) => {
+    localStorage.setItem("alouette_active_models", JSON.stringify(newActive));
+    localStorage.setItem("alouette_custom_models", JSON.stringify(newCustoms));
+    
+    // Trigger dynamic storage event for current window
+    window.dispatchEvent(new Event("storage"));
+  };
+
+
+
+  const handleAddCustomModel = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!custProvider || !custName || !custEndpoint) {
+      alert("Vui lòng nhập đầy đủ Tên nhà cung cấp, Tên model và Endpoint.");
+      return;
+    }
+
+    const newModel: CustomModel = {
+      id: `custom-${Date.now()}`,
+      provider: custProvider,
+      name: custName,
+      endpoint: custEndpoint,
+      apiKey: custApiKey,
+      contextLimit: custLimit,
+      supportsVision: custVision,
+    };
+
+    const updatedCustoms = [...customModels, newModel];
+    const updatedActive = [...activeModels, newModel.id];
+
+    setCustomModels(updatedCustoms);
+    setActiveModels(updatedActive);
+    autoSave(updatedActive, updatedCustoms);
+
+    // Reset form
+    setCustProvider("");
+    setCustName("");
+    setCustEndpoint("");
+    setCustApiKey("");
+    setCustLimit("128k");
+    setCustVision(false);
+
+    setToast({
+      message: "✓ Đã tự động lưu & cập nhật Model tùy chỉnh!",
+      type: "success"
+    });
+  };
+
+  const handleDeleteCustomModel = (id: string) => {
+    const updatedCustoms = customModels.filter((m) => m.id !== id);
+    const updatedActive = activeModels.filter((mid) => mid !== id);
+
+    setCustomModels(updatedCustoms);
+    setActiveModels(updatedActive);
+    autoSave(updatedActive, updatedCustoms);
+
+    setToast({
+      message: "✕ Đã xóa & cập nhật thay đổi.",
+      type: "info"
+    });
+  };
+
   return (
-    <div className="admin-panel animate-fade-in">
-      <h2 className="admin-panel-title">Model AI</h2>
-      <p className="admin-panel-desc">
-        Configure AI model endpoints and API keys.
-      </p>
-      <div className="admin-card-grid">
-        <div className="admin-card">
-          <div className="admin-card-header">Provider</div>
-          <select className="admin-select">
-            <option>OpenAI</option>
-            <option>Anthropic</option>
-            <option>Google Gemini</option>
-            <option>Local (Ollama)</option>
-          </select>
+    <div className="admin-panel animate-fade-in" style={{ paddingBottom: "60px", display: "flex", flexDirection: "column", gap: "28px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-primary)", paddingBottom: "14px" }}>
+        <div>
+          <h2 className="admin-panel-title">Model AI</h2>
+          <p className="admin-panel-desc">
+            Quản lý và kích hoạt các nhà cung cấp mô hình AI mặc định và tùy chỉnh độc lập.
+          </p>
         </div>
-        <div className="admin-card">
-          <div className="admin-card-header">API Key</div>
-          <input className="admin-input" type="password" placeholder="sk-..." />
+      </div>
+
+      {/* ── PART 1: ALOUETTE AGENT PREDEFINED MODELS ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div>
+          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
+            Alouette Agent Default Models
+          </h3>
+          <p style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+            Các nhà cung cấp AI kết nối trực tiếp qua Alouette Server trung tâm. Không cần cấu hình API Key cá nhân.
+          </p>
         </div>
-        <div className="admin-card">
-          <div className="admin-card-header">Model</div>
-          <select className="admin-select">
-            <option>gpt-4o</option>
-            <option>gpt-4o-mini</option>
-            <option>claude-3-opus</option>
-            <option>gemini-pro</option>
-          </select>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
+          {PREDEFINED_MODELS.map((model) => {
+            const providerModels = model.models.map(m => m.id);
+            const activeProviderModels = providerModels.filter(id => activeModels.includes(id));
+            const isProviderActive = activeProviderModels.length > 0;
+            const isExpanded = expandedProviders.includes(model.id);
+
+            return (
+              <div key={model.id} style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+                {/* Provider Row */}
+                <div
+                  onClick={(e) => handleToggleProvider(model.id, e)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "14px 18px",
+                    backgroundColor: "var(--bg-secondary)",
+                    border: `1px solid ${isProviderActive ? "var(--text-primary)" : "var(--border-primary)"}`,
+                    cursor: "pointer",
+                    transition: "all var(--transition-fast)"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "14px", maxWidth: "80%" }}>
+                    {/* Expand/Collapse Trigger */}
+                    <div 
+                      onClick={(e) => toggleExpandProvider(model.id, e)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "24px",
+                        height: "24px",
+                        cursor: "pointer",
+                        color: "var(--text-secondary)",
+                        borderRadius: "4px",
+                        backgroundColor: "var(--bg-tertiary)",
+                        border: "1px solid var(--border-primary)",
+                        transition: "all var(--transition-fast)"
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-primary)"}
+                      onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-secondary)"}
+                    >
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                      <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>
+                        {model.provider}
+                      </span>
+                      <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                        {activeProviderModels.length}/{model.models.length} model đang bật
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }} onClick={(e) => e.stopPropagation()}>
+                    <span style={{ fontSize: "11.5px", color: isProviderActive ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                      {isProviderActive ? "Đang bật" : "Đã tắt"}
+                    </span>
+                    <CustomCheckbox
+                      checked={isProviderActive}
+                      onChange={() => {
+                        const eventMock = { stopPropagation: () => {} } as React.MouseEvent;
+                        handleToggleProvider(model.id, eventMock);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Sub-models list (Expanded) */}
+                {isExpanded && (
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    padding: "12px 18px 16px 56px",
+                    backgroundColor: "rgba(255, 255, 255, 0.01)",
+                    borderLeft: "2px solid var(--border-primary)",
+                    borderRight: "1px solid var(--border-primary)",
+                    borderBottom: "1px solid var(--border-primary)",
+                    marginTop: "-1px",
+                    marginBottom: "8px",
+                    transition: "all var(--transition-fast)"
+                  }}>
+                    {model.models.map((subModel) => {
+                      const isSubModelActive = activeModels.includes(subModel.id);
+                      return (
+                        <div 
+                          key={subModel.id}
+                          onClick={(e) => handleToggleModel(subModel.id, e)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "14px",
+                            padding: "10px 14px",
+                            backgroundColor: "var(--bg-tertiary)",
+                            border: `1px solid ${isSubModelActive ? "var(--text-primary)" : "var(--border-primary)"}`,
+                            cursor: "pointer",
+                            transition: "all var(--transition-fast)"
+                          }}
+                        >
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxWidth: "80%" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                              <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                                {subModel.name}
+                              </span>
+                              <span style={{
+                                fontSize: "9px",
+                                padding: "1px 5px",
+                                backgroundColor: "var(--bg-secondary)",
+                                color: "var(--text-secondary)",
+                                border: "1px solid var(--border-primary)",
+                                fontWeight: 600
+                              }}>
+                                Vendor: {model.provider}
+                              </span>
+                              <span style={{
+                                fontSize: "9px",
+                                padding: "1px 5px",
+                                backgroundColor: "var(--bg-secondary)",
+                                color: "var(--text-secondary)",
+                                border: "1px solid var(--border-primary)"
+                              }}>
+                                Context: {subModel.context}
+                              </span>
+                            </div>
+                            <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: 0, lineHeight: "1.4" }}>
+                              {subModel.desc}
+                            </p>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }} onClick={(e) => e.stopPropagation()}>
+                            <span style={{ fontSize: "11.5px", color: isSubModelActive ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                              {isSubModelActive ? "Đang bật" : "Đã tắt"}
+                            </span>
+                            <CustomCheckbox
+                              checked={isSubModelActive}
+                              onChange={() => {
+                                const eventMock = { stopPropagation: () => {} } as React.MouseEvent;
+                                handleToggleModel(subModel.id, eventMock);
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ height: "1px", backgroundColor: "var(--border-primary)", margin: "8px 0" }} />
+
+      {/* ── PART 2: CUSTOM MODELS ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div>
+          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
+            Custom AI Provider Models
+          </h3>
+          <p style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+            Tự cấu hình mô hình độc lập qua API của riêng bạn. Cuộc gọi sẽ kết nối trực tiếp đến Endpoint của nhà sản xuất.
+          </p>
+        </div>
+
+        {/* Form to add a new Custom Model */}
+        <form onSubmit={handleAddCustomModel} className="admin-card" style={{ padding: "18px", display: "flex", flexDirection: "column", gap: "16px" }}>
+          <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-primary)", letterSpacing: "0.5px" }}>
+            Thêm Model Tùy Chỉnh mới
+          </span>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Tên nhà cung cấp (Vendor)</label>
+              <input
+                className="admin-input"
+                type="text"
+                placeholder="Ví dụ: OpenRouter, DeepInfra, Anthropic..."
+                value={custProvider}
+                onChange={(e) => setCustProvider(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Tên model</label>
+              <input
+                className="admin-input"
+                type="text"
+                placeholder="Ví dụ: claude-3-opus-custom..."
+                value={custName}
+                onChange={(e) => setCustName(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Giới hạn Context</label>
+              <input
+                className="admin-input"
+                type="text"
+                placeholder="Ví dụ: 128k, 200k, 32k..."
+                value={custLimit}
+                onChange={(e) => setCustLimit(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Đường gọi API (API Endpoint URL)</label>
+            <input
+              className="admin-input"
+              type="text"
+              placeholder="https://api.openai.com/v1"
+              value={custEndpoint}
+              onChange={(e) => setCustEndpoint(e.target.value)}
+              style={{ width: "100%" }}
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", alignItems: "center" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>ApiKey của nhà sản xuất</label>
+              <input
+                className="admin-input"
+                type="password"
+                placeholder="sk-..."
+                value={custApiKey}
+                onChange={(e) => setCustApiKey(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", height: "100%", paddingTop: "14px" }}>
+              <CustomCheckbox
+                checked={custVision}
+                onChange={(val) => setCustVision(val)}
+              />
+              <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 500 }}>
+                Hỗ trợ xem ảnh (Vision capability)
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="admin-btn admin-btn-primary"
+            style={{
+              alignSelf: "flex-start",
+              padding: "8px 16px",
+              marginTop: "4px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px"
+            }}
+          >
+            <span>+ Thêm Mô Hình Tự Nhập</span>
+          </button>
+        </form>
+
+        {/* Stored Custom Models List */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {customModels.length > 0 && (
+            <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)" }}>
+              Danh sách các mô hình tùy chỉnh đã nhập:
+            </span>
+          )}
+
+          {customModels.map((model) => {
+            const isActive = activeModels.includes(model.id);
+            return (
+              <div
+                key={model.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "14px 18px",
+                  backgroundColor: "var(--bg-secondary)",
+                  border: `1px solid ${isActive ? "var(--text-primary)" : "var(--border-primary)"}`,
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxWidth: "70%" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                      {model.name}
+                    </span>
+                    <span style={{
+                      fontSize: "9px",
+                      padding: "1px 5px",
+                      backgroundColor: "var(--bg-tertiary)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border-primary)",
+                      fontWeight: 600
+                    }}>
+                      Vendor: {model.provider}
+                    </span>
+                    <span style={{
+                      fontSize: "9px",
+                      padding: "1px 5px",
+                      backgroundColor: "var(--bg-tertiary)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border-primary)"
+                    }}>
+                      Context: {model.contextLimit}
+                    </span>
+                    {model.supportsVision && (
+                      <span style={{ fontSize: "10px" }}>👁️ Vision</span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: "11px", color: "var(--text-secondary)", wordBreak: "break-all" }}>
+                    Endpoint: {model.endpoint}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                  <div
+                    onClick={() => handleToggleModel(model.id)}
+                    style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}
+                  >
+                    <span style={{ fontSize: "11px", color: isActive ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                      {isActive ? "Đang bật" : "Đang tắt"}
+                    </span>
+                    <CustomCheckbox
+                      checked={isActive}
+                      onChange={() => handleToggleModel(model.id)}
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => handleDeleteCustomModel(model.id)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-secondary)",
+                      cursor: "pointer",
+                      fontSize: "11px",
+                      padding: "4px"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-primary)"}
+                    onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-secondary)"}
+                  >
+                    Xóa
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
+
+
 
 function EnvironmentSection() {
   return (
