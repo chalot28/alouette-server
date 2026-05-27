@@ -56,15 +56,53 @@ pub async fn agent_send_message(
         session
     };
 
+    // Load configuration for Custom AI
+    let ai_cfg = load_custom_ai_config();
+    
+    // Get the config for the active model or fallback to standard parameters
+    let active_model_name = ai_cfg.active_model.clone();
+    let model_config = ai_cfg.models.get(&active_model_name).cloned().unwrap_or_else(|| ModelConfig {
+        provider: "gemini".to_string(),
+        api_key: "".to_string(),
+        api_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+        context_limit: 1048576,
+        supports_vision: true,
+        temperature: 0.2,
+        top_p: 0.95,
+    });
+
+    // Apply context limit to compact history if needed
+    let max_msgs = if model_config.context_limit < 10000 { 10 } else { 50 };
+    AgentHarness::compact_history(&mut session.history, max_msgs);
+
     // Construct the full prompt (System prompt + History)
     let system_prompt = harness.assemble_system_prompt();
     
     // Call LLM (Gemini or fallback simulator)
-    let api_key = std::env::var("GEMINI_API_KEY").ok();
+    let api_key = if !model_config.api_key.is_empty() && model_config.api_key != "none" {
+        Some(model_config.api_key.clone())
+    } else {
+        std::env::var("GEMINI_API_KEY").ok()
+    };
+
+    let model_to_use = if !active_model_name.is_empty() {
+        active_model_name
+    } else {
+        model.clone()
+    };
+
     let llm_reply = match api_key {
         Some(key) => {
-            call_gemini_api(&key, &model, &system_prompt, &session.history).await
-                .unwrap_or_else(|e| format!("<thought>API Error occurred: {}. Falling back to Harness simulation.</thought>\n<call:check_port>{{\"port\": 3000}}</call:check_port>", e))
+            call_gemini_api(
+                &key,
+                &model_to_use,
+                &model_config.api_url,
+                model_config.temperature,
+                model_config.top_p,
+                &system_prompt,
+                &session.history,
+            ).await
+            .unwrap_or_else(|e| format!("<thought>API Error occurred: {}. Falling back to Harness simulation.</thought>\n<call:check_port>{{\"port\": 3000}}</call:check_port>", e))
         }
         None => {
             // Intelligent Harness Simulator if no API key is specified
@@ -199,6 +237,44 @@ pub async fn agent_approve_tool(
 }
 
 #[tauri::command]
+pub fn get_custom_ai_config() -> Result<CustomAiConfig, String> {
+    Ok(load_custom_ai_config())
+}
+
+#[tauri::command]
+pub fn save_custom_ai_config(config: CustomAiConfig) -> Result<(), String> {
+    let mut current = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let mut config_path = None;
+    
+    for _ in 0..10 {
+        let check_path = current.join("core_engine/app_data/ai_config.yml");
+        if check_path.exists() {
+            config_path = Some(check_path);
+            break;
+        }
+        if !current.pop() {
+            break;
+        }
+    }
+
+    let resolved_path = config_path.unwrap_or_else(|| {
+        std::env::current_dir().unwrap_or_default().join("core_engine/app_data/ai_config.yml")
+    });
+
+    if let Some(parent) = resolved_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let yaml_str = serde_yaml::to_string(&config)
+        .map_err(|e| format!("Failed to serialize custom AI config: {}", e))?;
+
+    std::fs::write(&resolved_path, yaml_str)
+        .map_err(|e| format!("Failed to write custom AI config to file: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn agent_reset_session() -> Result<String, String> {
     let session_store = get_session_store();
     let mut session_guard = session_store.lock().unwrap();
@@ -206,19 +282,96 @@ pub async fn agent_reset_session() -> Result<String, String> {
     Ok("✓ Session reset successfully.".to_string())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelConfig {
+    pub provider: String,
+    pub api_key: String,
+    pub api_url: String,
+    pub context_limit: usize,
+    pub supports_vision: bool,
+    pub temperature: f32,
+    pub top_p: f32,
+}
+
+fn default_active_model() -> String {
+    "gemini-1.5-flash".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomAiConfig {
+    #[serde(default = "default_active_model")]
+    pub active_model: String,
+    pub models: std::collections::HashMap<String, ModelConfig>,
+}
+
+fn load_custom_ai_config() -> CustomAiConfig {
+    let mut current = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let mut config_path = None;
+    
+    for _ in 0..10 {
+        let check_path = current.join("core_engine/app_data/ai_config.yml");
+        if check_path.exists() {
+            config_path = Some(check_path);
+            break;
+        }
+        if !current.pop() {
+            break;
+        }
+    }
+
+    let resolved_path = config_path.unwrap_or_else(|| {
+        std::env::current_dir().unwrap_or_default().join("core_engine/app_data/ai_config.yml")
+    });
+
+    if let Ok(content) = std::fs::read_to_string(&resolved_path) {
+        if let Ok(config) = serde_yaml::from_str::<CustomAiConfig>(&content) {
+            return config;
+        }
+    }
+
+    // Fallback default config if file is missing or parsing fails
+    let mut models = std::collections::HashMap::new();
+    models.insert(
+        "gemini-1.5-flash".to_string(),
+        ModelConfig {
+            provider: "gemini".to_string(),
+            api_key: "".to_string(),
+            api_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+            context_limit: 1048576,
+            supports_vision: true,
+            temperature: 0.2,
+            top_p: 0.95,
+        },
+    );
+
+    CustomAiConfig {
+        active_model: "gemini-1.5-flash".to_string(),
+        models,
+    }
+}
+
 /// Dynamic Gemini API caller using reqwest
 async fn call_gemini_api(
     api_key: &str,
     model: &str,
+    api_url: &str,
+    temperature: f32,
+    top_p: f32,
     system_prompt: &str,
     history: &[ChatMessage],
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
-    let model_name = if model.contains("flash") { "gemini-1.5-flash" } else { "gemini-1.5-pro" };
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        model_name, api_key
-    );
+    let model_name = if model.is_empty() { "gemini-1.5-flash" } else { model };
+    
+    // Support either clean base url or direct model url
+    let url = if api_url.contains("generateContent") {
+        format!("{}?key={}", api_url, api_key)
+    } else {
+        format!(
+            "{}/models/{}:generateContent?key={}",
+            api_url.trim_end_matches('/'), model_name, api_key
+        )
+    };
 
     // Build the request contents structure matching Google Gemini API spec
     let mut contents = Vec::new();
@@ -238,8 +391,8 @@ async fn call_gemini_api(
             "parts": [{"text": system_prompt}]
         },
         "generationConfig": {
-            "temperature": 0.2,
-            "topP": 0.95
+            "temperature": temperature,
+            "topP": top_p
         }
     });
 

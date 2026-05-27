@@ -135,6 +135,8 @@ fn main() {
             commands::agent::agent_send_message,
             commands::agent::agent_approve_tool,
             commands::agent::agent_reset_session,
+            commands::agent::get_custom_ai_config,
+            commands::agent::save_custom_ai_config,
         ])
 
         .build(tauri::generate_context!())

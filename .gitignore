@@ -8,3 +8,4 @@ nul
 **/nul
 tauri_app/zen_bundle/zen
 tauri_app/zen_bundle
+core_engine/app_data/ai_config.yml

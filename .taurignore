@@ -1,7 +1,6 @@
-src-tauri/logs/
-logs/
-*.log
-../core_engine/app_data/
 core_engine/app_data/
 **/core_engine/app_data/**
 **/ai_config.yml
+target/
+logs/
+*.log

@@ -509,8 +509,8 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
     );
   };
 
-  const handleToggleProvider = (providerId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleToggleProvider = (providerId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const provider = PREDEFINED_MODELS.find(p => p.id === providerId);
     if (!provider) return;
 
@@ -530,8 +530,8 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
     autoSave(updatedActive, customModels);
   };
 
-  const handleToggleModel = (modelId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleToggleModel = (modelId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const updatedActive = activeModels.includes(modelId)
       ? activeModels.filter((id) => id !== modelId)
       : [...activeModels, modelId];
@@ -547,23 +547,116 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
   const [custApiKey, setCustApiKey] = useState("");
   const [custLimit, setCustLimit] = useState("128k");
   const [custVision, setCustVision] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   // Load configurations
   useEffect(() => {
     const savedActive = localStorage.getItem("alouette_active_models");
     if (savedActive) setActiveModels(JSON.parse(savedActive));
 
-    const savedCustom = localStorage.getItem("alouette_custom_models");
-    if (savedCustom) setCustomModels(JSON.parse(savedCustom));
+    // Fetch from backend ai_config.yml
+    (async () => {
+      try {
+        interface RustModelConfig {
+          provider: string;
+          api_key: string;
+          api_url: string;
+          context_limit: number;
+          supports_vision: boolean;
+          temperature: number;
+          top_p: number;
+        }
+        interface RustCustomAiConfig {
+          active_model: string;
+          models: { [key: string]: RustModelConfig };
+        }
+        
+        const config = await invoke<RustCustomAiConfig>("get_custom_ai_config");
+        if (config && config.models) {
+          const loadedCustoms: CustomModel[] = Object.entries(config.models).map(([name, item]) => ({
+            id: name,
+            provider: item.provider,
+            name: name,
+            endpoint: item.api_url,
+            apiKey: item.api_key,
+            contextLimit: `${Math.round(item.context_limit / 1000)}k`,
+            supportsVision: item.supports_vision
+          }));
+          setCustomModels(loadedCustoms);
+          
+          // Also dynamically set active model if active_model is specified in yml
+          if (config.active_model && !savedActive) {
+            setActiveModels([config.active_model]);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load YAML config:", err);
+        // Fallback to localStorage if invoke fails
+        const savedCustom = localStorage.getItem("alouette_custom_models");
+        if (savedCustom) setCustomModels(JSON.parse(savedCustom));
+      }
+    })();
   }, []);
 
   // Instant Auto-Save Helper
-  const autoSave = (newActive: string[], newCustoms: CustomModel[]) => {
+  const autoSave = async (newActive: string[], newCustoms: CustomModel[]) => {
     localStorage.setItem("alouette_active_models", JSON.stringify(newActive));
     localStorage.setItem("alouette_custom_models", JSON.stringify(newCustoms));
     
     // Trigger dynamic storage event for current window
     window.dispatchEvent(new Event("storage"));
+
+    // Save to backend YAML
+    try {
+      interface RustModelConfig {
+        provider: string;
+        api_key: string;
+        api_url: string;
+        context_limit: number;
+        supports_vision: boolean;
+        temperature: number;
+        top_p: number;
+      }
+      const modelsMap: { [key: string]: RustModelConfig } = {};
+      newCustoms.forEach(m => {
+        let limit = 128000;
+        if (m.contextLimit) {
+          const val = parseInt(m.contextLimit.replace(/[^0-9]/g, ""), 10);
+          if (!isNaN(val)) {
+            limit = val * 1000;
+          }
+        }
+        const key = m.name || m.id;
+        modelsMap[key] = {
+          provider: m.provider,
+          api_key: m.apiKey || "",
+          api_url: m.endpoint || "",
+          context_limit: limit,
+          supports_vision: !!m.supportsVision,
+          temperature: 0.2,
+          top_p: 0.95
+        };
+      });
+
+      let activeModel = "gemini-1.5-flash";
+      if (newActive.length > 0) {
+        const activeCustom = newCustoms.find(m => newActive.includes(m.id));
+        if (activeCustom) {
+          activeModel = activeCustom.name || activeCustom.id;
+        } else {
+          activeModel = newActive[0];
+        }
+      }
+
+      await invoke("save_custom_ai_config", {
+        config: {
+          active_model: activeModel,
+          models: modelsMap
+        }
+      });
+    } catch (err) {
+      console.error("Failed to save custom AI config to backend:", err);
+    }
   };
 
 
@@ -599,6 +692,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
     setCustApiKey("");
     setCustLimit("128k");
     setCustVision(false);
+    setShowAddForm(false);
 
     setToast({
       message: "✓ Đã tự động lưu & cập nhật Model tùy chỉnh!",
@@ -623,14 +717,316 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
   return (
     <div className="admin-panel animate-fade-in" style={{ paddingBottom: "60px", display: "flex", flexDirection: "column", gap: "28px" }}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-primary)", paddingBottom: "14px" }}>
-        <div>
-          <h2 className="admin-panel-title">Model AI</h2>
-          <p className="admin-panel-desc">
-            Quản lý và kích hoạt các nhà cung cấp mô hình AI mặc định và tùy chỉnh độc lập.
-          </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-primary)", paddingBottom: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <Sparkles size={20} style={{ color: "var(--text-primary)" }} />
+          <div>
+            <h2 className="admin-panel-title" style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>Model AI</h2>
+            <p className="admin-panel-desc" style={{ margin: "2px 0 0 0", fontSize: "12px" }}>
+              Quản lý và kích hoạt các nhà cung cấp mô hình AI mặc định và tùy chỉnh độc lập.
+            </p>
+          </div>
         </div>
       </div>
+
+      {/* ── PART 2: CUSTOM MODELS ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div>
+            <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
+              Custom AI Provider Models
+            </h3>
+            <p style={{ fontSize: "11.5px", color: "var(--text-secondary)", margin: 0, lineHeight: "1.5" }}>
+              Tự cấu hình mô hình độc lập qua API của riêng bạn. Cuộc gọi kết nối trực tiếp đến Endpoint của nhà sản xuất (Hiện có <strong style={{ color: "var(--text-primary)" }}>{customModels.length} custom model</strong> nạp từ ai_config.yml).
+            </p>
+          </div>
+
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              backgroundColor: "transparent",
+              border: "1px solid var(--border-primary)",
+              color: "var(--text-primary)",
+              fontSize: "12px",
+              fontWeight: 600,
+              cursor: "pointer",
+              borderRadius: "4px",
+              transition: "all 0.15s ease"
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "var(--text-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "var(--border-primary)";
+            }}
+          >
+            <span>{showAddForm ? "✕ Hủy nhập" : "＋ Thêm Model Tự Nhập"}</span>
+          </button>
+        </div>
+
+        {/* Form to add a new Custom Model (Smooth Dropdown Expand) */}
+        {showAddForm && (
+          <form
+            onSubmit={handleAddCustomModel}
+            className="admin-card animate-fade-in"
+            style={{
+              padding: "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+              border: "1px solid var(--border-primary)",
+              borderRadius: "4px",
+              background: "var(--bg-secondary)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--border-primary)", paddingBottom: "10px", marginBottom: "4px" }}>
+              <Sparkles size={14} style={{ color: "var(--text-primary)" }} />
+              <span style={{ fontSize: "12.5px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-primary)", letterSpacing: "0.5px" }}>
+                Cấu hình nhà cung cấp AI mới
+              </span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Tên nhà cung cấp (Vendor)</label>
+                <input
+                  className="admin-input"
+                  type="text"
+                  placeholder="Ví dụ: OpenRouter, Gemini, Anthropic..."
+                  value={custProvider}
+                  onChange={(e) => setCustProvider(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Tên model</label>
+                <input
+                  className="admin-input"
+                  type="text"
+                  placeholder="Ví dụ: gemini-1.5-pro, local-ollama..."
+                  value={custName}
+                  onChange={(e) => setCustName(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Giới hạn Context (Tokens)</label>
+                <input
+                  className="admin-input"
+                  type="text"
+                  placeholder="Ví dụ: 128k, 2000k, 8k..."
+                  value={custLimit}
+                  onChange={(e) => setCustLimit(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Đường gọi API (API Endpoint URL)</label>
+              <input
+                className="admin-input"
+                type="text"
+                placeholder="https://api.openai.com/v1"
+                value={custEndpoint}
+                onChange={(e) => setCustEndpoint(e.target.value)}
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px", alignItems: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>ApiKey của nhà sản xuất</label>
+                <input
+                  className="admin-input"
+                  type="password"
+                  placeholder="sk-... hoặc none"
+                  value={custApiKey}
+                  onChange={(e) => setCustApiKey(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", height: "100%", paddingTop: "14px" }}>
+                <CustomCheckbox
+                  checked={custVision}
+                  onChange={(val) => setCustVision(val)}
+                />
+                <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 500 }}>
+                  Hỗ trợ xem ảnh (Vision capability)
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+              <button
+                type="submit"
+                className="admin-btn admin-btn-primary"
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontWeight: 600
+                }}
+              >
+                <span>✓ Lưu & Kích Hoạt</span>
+              </button>
+              <button
+                type="button"
+                className="admin-btn"
+                onClick={() => setShowAddForm(false)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "4px",
+                  backgroundColor: "transparent",
+                  border: "1px solid var(--border-primary)",
+                  color: "var(--text-secondary)"
+                }}
+              >
+                Hủy bỏ
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Stored Custom Models List */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {customModels.length > 0 ? (
+            customModels.map((model) => {
+              const isActive = activeModels.includes(model.id);
+              return (
+                <div
+                  key={model.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "14px 18px",
+                    backgroundColor: "var(--bg-secondary)",
+                    border: `1px solid ${isActive ? "var(--text-primary)" : "var(--border-primary)"}`,
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxWidth: "70%" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                        {model.name}
+                      </span>
+                      
+                      <span style={{
+                        fontSize: "9px",
+                        padding: "1px 5px",
+                        backgroundColor: "var(--bg-tertiary)",
+                        color: "var(--text-secondary)",
+                        border: "1px solid var(--border-primary)",
+                        fontWeight: 600
+                      }}>
+                        Vendor: {model.provider}
+                      </span>
+                      
+                      <span style={{
+                        fontSize: "9px",
+                        padding: "1px 5px",
+                        backgroundColor: "var(--bg-tertiary)",
+                        color: "var(--text-secondary)",
+                        border: "1px solid var(--border-primary)"
+                      }}>
+                        Context: {model.contextLimit}
+                      </span>
+
+                      {model.supportsVision && (
+                        <span style={{
+                          fontSize: "9px",
+                          padding: "1px 5px",
+                          backgroundColor: "var(--bg-tertiary)",
+                          color: "var(--text-secondary)",
+                          border: "1px solid var(--border-primary)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "3px"
+                        }}>
+                          👁️ Vision
+                        </span>
+                      )}
+                    </div>
+                    
+                    <span style={{ fontSize: "11px", color: "var(--text-secondary)", wordBreak: "break-all" }}>
+                      Endpoint: {model.endpoint}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <div
+                      onClick={() => handleToggleModel(model.id)}
+                      style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}
+                    >
+                      <span style={{ fontSize: "11px", color: isActive ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                        {isActive ? "Đang bật" : "Đang tắt"}
+                      </span>
+                      <CustomCheckbox
+                        checked={isActive}
+                        onChange={() => handleToggleModel(model.id)}
+                      />
+                    </div>
+
+                    <button
+                      onClick={() => handleDeleteCustomModel(model.id)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--text-secondary)",
+                        cursor: "pointer",
+                        fontSize: "11px",
+                        padding: "4px"
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-primary)"}
+                      onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-secondary)"}
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "30px 20px",
+              backgroundColor: "rgba(255, 255, 255, 0.01)",
+              border: "1px dashed var(--border-primary)",
+              borderRadius: "4px",
+              textAlign: "center",
+              gap: "8px"
+            }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                Chưa có mô hình tùy chỉnh nào được nhập.
+              </span>
+              <button
+                onClick={() => setShowAddForm(true)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-primary)",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textDecoration: "underline"
+                }}
+              >
+                Nhấp để thêm ngay
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ height: "1px", backgroundColor: "var(--border-primary)", margin: "8px 0" }} />
 
       {/* ── PART 1: ALOUETTE AGENT PREDEFINED MODELS ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -793,202 +1189,6 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
                     })}
                   </div>
                 )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div style={{ height: "1px", backgroundColor: "var(--border-primary)", margin: "8px 0" }} />
-
-      {/* ── PART 2: CUSTOM MODELS ── */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div>
-          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
-            Custom AI Provider Models
-          </h3>
-          <p style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
-            Tự cấu hình mô hình độc lập qua API của riêng bạn. Cuộc gọi sẽ kết nối trực tiếp đến Endpoint của nhà sản xuất.
-          </p>
-        </div>
-
-        {/* Form to add a new Custom Model */}
-        <form onSubmit={handleAddCustomModel} className="admin-card" style={{ padding: "18px", display: "flex", flexDirection: "column", gap: "16px" }}>
-          <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-primary)", letterSpacing: "0.5px" }}>
-            Thêm Model Tùy Chỉnh mới
-          </span>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Tên nhà cung cấp (Vendor)</label>
-              <input
-                className="admin-input"
-                type="text"
-                placeholder="Ví dụ: OpenRouter, DeepInfra, Anthropic..."
-                value={custProvider}
-                onChange={(e) => setCustProvider(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Tên model</label>
-              <input
-                className="admin-input"
-                type="text"
-                placeholder="Ví dụ: claude-3-opus-custom..."
-                value={custName}
-                onChange={(e) => setCustName(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Giới hạn Context</label>
-              <input
-                className="admin-input"
-                type="text"
-                placeholder="Ví dụ: 128k, 200k, 32k..."
-                value={custLimit}
-                onChange={(e) => setCustLimit(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Đường gọi API (API Endpoint URL)</label>
-            <input
-              className="admin-input"
-              type="text"
-              placeholder="https://api.openai.com/v1"
-              value={custEndpoint}
-              onChange={(e) => setCustEndpoint(e.target.value)}
-              style={{ width: "100%" }}
-            />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", alignItems: "center" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "11px", color: "var(--text-secondary)" }}>ApiKey của nhà sản xuất</label>
-              <input
-                className="admin-input"
-                type="password"
-                placeholder="sk-..."
-                value={custApiKey}
-                onChange={(e) => setCustApiKey(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", height: "100%", paddingTop: "14px" }}>
-              <CustomCheckbox
-                checked={custVision}
-                onChange={(val) => setCustVision(val)}
-              />
-              <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 500 }}>
-                Hỗ trợ xem ảnh (Vision capability)
-              </span>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            className="admin-btn admin-btn-primary"
-            style={{
-              alignSelf: "flex-start",
-              padding: "8px 16px",
-              marginTop: "4px",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px"
-            }}
-          >
-            <span>+ Thêm Mô Hình Tự Nhập</span>
-          </button>
-        </form>
-
-        {/* Stored Custom Models List */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          {customModels.length > 0 && (
-            <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)" }}>
-              Danh sách các mô hình tùy chỉnh đã nhập:
-            </span>
-          )}
-
-          {customModels.map((model) => {
-            const isActive = activeModels.includes(model.id);
-            return (
-              <div
-                key={model.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "14px 18px",
-                  backgroundColor: "var(--bg-secondary)",
-                  border: `1px solid ${isActive ? "var(--text-primary)" : "var(--border-primary)"}`,
-                }}
-              >
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxWidth: "70%" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
-                      {model.name}
-                    </span>
-                    <span style={{
-                      fontSize: "9px",
-                      padding: "1px 5px",
-                      backgroundColor: "var(--bg-tertiary)",
-                      color: "var(--text-secondary)",
-                      border: "1px solid var(--border-primary)",
-                      fontWeight: 600
-                    }}>
-                      Vendor: {model.provider}
-                    </span>
-                    <span style={{
-                      fontSize: "9px",
-                      padding: "1px 5px",
-                      backgroundColor: "var(--bg-tertiary)",
-                      color: "var(--text-secondary)",
-                      border: "1px solid var(--border-primary)"
-                    }}>
-                      Context: {model.contextLimit}
-                    </span>
-                    {model.supportsVision && (
-                      <span style={{ fontSize: "10px" }}>👁️ Vision</span>
-                    )}
-                  </div>
-                  <span style={{ fontSize: "11px", color: "var(--text-secondary)", wordBreak: "break-all" }}>
-                    Endpoint: {model.endpoint}
-                  </span>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                  <div
-                    onClick={() => handleToggleModel(model.id)}
-                    style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}
-                  >
-                    <span style={{ fontSize: "11px", color: isActive ? "var(--text-primary)" : "var(--text-secondary)" }}>
-                      {isActive ? "Đang bật" : "Đang tắt"}
-                    </span>
-                    <CustomCheckbox
-                      checked={isActive}
-                      onChange={() => handleToggleModel(model.id)}
-                    />
-                  </div>
-
-                  <button
-                    onClick={() => handleDeleteCustomModel(model.id)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--text-secondary)",
-                      cursor: "pointer",
-                      fontSize: "11px",
-                      padding: "4px"
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-primary)"}
-                    onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-secondary)"}
-                  >
-                    Xóa
-                  </button>
-                </div>
               </div>
             );
           })}
