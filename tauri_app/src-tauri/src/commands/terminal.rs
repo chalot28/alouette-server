@@ -28,6 +28,19 @@ pub async fn write_to_terminal_session(
     session_id: String,
     input: String,
 ) -> Result<(), String> {
+    // 1. Immediately handle Ctrl+C to interrupt executing commands
+    if input.contains('\x03') {
+        let mut pm = state.process_manager.lock().await;
+        pm.clear_input_buf(&session_id);
+        let ctx = pm.get_terminal_write_context(&session_id)?;
+        let stdin_tx = ctx.stdin_sender.clone();
+        drop(pm);
+
+        let _ = stdin_tx.send("\x03".to_string()).await
+            .map_err(|e| format!("Terminal send Ctrl+C: {e}"))?;
+        return Ok(());
+    }
+
     let is_enter = input.contains('\r') || input.contains('\n');
     let mut allowed_cmd = String::new();
     let mut blocked_reason = String::new();
@@ -98,10 +111,12 @@ pub async fn write_to_terminal_session(
         return Ok(());
     }
 
-    if is_enter && !allowed_cmd.is_empty() {
+    if is_enter {
         {
             let mut pm = state.process_manager.lock().await;
-            pm.update_cwd_for_cd(&session_id, &allowed_cmd);
+            if !allowed_cmd.is_empty() {
+                pm.update_cwd_for_cd(&session_id, &allowed_cmd);
+            }
         }
         let full = allowed_cmd + "\r";
         let _ = stdin_tx.send(full).await
