@@ -24,6 +24,8 @@ pub struct ProcessManager {
     pub(crate) _prompt_files: HashMap<String, PathBuf>,
     pub input_buf: HashMap<String, String>,
     pub sessions_cwd: HashMap<String, PathBuf>,
+    pub terminal_history: HashMap<String, Vec<String>>,
+    pub terminal_history_index: HashMap<String, usize>,
 }
 
 impl ProcessManager {
@@ -119,6 +121,8 @@ impl ProcessManager {
             _prompt_files: HashMap::new(),
             input_buf: HashMap::new(),
             sessions_cwd: HashMap::new(),
+            terminal_history: HashMap::new(),
+            terminal_history_index: HashMap::new(),
         }
     }
 

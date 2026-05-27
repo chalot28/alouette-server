@@ -40,6 +40,48 @@ pub async fn write_to_terminal_session(
         return Ok(());
     }
 
+    // 2. Handle Up/Down arrow keys for command history navigation
+    if input == "\x1b[A" || input == "\x1b[B" {
+        let mut pm = state.process_manager.lock().await;
+        if let Ok(ctx) = pm.get_terminal_write_context(&session_id) {
+            let out_tx = ctx.terminal_sender.clone();
+            let history = pm.terminal_history.entry(session_id.clone()).or_default().clone();
+            let mut idx = *pm.terminal_history_index.entry(session_id.clone()).or_insert(history.len());
+
+            if !history.is_empty() {
+                if input == "\x1b[A" {
+                    // Up Arrow
+                    if idx > 0 {
+                        idx -= 1;
+                    }
+                } else {
+                    // Down Arrow
+                    if idx < history.len() {
+                        idx += 1;
+                    }
+                }
+                pm.terminal_history_index.insert(session_id.clone(), idx);
+
+                let new_cmd = if idx < history.len() {
+                    history[idx].clone()
+                } else {
+                    String::new()
+                };
+
+                let cur_len = pm.input_buf.get(&session_id).map(|s| s.len()).unwrap_or(0);
+                let erase = "\x08 \x08".repeat(cur_len);
+
+                pm.input_buf.insert(session_id.clone(), new_cmd.clone());
+
+                let _ = out_tx.send(core_engine::TerminalOutput {
+                    session_id,
+                    text: format!("{}{}", erase, new_cmd),
+                });
+            }
+        }
+        return Ok(());
+    }
+
     let is_enter = input.contains('\r') || input.contains('\n');
     let mut allowed_cmd = String::new();
     let mut blocked_reason = String::new();
@@ -52,10 +94,35 @@ pub async fn write_to_terminal_session(
         let mut pm = state.process_manager.lock().await;
 
         if is_enter {
+            // Normalize cd shortcuts in the input buffer first
+            if let Some(buf) = pm.input_buf.get_mut(&session_id) {
+                let trimmed = buf.trim();
+                let lower = trimmed.to_lowercase();
+                if lower.starts_with("cd..") {
+                    *buf = format!("cd ..{}", &trimmed[4..]);
+                } else if lower.starts_with("cd/") {
+                    *buf = format!("cd /{}", &trimmed[3..]);
+                } else if lower.starts_with("cd\\") {
+                    *buf = format!("cd \\{}", &trimmed[3..]);
+                }
+            }
+
             match pm.check_input_sandbox(&session_id) {
                 Ok(None) => {
                     allowed_cmd = pm.get_input_buf(&session_id).cloned().unwrap_or_default();
                     pm.clear_input_buf(&session_id);
+
+                    // Add command to history on successful enter
+                    if !allowed_cmd.trim().is_empty() {
+                        let len = {
+                            let hist = pm.terminal_history.entry(session_id.clone()).or_default();
+                            if hist.last() != Some(&allowed_cmd) {
+                                hist.push(allowed_cmd.clone());
+                            }
+                            hist.len()
+                        };
+                        pm.terminal_history_index.insert(session_id.clone(), len);
+                    }
                 }
                 Ok(Some(reason)) => {
                     blocked_reason = reason;

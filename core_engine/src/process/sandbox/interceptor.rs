@@ -233,6 +233,16 @@ fn normalize_input(input: &str) -> String {
     // Chuẩn hóa khoảng trắng: `\t`, `\r` → space
     s = s.replace('\t', " ").replace('\r', " ");
 
+    // Chuẩn hóa cd shortcuts: cd.. -> cd .., cd/ -> cd /, cd\ -> cd \
+    let lower = s.to_lowercase();
+    if lower.starts_with("cd..") {
+        s = format!("cd ..{}", &s[4..]);
+    } else if lower.starts_with("cd/") {
+        s = format!("cd /{}", &s[3..]);
+    } else if lower.starts_with("cd\\") {
+        s = format!("cd \\{}", &s[3..]);
+    }
+
     // Chuẩn hóa backslash → forward slash (dễ xử lý path)
     // Giữ nguyên cho Windows paths (C:\...) nhưng chuẩn hóa phần còn lại
     s = s.replace("\\\\", "\\"); // unescape double backslash
