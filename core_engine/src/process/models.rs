@@ -34,6 +34,18 @@ pub struct TerminalSession {
     pub block_internet: bool,
     /// MUST keep child alive or portable-pty kills the process on drop.
     pub _child: Option<Box<dyn portable_pty::Child + Send>>,
+    pub _job_handle: Option<usize>,
+}
+
+impl Drop for TerminalSession {
+    fn drop(&mut self) {
+        #[cfg(target_os = "windows")]
+        if let Some(handle) = self._job_handle {
+            unsafe {
+                winapi::um::handleapi::CloseHandle(handle as *mut winapi::ctypes::c_void);
+            }
+        }
+    }
 }
 
 /// Lightweight context cloned from a TerminalSession, used to process

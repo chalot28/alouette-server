@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Layers,
+  LayoutGrid,
   Activity,
   User,
   Terminal as TerminalIcon,
@@ -19,6 +19,8 @@ import {
   Server,
   Cpu,
   Settings,
+  SlidersHorizontal,
+  Hammer,
 } from "lucide-react";
 
 // Components
@@ -867,7 +869,7 @@ export default function App() {
             }}
             title="Tab"
           >
-            <Layers size={16} />
+            <LayoutGrid size={16} />
           </button>
 
           <button
@@ -889,7 +891,7 @@ export default function App() {
             onClick={() => setRightBottomTab("manager")}
             title="Manager"
           >
-            <Activity size={16} />
+            <SlidersHorizontal size={16} />
           </button>
 
           <button
@@ -897,7 +899,7 @@ export default function App() {
             onClick={() => setRightBottomTab("build")}
             title="Build"
           >
-            <Cpu size={16} />
+            <Hammer size={16} />
           </button>
         </div>
 

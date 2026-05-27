@@ -263,6 +263,15 @@ impl ProcessManager {
         let pty_ptr = Box::into_raw(Box::new(pty));
         self._pty_pairs.insert(sid.clone(), pty_ptr as usize);
 
+        // Áp dụng Tầng 2: OS-level sandbox (Job Object)
+        let job_handle = match super::sandbox::windows::apply_sandbox_to_process(pid) {
+            Ok(handle) => handle,
+            Err(e) => {
+                eprintln!("[terminal] Failed to apply OS sandbox: {e}");
+                None
+            }
+        };
+
         let workspace_root = PathBuf::from(&abs_root);
         self.terminal_sessions.insert(sid.clone(), TerminalSession {
             stdin_sender: tx,
@@ -270,6 +279,7 @@ impl ProcessManager {
             workspace_root: workspace_root.clone(),
             block_internet,
             _child: Some(child),
+            _job_handle: job_handle,
         });
 
         // Apply network isolation if requested
@@ -281,11 +291,6 @@ impl ProcessManager {
 
         self.input_buf.insert(sid.clone(), String::new());
         self.sessions_cwd.insert(sid.clone(), workspace_root);
-
-        // Áp dụng Tầng 2: OS-level sandbox (Job Object)
-        if let Err(e) = super::sandbox::windows::apply_sandbox_to_process(pid) {
-            eprintln!("[terminal] Failed to apply OS sandbox: {e}");
-        }
 
         let hb_tx = self.terminal_sender.clone();
         tokio::spawn(async move {

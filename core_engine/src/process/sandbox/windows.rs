@@ -29,7 +29,7 @@ pub fn is_supported() -> bool {
 
 /// Áp dụng Windows Job Object sandbox vào một PID đang chạy nhằm tước quyền Admin và cô lập process.
 #[cfg(windows)]
-pub fn apply_sandbox_to_process(pid: u32) -> Result<(), String> {
+pub fn apply_sandbox_to_process(pid: u32) -> Result<Option<usize>, String> {
     use winapi::um::processthreadsapi::OpenProcess;
     use winapi::um::winnt::{PROCESS_SET_QUOTA, PROCESS_TERMINATE};
     use winapi::um::jobapi2::{CreateJobObjectW, AssignProcessToJobObject, SetInformationJobObject};
@@ -71,24 +71,22 @@ pub fn apply_sandbox_to_process(pid: u32) -> Result<(), String> {
         // Confine process to Job
         let res = AssignProcessToJobObject(job_handle, process_handle);
         if res == 0 {
-            // Note: Assigning may fail if the process is already in a job under some environments,
-            // but we attempt to lock it.
             let err = std::io::Error::last_os_error();
             winapi::um::handleapi::CloseHandle(job_handle);
             winapi::um::handleapi::CloseHandle(process_handle);
             return Err(format!("AssignProcessToJobObject failed: {}", err));
         }
 
-        // Close handles safely (process keeps running in the job)
-        winapi::um::handleapi::CloseHandle(job_handle);
+        // Close process handle safely (keep job_handle open so Job constraints remain active)
         winapi::um::handleapi::CloseHandle(process_handle);
+        
+        Ok(Some(job_handle as usize))
     }
-    Ok(())
 }
 
 #[cfg(not(windows))]
-pub fn apply_sandbox_to_process(_pid: u32) -> Result<(), String> {
-    Ok(())
+pub fn apply_sandbox_to_process(_pid: u32) -> Result<Option<usize>, String> {
+    Ok(None)
 }
 
 pub fn spawn_in_appcontainer(
