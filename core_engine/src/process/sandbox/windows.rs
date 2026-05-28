@@ -33,10 +33,7 @@ pub fn apply_sandbox_to_process(pid: u32) -> Result<Option<usize>, String> {
     use winapi::um::processthreadsapi::OpenProcess;
     use winapi::um::winnt::{PROCESS_SET_QUOTA, PROCESS_TERMINATE};
     use winapi::um::jobapi2::{CreateJobObjectW, AssignProcessToJobObject, SetInformationJobObject};
-    use winapi::um::winnt::{
-        JobObjectBasicLimitInformation, JOBOBJECT_BASIC_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-    };
+    use winapi::um::winnt::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
 
     unsafe {
         // Open handle to process with quotas & terminate rights
@@ -53,14 +50,14 @@ pub fn apply_sandbox_to_process(pid: u32) -> Result<Option<usize>, String> {
         }
 
         // Configure basic constraints (kill on close to prevent orphaned backend shells)
-        let mut info = std::mem::zeroed::<JOBOBJECT_BASIC_LIMIT_INFORMATION>();
-        info.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let mut info = std::mem::zeroed::<winapi::um::winnt::JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
 
         let res = SetInformationJobObject(
             job_handle,
-            JobObjectBasicLimitInformation,
+            winapi::um::winnt::JobObjectExtendedLimitInformation,
             &mut info as *mut _ as *mut winapi::ctypes::c_void,
-            std::mem::size_of::<JOBOBJECT_BASIC_LIMIT_INFORMATION>() as u32,
+            std::mem::size_of::<winapi::um::winnt::JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
         );
         if res == 0 {
             winapi::um::handleapi::CloseHandle(job_handle);

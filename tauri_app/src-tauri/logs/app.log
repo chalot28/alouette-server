@@ -1082,3 +1082,86 @@
 [2026-05-28 06:23:26.292] Toolchains checked / verified stable.
 [2026-05-28 06:23:29.601] Cloudflared binary verified / updated successfully.
 [2026-05-28 06:23:29.602] Isolated environment initialized successfully!
+[2026-05-28 10:51:00.406] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 10:51:00.416] Proto CLI verified and active.
+[2026-05-28 10:51:00.482] Toolchains checked / verified stable.
+[2026-05-28 10:51:04.963] Cloudflared binary verified / updated successfully.
+[2026-05-28 10:51:04.964] Isolated environment initialized successfully!
+[2026-05-28 10:51:56.581] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 10:51:56.585] Proto CLI verified and active.
+[2026-05-28 10:51:56.616] Toolchains checked / verified stable.
+[2026-05-28 10:52:00.954] Cloudflared binary verified / updated successfully.
+[2026-05-28 10:52:00.956] Isolated environment initialized successfully!
+[2026-05-28 10:52:56.540] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 10:52:56.545] Proto CLI verified and active.
+[2026-05-28 10:52:56.569] Toolchains checked / verified stable.
+[2026-05-28 10:52:59.053] Cloudflared binary verified / updated successfully.
+[2026-05-28 10:52:59.055] Isolated environment initialized successfully!
+[2026-05-28 10:56:56.341] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 10:56:56.346] Proto CLI verified and active.
+[2026-05-28 10:56:56.360] Toolchains checked / verified stable.
+[2026-05-28 10:56:59.493] Cloudflared binary verified / updated successfully.
+[2026-05-28 10:56:59.494] Isolated environment initialized successfully!
+[2026-05-28 10:59:11.724] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 10:59:11.728] Proto CLI verified and active.
+[2026-05-28 10:59:11.830] Toolchains checked / verified stable.
+[2026-05-28 10:59:15.066] Cloudflared binary verified / updated successfully.
+[2026-05-28 10:59:15.078] Isolated environment initialized successfully!
+[2026-05-28 11:02:30.806] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 11:02:30.812] Proto CLI verified and active.
+[2026-05-28 11:02:30.874] Toolchains checked / verified stable.
+[2026-05-28 11:02:33.569] Cloudflared binary verified / updated successfully.
+[2026-05-28 11:02:33.570] Isolated environment initialized successfully!
+[2026-05-28 11:03:48.274] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 11:03:48.279] Proto CLI verified and active.
+[2026-05-28 11:03:48.298] Toolchains checked / verified stable.
+[2026-05-28 11:03:51.251] Cloudflared binary verified / updated successfully.
+[2026-05-28 11:03:51.252] Isolated environment initialized successfully!
+[2026-05-28 11:05:34.305] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 11:05:34.309] Proto CLI verified and active.
+[2026-05-28 11:05:34.327] Toolchains checked / verified stable.
+[2026-05-28 11:05:37.008] Cloudflared binary verified / updated successfully.
+[2026-05-28 11:05:37.010] Isolated environment initialized successfully!
+[2026-05-28 11:06:47.253] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 11:06:47.257] Proto CLI verified and active.
+[2026-05-28 11:06:47.352] Toolchains checked / verified stable.
+[2026-05-28 11:06:49.966] Cloudflared binary verified / updated successfully.
+[2026-05-28 11:06:49.967] Isolated environment initialized successfully!
+[2026-05-28 19:16:55.472] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 19:16:55.479] Proto CLI verified and active.
+[2026-05-28 19:16:55.527] Toolchains checked / verified stable.
+[2026-05-28 19:16:59.617] Cloudflared binary verified / updated successfully.
+[2026-05-28 19:16:59.619] Isolated environment initialized successfully!
+[2026-05-28 19:18:23.449] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 19:18:23.457] Proto CLI verified and active.
+[2026-05-28 19:18:23.608] Toolchains checked / verified stable.
+[2026-05-28 19:18:26.163] Cloudflared binary verified / updated successfully.
+[2026-05-28 19:18:26.164] Isolated environment initialized successfully!
+[2026-05-28 19:23:17.252] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 19:23:17.259] Proto CLI verified and active.
+[2026-05-28 19:23:17.331] Toolchains checked / verified stable.
+[2026-05-28 19:23:38.794] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 19:23:38.798] Proto CLI verified and active.
+[2026-05-28 19:23:38.828] Toolchains checked / verified stable.
+[2026-05-28 19:23:41.385] Cloudflared binary verified / updated successfully.
+[2026-05-28 19:23:41.393] Isolated environment initialized successfully!
+[2026-05-28 19:27:17.716] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 19:27:17.720] Proto CLI verified and active.
+[2026-05-28 19:27:17.724] Toolchains checked / verified stable.
+[2026-05-28 19:27:24.358] Cloudflared binary verified / updated successfully.
+[2026-05-28 19:27:24.361] Isolated environment initialized successfully!
+[2026-05-28 19:29:20.530] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 19:29:20.534] Proto CLI verified and active.
+[2026-05-28 19:29:20.589] Toolchains checked / verified stable.
+[2026-05-28 19:29:23.683] Cloudflared binary verified / updated successfully.
+[2026-05-28 19:29:23.684] Isolated environment initialized successfully!
+[2026-05-28 19:30:01.194] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 19:30:01.200] Proto CLI verified and active.
+[2026-05-28 19:30:01.294] Toolchains checked / verified stable.
+[2026-05-28 19:30:03.500] Cloudflared binary verified / updated successfully.
+[2026-05-28 19:30:03.502] Isolated environment initialized successfully!
+[2026-05-28 19:33:11.685] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-28 19:33:11.690] Proto CLI verified and active.
+[2026-05-28 19:33:11.906] Toolchains checked / verified stable.
+[2026-05-28 19:33:14.931] Cloudflared binary verified / updated successfully.
+[2026-05-28 19:33:14.932] Isolated environment initialized successfully!

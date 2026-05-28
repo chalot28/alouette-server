@@ -78,6 +78,7 @@ const DOCK_ITEMS: DockItem[] = [
   { id: "sandbox", label: "Sandbox", icon: <Box size={16} /> },
   { id: "theme", label: "Theme", icon: <Palette size={16} /> },
   { id: "language", label: "Programming Language", icon: <Code size={16} /> },
+  { id: "system", label: "System", icon: <Settings size={16} /> },
 ];
 
 // ── Toast state ──
@@ -242,8 +243,7 @@ export default function AdminPanel() {
               onClick={() => handleDockClick(item.id)}
               title={item.label}
             >
-              <span className="admin-dock-icon">{item.icon}</span>
-              <span className="admin-dock-label">{item.label}</span>
+              <span className="admin-dock-label" style={{ paddingLeft: "4px" }}>{item.label}</span>
               {(item.id === "postman" || item.id === "browser") && (
                 <ExternalLink size={10} className="admin-dock-external" />
               )}
@@ -306,6 +306,7 @@ export default function AdminPanel() {
             />
           )}
           {activeDock === "language" && <LanguageSection />}
+          {activeDock === "system" && <SystemSection />}
         </div>
       </div>
 
@@ -3247,4 +3248,286 @@ interface LanguageTool {
   name: string;
   command: string;
   version: string;
+}
+
+function SystemSection() {
+  const [settings, setSettings] = useState<any>(null);
+
+  // telegram bot (local state as user requested to handle backend integration for it later)
+  const [enableTelegram, setEnableTelegram] = useState(false);
+  const [botToken, setBotToken] = useState("");
+  const [chatId, setChatId] = useState("");
+  const [botEvents, setBotEvents] = useState({
+    onStart: true,
+    onStop: true,
+    onError: true,
+    onResourceAlert: false,
+  });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await invoke<any>("get_settings");
+        setSettings(s);
+      } catch (err) {
+        console.error("Failed to load settings:", err);
+      }
+    })();
+  }, []);
+
+  const handleSaveSettings = async () => {
+    if (!settings) return;
+    try {
+      await invoke("save_settings", { settings });
+      alert("Đã lưu cấu hình hệ thống thành công!");
+    } catch (err) {
+      console.error("Failed to save settings:", err);
+      alert("Có lỗi xảy ra khi lưu: " + err);
+    }
+  };
+
+  if (!settings) {
+    return (
+      <div className="admin-panel animate-fade-in" style={{ padding: "40px", textAlign: "center", color: "var(--text-secondary)" }}>
+        Đang tải cấu hình hệ thống...
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-panel animate-fade-in" style={{ paddingBottom: "60px", display: "flex", flexDirection: "column", gap: "28px" }}>
+      <div style={{ borderBottom: "1px solid var(--border-primary)", paddingBottom: "16px" }}>
+        <h2 className="admin-panel-title" style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>System Settings</h2>
+        <p className="admin-panel-desc" style={{ margin: "4px 0 0 0", fontSize: "12px" }}>
+          Cấu hình tối ưu hóa hệ thống, tự khởi động, kiểm soát tài nguyên và tích hợp Bot Telegram giám sát.
+        </p>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* ── Khởi động & Trạng thái ── */}
+        <div className="admin-card">
+          <div className="admin-card-header" style={{ borderBottom: "1px solid var(--border-primary)", paddingBottom: "10px", marginBottom: "14px", fontWeight: 600 }}>
+            Ứng Dụng & Khởi Động
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <CustomCheckbox
+                  checked={settings.keep_alive}
+                  onChange={(val) => setSettings({ ...settings, keep_alive: val })}
+                />
+                <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: 500 }}>
+                  Giữ app sống khi lỡ tay tắt
+                </span>
+              </div>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)", paddingLeft: "26px", lineHeight: "1.4" }}>
+                Khi nhấn nút đóng cửa sổ, ứng dụng sẽ thu nhỏ xuống thanh hệ thống (System Tray) thay vì thoát hoàn toàn.
+              </span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <CustomCheckbox
+                  checked={settings.auto_start}
+                  onChange={(val) => setSettings({ ...settings, auto_start: val })}
+                />
+                <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: 500 }}>
+                  Tự khởi động theo OS
+                </span>
+              </div>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)", paddingLeft: "26px", lineHeight: "1.4" }}>
+                Tự động khởi chạy ứng dụng cùng hệ thống khi máy tính khởi động.
+              </span>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ── Tự động Restart & Tài nguyên ── */}
+        <div className="admin-card" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div>
+            <div className="admin-card-header" style={{ borderBottom: "1px solid var(--border-primary)", paddingBottom: "10px", marginBottom: "14px", fontWeight: 600 }}>
+              Kiểm Soát Tài Nguyên & Restart
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+                <CustomCheckbox
+                  checked={settings.enable_limit}
+                  onChange={(val) => setSettings({ ...settings, enable_limit: val })}
+                />
+                <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: 500 }}>
+                  Giới hạn tài nguyên phần cứng
+                </span>
+              </div>
+              
+              <div style={{ display: "flex", gap: "10px", paddingLeft: "26px", opacity: settings.enable_limit ? 1 : 0.6, transition: "opacity 0.2s ease" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
+                  <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Max CPU (%)</label>
+                  <input
+                    type="number"
+                    disabled={!settings.enable_limit}
+                    className="admin-input"
+                    style={{ padding: "6px 8px", cursor: settings.enable_limit ? "text" : "not-allowed" }}
+                    value={settings.max_cpu_percent}
+                    onChange={(e) => setSettings({ ...settings, max_cpu_percent: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
+                  <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Max RAM (MB)</label>
+                  <input
+                    type="number"
+                    disabled={!settings.enable_limit}
+                    className="admin-input"
+                    style={{ padding: "6px 8px", cursor: settings.enable_limit ? "text" : "not-allowed" }}
+                    value={settings.max_ram_mb}
+                    onChange={(e) => setSettings({ ...settings, max_ram_mb: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+                <CustomCheckbox
+                  checked={settings.auto_restart}
+                  onChange={(val) => setSettings({ ...settings, auto_restart: val })}
+                />
+                <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: 500 }}>
+                  Tự restart app định kỳ
+                </span>
+              </div>
+              
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingLeft: "26px", opacity: settings.auto_restart ? 1 : 0.6, transition: "opacity 0.2s ease" }}>
+                <span style={{ fontSize: "12px", color: "var(--text-primary)" }}>Chu kỳ:</span>
+                <input
+                  type="number"
+                  disabled={!settings.auto_restart}
+                  className="admin-input"
+                  style={{ width: "80px", padding: "6px 8px", cursor: settings.auto_restart ? "text" : "not-allowed" }}
+                  value={settings.restart_interval_hours}
+                  onChange={(e) => setSettings({ ...settings, restart_interval_hours: parseInt(e.target.value) || 0 })}
+                />
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>giờ</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Telegram Bot Integration ── */}
+        <div className="admin-card">
+          <div className="admin-card-header" style={{ borderBottom: "1px solid var(--border-primary)", paddingBottom: "10px", marginBottom: "14px", fontWeight: 600 }}>
+            Cấu Hình Bot Telegram Giám Sát
+          </div>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+              <CustomCheckbox
+                checked={enableTelegram}
+                onChange={setEnableTelegram}
+              />
+              <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: 500 }}>
+                Kích hoạt Bot Telegram báo cáo trạng thái
+              </span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px", paddingLeft: "26px", opacity: enableTelegram ? 1 : 0.6, transition: "opacity 0.2s ease" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Bot Token API</label>
+                  <input
+                    type="password"
+                    disabled={!enableTelegram}
+                    className="admin-input"
+                    style={{ cursor: enableTelegram ? "text" : "not-allowed" }}
+                    placeholder="Ví dụ: 5500000000:AAFn..."
+                    value={botToken}
+                    onChange={(e) => setBotToken(e.target.value)}
+                  />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>User ID / Chat ID</label>
+                  <input
+                    type="text"
+                    disabled={!enableTelegram}
+                    className="admin-input"
+                    style={{ cursor: enableTelegram ? "text" : "not-allowed" }}
+                    placeholder="Ví dụ: 987654321"
+                    value={chatId}
+                    onChange={(e) => setChatId(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <span style={{ fontSize: "11.5px", color: "var(--text-secondary)", fontWeight: 600 }}>Gửi thông báo khi:</span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: enableTelegram ? "pointer" : "not-allowed" }}>
+                    <input
+                      type="checkbox"
+                      disabled={!enableTelegram}
+                      checked={botEvents.onStart}
+                      onChange={(e) => setBotEvents({ ...botEvents, onStart: e.target.checked })}
+                      style={{ accentColor: "var(--color-accent)", cursor: enableTelegram ? "pointer" : "not-allowed" }}
+                    />
+                    Ứng dụng khởi động
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: enableTelegram ? "pointer" : "not-allowed" }}>
+                    <input
+                      type="checkbox"
+                      disabled={!enableTelegram}
+                      checked={botEvents.onStop}
+                      onChange={(e) => setBotEvents({ ...botEvents, onStop: e.target.checked })}
+                      style={{ accentColor: "var(--color-accent)", cursor: enableTelegram ? "pointer" : "not-allowed" }}
+                    />
+                    Ứng dụng tắt/dừng
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: enableTelegram ? "pointer" : "not-allowed" }}>
+                    <input
+                      type="checkbox"
+                      disabled={!enableTelegram}
+                      checked={botEvents.onError}
+                      onChange={(e) => setBotEvents({ ...botEvents, onError: e.target.checked })}
+                      style={{ accentColor: "var(--color-accent)", cursor: enableTelegram ? "pointer" : "not-allowed" }}
+                    />
+                    Có lỗi hệ thống phát sinh
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", cursor: enableTelegram ? "pointer" : "not-allowed" }}>
+                    <input
+                      type="checkbox"
+                      disabled={!enableTelegram}
+                      checked={botEvents.onResourceAlert}
+                      onChange={(e) => setBotEvents({ ...botEvents, onResourceAlert: e.target.checked })}
+                      style={{ accentColor: "var(--color-accent)", cursor: enableTelegram ? "pointer" : "not-allowed" }}
+                    />
+                    Cảnh báo vượt hạn mức tài nguyên
+                  </label>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={!enableTelegram}
+                className="admin-btn admin-btn-secondary"
+                style={{ alignSelf: "flex-start", fontSize: "11px", padding: "6px 12px", cursor: enableTelegram ? "pointer" : "not-allowed" }}
+                onClick={() => alert("Gửi tin nhắn thử nghiệm thành công đến Telegram!")}
+              >
+                Gửi tin nhắn test thử (Send Test Message)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="admin-actions-bar" style={{ marginTop: "12px" }}>
+        <button
+          className="admin-btn admin-btn-primary"
+          onClick={handleSaveSettings}
+          style={{ padding: "8px 20px" }}
+        >
+          Lưu Cấu Hình Hệ Thống
+        </button>
+      </div>
+    </div>
+  );
 }

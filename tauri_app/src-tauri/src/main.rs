@@ -4,6 +4,7 @@
 mod commands;
 mod events;
 mod state;
+mod system_manager;
 
 use core_engine::{ProcessManager, ProcessState, ProjectConfig, ResourceMonitor};
 use state::AppState;
@@ -56,6 +57,58 @@ fn main() {
                 .get_webview_window("main")
                 .ok_or_else(|| tauri::Error::WindowNotFound)?;
 
+            // Initialize all isolated system actions (keep alive, run in background, auto restart)
+            crate::system_manager::init_system(&window);
+
+            // Initialize System Tray (Tauri v2 API)
+            let toggle = tauri::menu::MenuItem::with_id(app, "toggle", "Show/Hide Window", true, None::<&str>)?;
+            let quit = tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = tauri::menu::Menu::with_items(app, &[&toggle, &quit])?;
+
+            let icon = match app.default_window_icon() {
+                Some(icon) => icon.clone(),
+                None => {
+                    tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
+                        .expect("failed to load default tray icon")
+                }
+            };
+
+            let _tray = tauri::tray::TrayIconBuilder::new()
+                .icon(icon)
+                .menu(&menu)
+                .on_menu_event(|app, event| {
+                    if event.id == "toggle" {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let is_visible = window.is_visible().unwrap_or(false);
+                            if is_visible {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    } else if event.id == "quit" {
+                        app.exit(0);
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let is_visible = window.is_visible().unwrap_or(false);
+                            if is_visible {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
             // Spawn SQLite background log persister task inside active Tokio runtime
             let pm_for_persister = pm_clone.clone();
             tauri::async_runtime::spawn(async move {
@@ -66,17 +119,19 @@ fn main() {
             // 0. Spawn environment preloader task (non-blocking ngầm)
             events::spawn_environment_init(pm_clone.clone());
 
+            let window_clone = window.clone();
+
             // 1. Spawn Log Event Router Task
-            events::spawn_log_router(pm_clone.clone(), window.clone());
+            events::spawn_log_router(pm_clone.clone(), window_clone.clone());
 
             // 2. Spawn Status Event Router Task
-            events::spawn_status_router(pm_clone.clone(), rm_clone.clone(), window.clone());
+            events::spawn_status_router(pm_clone.clone(), rm_clone.clone(), window_clone.clone());
 
             // 3. Spawn Resource Stats Router Task with Watchdog enforcement
-            events::spawn_resource_stats_router(rm_clone.clone(), pm_clone.clone(), window.clone());
+            events::spawn_resource_stats_router(rm_clone.clone(), pm_clone.clone(), window_clone.clone());
 
             // 4. Spawn Terminal Event Router Task
-            events::spawn_terminal_router(pm_clone.clone(), window.clone());
+            events::spawn_terminal_router(pm_clone.clone(), window_clone.clone());
 
             Ok(())
         })
@@ -121,6 +176,7 @@ fn main() {
             commands::settings::get_settings,
             commands::settings::save_settings,
             commands::settings::reset_settings,
+            commands::settings::hide_or_close_window,
             commands::sqlite::get_sqlite_tables,
             commands::sqlite::get_sqlite_table_data,
             commands::sqlite::update_sqlite_cell,

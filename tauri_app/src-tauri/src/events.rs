@@ -140,16 +140,32 @@ pub fn spawn_resource_stats_router(
             // Always broadcast stats to frontend
             let _ = window.emit("resource-update", stats.clone());
 
-            // Read thresholds from project config
+            // Read thresholds from project config and global settings
+            let settings = core_engine::AppSettings::load_from_file(
+                std::env::current_dir()
+                    .unwrap_or_default()
+                    .join("app_data")
+                    .join("settings.json")
+            ).unwrap_or_default();
+
             let limits = {
                 let pm = pm_clone.lock().await;
                 pm.get_config(&stats.project_id)
             };
 
-            if let Some(config) = limits {
-                let cpu_limit = config.max_cpu_percent;
-                let ram_limit_mb = config.max_ram_mb;
+            let mut cpu_limit = limits.as_ref().and_then(|c| c.max_cpu_percent);
+            let mut ram_limit_mb = limits.as_ref().and_then(|c| c.max_ram_mb);
 
+            if settings.enable_limit {
+                if cpu_limit.is_none() {
+                    cpu_limit = Some(settings.max_cpu_percent);
+                }
+                if ram_limit_mb.is_none() {
+                    ram_limit_mb = Some(settings.max_ram_mb as u64);
+                }
+            }
+
+            if cpu_limit.is_some() || ram_limit_mb.is_some() {
                 let cpu_exceeded = cpu_limit.map(|limit| stats.cpu_percentage > limit as f32).unwrap_or(false);
                 let ram_exceeded = ram_limit_mb.map(|limit| stats.ram_bytes > limit * 1024 * 1024).unwrap_or(false);
 

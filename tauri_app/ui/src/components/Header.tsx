@@ -1,5 +1,6 @@
 import brandIcon from "./brand-icon.png";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import {
   FileText,
   Settings,
@@ -71,9 +72,14 @@ export default function Header({
 
   const handleClose = async () => {
     try {
-      await appWindow.close();
+      await invoke("hide_or_close_window");
     } catch (e) {
       console.error("Close error:", e);
+      try {
+        await appWindow.close();
+      } catch (err) {
+        console.error("Fallback close error:", err);
+      }
     }
   };
 

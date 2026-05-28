@@ -36,6 +36,16 @@ pub struct AppSettings {
     pub build_output_name: String,
     pub build_source_dir: String,
     pub build_target: String, // "Desktop" | "Android"
+
+    // ── System ──
+    pub keep_alive: bool,
+    pub auto_start: bool,
+    pub run_in_background: bool,
+    pub enable_limit: bool,
+    pub max_cpu_percent: u32,
+    pub max_ram_mb: u32,
+    pub auto_restart: bool,
+    pub restart_interval_hours: u32,
 }
 
 impl Default for AppSettings {
@@ -63,6 +73,14 @@ impl Default for AppSettings {
             build_output_name: "alouette-server".to_string(),
             build_source_dir: ".".to_string(),
             build_target: "Desktop".to_string(),
+            keep_alive: true,
+            auto_start: false,
+            run_in_background: false,
+            enable_limit: false,
+            max_cpu_percent: 80,
+            max_ram_mb: 1024,
+            auto_restart: false,
+            restart_interval_hours: 24,
         }
     }
 }
