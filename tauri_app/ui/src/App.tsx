@@ -824,6 +824,7 @@ export default function App() {
             <AiAgent 
               onBack={() => setIsAiViewActive(false)} 
               activeProjectCwd={activeProject?.cwd}
+              activeProjectId={activeProject?.id}
             />
           ) : (
             <>

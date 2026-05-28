@@ -245,16 +245,29 @@ impl ProcessManager {
         });
 
         let out_tx = self.terminal_sender.clone();
+        let log_tx = self.log_sender.clone();
         std::thread::spawn(move || {
             let mut r = reader;
             let mut buf = [0u8; 4096];
             loop {
                 match std::io::Read::read(&mut r, &mut buf) {
                     Ok(0) => { eprintln!("[terminal] '{sid_r}' EOF"); break; }
-                    Ok(n) => { let _ = out_tx.send(TerminalOutput {
-                        session_id: sid_r.clone(),
-                        text: String::from_utf8_lossy(&buf[..n]).into_owned(),
-                    }); }
+                    Ok(n) => {
+                        let text = String::from_utf8_lossy(&buf[..n]).into_owned();
+                        let _ = out_tx.send(TerminalOutput {
+                            session_id: sid_r.clone(),
+                            text: text.clone(),
+                        });
+
+                        // Extract project ID from session ID (e.g. backend-term-default -> backend)
+                        let project_id = sid_r.split("-term-").next().unwrap_or(&sid_r).to_string();
+                        let _ = log_tx.send(super::models::ProcessLog {
+                            project_id,
+                            stream: "stdout".to_string(),
+                            text,
+                            timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                        });
+                    }
                     Err(e) => { eprintln!("[terminal] '{sid_r}' read: {e}"); break; }
                 }
             }

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, Send, RefreshCw, Layers, History, ArrowLeft, Shield, Terminal, Database, Globe, Cpu, Activity, Hammer, Chrome, Lock, Unlock, Zap, GitBranch, Sliders } from "lucide-react";
+import { Plus, Send, RefreshCw, Layers, History, ArrowLeft, Shield, Terminal, Database, Globe, Cpu, Activity, Hammer, Chrome, Lock, Unlock, Zap, GitBranch, Sliders, Bot, X, Search, AlertTriangle } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -19,11 +19,13 @@ interface ChatItem {
 interface AiAgentProps {
   onBack: () => void;
   activeProjectCwd?: string;
+  activeProjectId?: string;
 }
 
-export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
+export default function AiAgent({ onBack, activeProjectCwd, activeProjectId }: AiAgentProps) {
   const [chatHistory, setChatHistory] = useState<ChatItem[]>([]);
   const [activeTool, setActiveTool] = useState<{ status: "executing" | "idle"; tool_name?: string; args?: string }>({ status: "idle" });
+  const [alouetteError, setAlouetteError] = useState<{ id: string; projectName: string; errorText: string } | null>(null);
 
   const [inputVal, setInputVal] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -172,26 +174,28 @@ export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
     const setupErrorListener = async () => {
       unlistenFn = await listen("alouette-open-error", (event: any) => {
         const errorData = event.payload;
-        // Verify if we are currently standing on this project
-        const matchesCwd = activeProjectCwd && errorData.cwd && 
-          activeProjectCwd.replace(/\\/g, "/").toLowerCase() === errorData.cwd.replace(/\\/g, "/").toLowerCase();
         
-        if (matchesCwd) {
-          const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const newMsg: ChatItem = {
+        const normalizePath = (p: string | undefined | null) => {
+          if (!p) return "";
+          let clean = p.replace(/\\/g, "/").toLowerCase();
+          if (clean.startsWith("//?/")) clean = clean.substring(4);
+          if (clean.startsWith("\\\\?\\")) clean = clean.substring(4);
+          // Strip UNC prefix specifically
+          clean = clean.replace(/^\/\/\?\//, "");
+          return clean;
+        };
+
+        const matchesCwd = activeProjectCwd && errorData.cwd && 
+          normalizePath(activeProjectCwd) === normalizePath(errorData.cwd);
+          
+        const matchesId = activeProjectId && errorData.project_id && 
+          activeProjectId.toLowerCase() === errorData.project_id.toLowerCase();
+        
+        if (matchesCwd || matchesId) {
+          setAlouetteError({
             id: `err_${Date.now()}`,
-            type: "alouette_error",
-            sender: "agent",
             projectName: errorData.project_name,
-            errorText: errorData.text,
-            timestamp: timestampStr
-          };
-          setChatHistory((prev) => {
-            // Avoid duplicate error inserts
-            if (prev.some(m => m.errorText === errorData.text)) {
-              return prev;
-            }
-            return [...prev, newMsg];
+            errorText: errorData.text
           });
         }
       });
@@ -200,7 +204,7 @@ export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
     return () => {
       if (unlistenFn) unlistenFn();
     };
-  }, [activeProjectCwd]);
+  }, [activeProjectCwd, activeProjectId]);
 
   // Auto-resize textarea height
   useEffect(() => {
@@ -597,82 +601,6 @@ export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
             );
           }
 
-          if (item.type === "alouette_error") {
-            return (
-              <div key={item.id} style={{
-                padding: "12px 14px",
-                backgroundColor: "var(--bg-primary)",
-                border: "1px solid var(--border-primary)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "10px",
-                margin: "4px 0",
-                borderRadius: "4px"
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
-                    🤖 <span>Alouette A1 phát hiện lỗi</span>
-                  </span>
-                  <span style={{ fontSize: "9px", color: "var(--text-muted)" }}>{item.timestamp}</span>
-                </div>
-
-                <div style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
-                  Phát hiện lỗi tại dự án <strong style={{ color: "var(--text-primary)" }}>{item.projectName}</strong>. Bạn có muốn bắt đầu tìm hiểu nguyên nhân lỗi này không?
-                </div>
-
-                <div style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "10.5px",
-                  color: "#ef4444",
-                  backgroundColor: "rgba(239, 68, 68, 0.04)",
-                  padding: "8px 10px",
-                  border: "1px solid rgba(239, 68, 68, 0.15)",
-                  borderRadius: "3px",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                  maxHeight: "120px",
-                  overflowY: "auto"
-                }}>
-                  {item.errorText}
-                </div>
-
-                <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
-                  <button
-                    onClick={() => {
-                      setChatHistory(prev => prev.filter(m => m.id !== item.id));
-                    }}
-                    style={{
-                      padding: "5px 10px",
-                      fontSize: "11px",
-                      backgroundColor: "transparent",
-                      border: "1px solid var(--border-primary)",
-                      color: "var(--text-secondary)",
-                      cursor: "pointer",
-                      borderRadius: "3px"
-                    }}
-                  >
-                    Bỏ qua
-                  </button>
-                  <button
-                    onClick={() => handleStartAnalyze(item.errorText || "")}
-                    style={{
-                      padding: "5px 12px",
-                      fontSize: "11px",
-                      backgroundColor: "var(--text-primary)",
-                      border: "1px solid var(--text-primary)",
-                      color: "var(--bg-primary)",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      borderRadius: "3px"
-                    }}
-                  >
-                    🔍 Bắt đầu tìm hiểu
-                  </button>
-                </div>
-              </div>
-            );
-          }
-
           if (item.type === "tool_request") {
             return (
               <div key={item.id} style={{
@@ -823,6 +751,108 @@ export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
         flexDirection: "column",
         gap: "8px"
       }}>
+        {alouetteError && (
+          <div className="animate-fade-in" style={{
+            padding: "10px 12px",
+            backgroundColor: "var(--bg-primary)",
+            border: "1px solid #ef4444",
+            borderRadius: "4px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+            marginBottom: "4px",
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Bot size={14} style={{ color: "#ef4444" }} /> <span>Alouette A1 phát hiện lỗi ở [{alouetteError.projectName}]</span>
+              </span>
+              <button
+                onClick={() => setAlouetteError(null)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-secondary)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "2px",
+                  borderRadius: "3px",
+                  transition: "all 0.2s"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--text-primary)";
+                  e.currentTarget.style.backgroundColor = "var(--bg-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "var(--text-secondary)";
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "10.5px",
+              color: "#ef4444",
+              backgroundColor: "rgba(239, 68, 68, 0.05)",
+              padding: "6px 8px",
+              border: "1px solid rgba(239, 68, 68, 0.15)",
+              borderRadius: "3px",
+              maxHeight: "80px",
+              overflowY: "auto",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-all"
+            }}>
+              {alouetteError.errorText}
+            </div>
+
+            <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setAlouetteError(null)}
+                style={{
+                  padding: "4px 8px",
+                  fontSize: "10.5px",
+                  backgroundColor: "transparent",
+                  border: "1px solid var(--border-primary)",
+                  color: "var(--text-secondary)",
+                  cursor: "pointer",
+                  borderRadius: "3px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px"
+                }}
+              >
+                Bỏ qua
+              </button>
+              <button
+                onClick={() => {
+                  handleStartAnalyze(alouetteError.errorText);
+                  setAlouetteError(null);
+                }}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "10.5px",
+                  backgroundColor: "var(--text-primary)",
+                  border: "1px solid var(--text-primary)",
+                  color: "var(--bg-primary)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  borderRadius: "3px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px"
+                }}
+              >
+                <Search size={12} /> Bắt đầu tìm hiểu
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Capabilities Panel */}
         {capsOpen && (
           <div style={{
