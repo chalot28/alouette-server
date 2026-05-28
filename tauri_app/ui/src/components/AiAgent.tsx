@@ -164,6 +164,41 @@ export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
     };
   }, []);
 
+  // Listen for Alouette Open background error event
+  useEffect(() => {
+    let unlistenFn: any;
+    const setupErrorListener = async () => {
+      unlistenFn = await listen("alouette-open-error", (event: any) => {
+        const errorData = event.payload;
+        // Verify if we are currently standing on this project
+        const matchesCwd = activeProjectCwd && errorData.cwd && 
+          activeProjectCwd.replace(/\\/g, "/").toLowerCase() === errorData.cwd.replace(/\\/g, "/").toLowerCase();
+        
+        if (matchesCwd) {
+          const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const newMsg: ChatItem = {
+            id: `err_${Date.now()}`,
+            type: "text",
+            sender: "agent",
+            text: `[Alouette Open] Phát hiện lỗi tại dự án "${errorData.project_name}":\n\n\`\`\`\n${errorData.text}\n\`\`\`\n\nBạn có muốn tôi tự động sửa lỗi này không?`,
+            timestamp: timestampStr
+          };
+          setChatHistory((prev) => {
+            // Avoid duplicate error inserts
+            if (prev.some(m => m.text?.includes(errorData.text))) {
+              return prev;
+            }
+            return [...prev, newMsg];
+          });
+        }
+      });
+    };
+    setupErrorListener();
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  }, [activeProjectCwd]);
+
   // Auto-resize textarea height
   useEffect(() => {
     if (textareaRef.current) {

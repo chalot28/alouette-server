@@ -21,6 +21,7 @@ regex-lite = "0.1"
 url = "2"
 quick-xml = "0.31"
 jsonschema = "0.18"
+tract-onnx = "0.21.3"
 
 
 

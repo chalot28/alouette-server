@@ -5,6 +5,7 @@ mod commands;
 mod events;
 mod state;
 mod system_manager;
+mod alouette_open;
 
 use core_engine::{ProcessManager, ProcessState, ProjectConfig, ResourceMonitor};
 use state::AppState;
@@ -133,6 +134,9 @@ fn main() {
             // 4. Spawn Terminal Event Router Task
             events::spawn_terminal_router(pm_clone.clone(), window_clone.clone());
 
+            // 5. Spawn Alouette Open log monitor task
+            alouette_open::spawn_alouette_open_monitor(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -196,6 +200,8 @@ fn main() {
             commands::agent::agent_reset_session,
             commands::agent::get_custom_ai_config,
             commands::agent::save_custom_ai_config,
+            toggle_alouette_open,
+            is_alouette_open_active,
         ])
 
         .build(tauri::generate_context!())
@@ -240,4 +246,14 @@ fn main() {
                 });
             }
         });
+}
+
+#[tauri::command]
+fn toggle_alouette_open(enabled: bool) {
+    alouette_open::set_alouette_open_enabled(enabled);
+}
+
+#[tauri::command]
+fn is_alouette_open_active() -> bool {
+    alouette_open::is_alouette_open_enabled()
 }

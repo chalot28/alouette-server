@@ -508,10 +508,15 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
     return saved ? JSON.parse(saved) : true;
   });
 
-  const handleToggleAlouetteOpen = () => {
+  const handleToggleAlouetteOpen = async () => {
     const nextVal = !alouetteOpenEnabled;
     setAlouetteOpenEnabled(nextVal);
     localStorage.setItem("alouette_open_enabled", JSON.stringify(nextVal));
+    try {
+      await invoke("toggle_alouette_open", { enabled: nextVal });
+    } catch (err) {
+      console.error("Failed to sync Alouette Open toggle:", err);
+    }
     setToast({
       message: nextVal ? "✓ Đã bật mô hình tích hợp Alouette Open" : "✕ Đã tắt mô hình tích hợp Alouette Open",
       type: nextVal ? "success" : "info"
@@ -568,6 +573,13 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
 
   // Load configurations
   useEffect(() => {
+    // Sync initial Alouette Open state to backend
+    const savedAlouetteOpen = localStorage.getItem("alouette_open_enabled");
+    const alouetteEnabled = savedAlouetteOpen ? JSON.parse(savedAlouetteOpen) : true;
+    invoke("toggle_alouette_open", { enabled: alouetteEnabled }).catch(err => 
+      console.error("Failed to sync initial Alouette Open state:", err)
+    );
+
     const savedActive = localStorage.getItem("alouette_active_models");
     if (savedActive) setActiveModels(JSON.parse(savedActive));
 
