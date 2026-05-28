@@ -503,6 +503,20 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
   const [activeModels, setActiveModels] = useState<string[]>(["deepseek-v4-pro", "claude-opus-4.7", "gemini-3.5-flash"]);
   const [customModels, setCustomModels] = useState<CustomModel[]>([]);
   const [expandedProviders, setExpandedProviders] = useState<string[]>([]);
+  const [alouetteOpenEnabled, setAlouetteOpenEnabled] = useState(() => {
+    const saved = localStorage.getItem("alouette_open_enabled");
+    return saved ? JSON.parse(saved) : true;
+  });
+
+  const handleToggleAlouetteOpen = () => {
+    const nextVal = !alouetteOpenEnabled;
+    setAlouetteOpenEnabled(nextVal);
+    localStorage.setItem("alouette_open_enabled", JSON.stringify(nextVal));
+    setToast({
+      message: nextVal ? "✓ Đã bật mô hình tích hợp Alouette Open" : "✕ Đã tắt mô hình tích hợp Alouette Open",
+      type: nextVal ? "success" : "info"
+    });
+  };
 
   const toggleExpandProvider = (provId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1065,6 +1079,68 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      <div style={{ height: "1px", backgroundColor: "var(--border-primary)", margin: "8px 0" }} />
+
+      {/* ── PART 3: ALOUETTE INTEGRATED MODELS ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div>
+          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
+            Alouette Integrated Models
+          </h3>
+          <p style={{ fontSize: "11.5px", color: "var(--text-secondary)", margin: 0 }}>
+            Mô hình AI tích hợp sâu chạy ngầm phục vụ tác vụ tự trị và các tính năng lõi của hệ thống Alouette (Không hiển thị ở giao diện AI Agent chat).
+          </p>
+        </div>
+
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "14px 18px",
+          backgroundColor: "var(--bg-secondary)",
+          border: `1px solid ${alouetteOpenEnabled ? "var(--text-primary)" : "var(--border-primary)"}`,
+          borderRadius: "4px"
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                Alouette Open
+              </span>
+              <span style={{
+                fontSize: "9px",
+                padding: "1px 5px",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-secondary)",
+                border: "1px solid var(--border-primary)",
+                fontWeight: 600,
+                borderRadius: "3px"
+              }}>
+                MÔ HÌNH LÕI TÍCH HỢP
+              </span>
+            </div>
+            
+            <p style={{ fontSize: "11.5px", color: "var(--text-secondary)", margin: 0, lineHeight: "1.4" }}>
+              Mã máy: <strong style={{ color: "var(--text-primary)" }}>alouette_open-A1</strong> (Context: 40k) • Chuyên biệt cho xử lý logic hệ thống, tự động hóa quy trình và phân tích ngầm.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div
+              onClick={handleToggleAlouetteOpen}
+              style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}
+            >
+              <span style={{ fontSize: "11px", color: alouetteOpenEnabled ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                {alouetteOpenEnabled ? "Đang bật" : "Đã tắt"}
+              </span>
+              <CustomCheckbox
+                checked={alouetteOpenEnabled}
+                onChange={handleToggleAlouetteOpen}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
