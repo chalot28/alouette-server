@@ -50,7 +50,7 @@ pub fn spawn_alouette_open_monitor(app_handle: AppHandle) {
         };
 
         loop {
-            sleep(Duration::from_secs(30)).await;
+            sleep(Duration::from_millis(500)).await;
 
             if !is_alouette_open_enabled() {
                 continue;
