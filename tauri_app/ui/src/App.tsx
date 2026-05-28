@@ -21,6 +21,7 @@ import {
   Settings,
   SlidersHorizontal,
   Hammer,
+  Database
 } from "lucide-react";
 
 // Components
@@ -36,6 +37,7 @@ import FileExplorer from "./components/FileExplorer";
 import SqliteEditor from "./components/SqliteEditor";
 import MiniPostman from "./components/MiniPostman";
 import AiAgent from "./components/AiAgent";
+import ProjectResources from "./components/ProjectResources";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 function ZenIcon({ size = 14 }: { size?: number }) {
@@ -520,6 +522,7 @@ export default function App() {
         handleStop={handleStop}
         triggerConfirm={triggerConfirm}
         triggerToast={triggerToast}
+        onOpenResources={() => handleFileOpen("__resources__")}
       />
 
       {/* 2. Main Workspace — Full Dashboard Grid */}
@@ -686,9 +689,13 @@ export default function App() {
                           onClick={() => setOpenFilePath(path)}
                           title={path}
                         >
-                          <FileCode size={12} className="tab-icon" />
+                          {path === "__resources__" ? (
+                            <Database size={12} className="tab-icon" />
+                          ) : (
+                            <FileCode size={12} className="tab-icon" />
+                          )}
                           <span className="tab-name">
-                            {path.split(/[\\/]/).pop()}
+                            {path === "__resources__" ? "Tài nguyên" : path.split(/[\\/]/).pop()}
                           </span>
                           <button
                             className="tab-close-btn"
@@ -733,7 +740,15 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                {isSqliteFile && openFilePath ? (
+                {openFilePath === "__resources__" ? (
+                  <ProjectResources
+                    activeProject={activeProject}
+                    activeState={activeState}
+                    resourceHistory={resourceHistory}
+                    handleStart={handleStart}
+                    handleStop={handleStop}
+                  />
+                ) : isSqliteFile && openFilePath ? (
                   <SqliteEditor
                     filePath={openFilePath}
                     triggerConfirm={triggerConfirm}

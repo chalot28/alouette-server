@@ -1180,3 +1180,19 @@
 [2026-05-28 21:16:28.902] Toolchains checked / verified stable.
 [2026-05-28 21:16:31.809] Cloudflared binary verified / updated successfully.
 [2026-05-28 21:16:31.810] Isolated environment initialized successfully!
+[2026-05-29 06:06:15.454] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 06:06:15.460] Proto CLI verified and active.
+[2026-05-29 06:06:15.547] Toolchains checked / verified stable.
+[2026-05-29 06:06:18.492] Cloudflared binary verified / updated successfully.
+[2026-05-29 06:06:18.494] Isolated environment initialized successfully!
+[2026-05-29 06:14:02.181] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 06:14:02.186] Proto CLI verified and active.
+[2026-05-29 06:14:02.220] Toolchains checked / verified stable.
+[2026-05-29 06:14:06.242] Cloudflared binary verified / updated successfully.
+[2026-05-29 06:14:06.244] Isolated environment initialized successfully!
+[2026-05-29 06:19:39.274] Reading file: D:/server_dvtn/.env
+[2026-05-29 06:24:47.879] Reading file: __resources__
+[2026-05-29 06:25:03.260] Tauri command received: start_project_process for project_id: backend
+[2026-05-29 06:25:03.268] Process successfully started for project_id: backend
+[2026-05-29 06:25:39.791] Tauri command received: stop_project_process for project_id: backend
+[2026-05-29 06:25:39.793] Process successfully stopped for project_id: backend

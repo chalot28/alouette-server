@@ -10,7 +10,8 @@ import {
   Minus,
   Square,
   X,
-  Play
+  Play,
+  Database
 } from "lucide-react";
 
 interface HeaderProps {
@@ -31,6 +32,7 @@ interface HeaderProps {
   handleStop?: () => void;
   triggerConfirm: (message: string, onConfirm: () => void) => void;
   triggerToast: (message: string, type: "success" | "error" | "info") => void;
+  onOpenResources: () => void;
 }
 
 export default function Header({
@@ -50,7 +52,8 @@ export default function Header({
   handleStart,
   handleStop,
   triggerConfirm,
-  triggerToast
+  triggerToast,
+  onOpenResources
 }: HeaderProps) {
   const appWindow = getCurrentWindow();
 
@@ -188,6 +191,16 @@ export default function Header({
       </div>
 
       <div className="header-right">
+        <button
+          className="btn-header-resources"
+          onClick={() => {
+            onOpenResources();
+          }}
+          title="Tài nguyên"
+        >
+          <Database size={13} />
+        </button>
+
         {activeProject && (
           <div className="header-process-controls">
             <span className="header-process-name" title={activeProject.name}>

@@ -339,7 +339,8 @@ body {
     }
 }
 
-.btn-theme-toggle {
+.btn-theme-toggle,
+.btn-header-resources {
     background: none;
     border: none;
     color: var(--text-secondary);
@@ -352,7 +353,8 @@ body {
     transition: all var(--transition-fast);
 }
 
-.btn-theme-toggle:hover {
+.btn-theme-toggle:hover,
+.btn-header-resources:hover {
     color: var(--text-primary);
     background-color: var(--bg-tertiary);
 }
@@ -6751,4 +6753,204 @@ body {
 
 .sandbox-terminal {
     user-select: text;
+}
+
+/* ==========================================
+   Project Resources Dashboard (Tài nguyên)
+   ========================================== */
+
+.resources-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 40px;
+    text-align: center;
+    color: var(--text-secondary);
+    background-color: var(--bg-primary);
+}
+
+.resources-empty-state h3 {
+    margin-top: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.resources-empty-state p {
+    margin-top: 8px;
+    font-size: 12px;
+    max-width: 320px;
+    line-height: 1.5;
+}
+
+.project-resources-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px;
+    height: 100%;
+    overflow-y: auto;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* Resource Cards Grid */
+.resources-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.stat-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color var(--transition-normal);
+}
+
+.stat-card:hover {
+    border-color: var(--border-focus);
+}
+
+.stat-card .card-header {
+    display: flex;
+    align-items: center;
+}
+
+.stat-card .card-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stat-card .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.value-display {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.value-display .number {
+    font-family: var(--font-mono);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.value-display .unit {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.uptime-display {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.02em;
+}
+
+.uptime-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.progress-bar-wrapper {
+    height: 4px;
+    background: var(--bg-tertiary);
+    width: 100%;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    transition: width 0.5s ease-out;
+}
+
+/* All fills match the application brand accent color */
+.progress-bar-fill.cpu,
+.progress-bar-fill.ram,
+.progress-bar-fill.gpu { 
+    background-color: var(--color-accent); 
+}
+
+.stat-card .meta-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+/* Meta Details Section */
+.resources-meta-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-top: 1px solid var(--border-primary);
+    padding-top: 16px;
+    margin-top: 4px;
+}
+
+.resources-meta-section .section-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.meta-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+}
+
+.meta-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.meta-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.meta-value {
+    font-size: 11.5px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.meta-value.mono {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
 }
