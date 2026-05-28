@@ -5,13 +5,15 @@ import { listen } from "@tauri-apps/api/event";
 
 interface ChatItem {
   id: string;
-  type: "text" | "tool_request" | "agent_activity";
+  type: "text" | "tool_request" | "agent_activity" | "alouette_error";
   sender: "user" | "agent";
   text?: string;
   toolName?: string;
   args?: string;
   toolStatus?: "waiting" | "approved" | "rejected";
   timestamp: string;
+  projectName?: string;
+  errorText?: string;
 }
 
 interface AiAgentProps {
@@ -178,14 +180,15 @@ export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
           const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const newMsg: ChatItem = {
             id: `err_${Date.now()}`,
-            type: "text",
+            type: "alouette_error",
             sender: "agent",
-            text: `[Alouette Open] Phát hiện lỗi tại dự án "${errorData.project_name}":\n\n\`\`\`\n${errorData.text}\n\`\`\`\n\nBạn có muốn tôi tự động sửa lỗi này không?`,
+            projectName: errorData.project_name,
+            errorText: errorData.text,
             timestamp: timestampStr
           };
           setChatHistory((prev) => {
             // Avoid duplicate error inserts
-            if (prev.some(m => m.text?.includes(errorData.text))) {
+            if (prev.some(m => m.errorText === errorData.text)) {
               return prev;
             }
             return [...prev, newMsg];
@@ -218,26 +221,19 @@ export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputVal.trim()) return;
+  const triggerSendMessage = async (messageText: string) => {
+    if (!messageText.trim()) return;
 
     const userMsg: ChatItem = {
       id: Date.now().toString(),
       type: "text",
       sender: "user",
-      text: inputVal,
+      text: messageText,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
     setChatHistory((prev) => [...prev, userMsg]);
-    const messageText = inputVal;
-    setInputVal("");
     setIsTyping(true);
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
 
     try {
       const response: {
@@ -297,6 +293,22 @@ export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
       };
       setChatHistory((prev) => [...prev, errorMsg]);
     }
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputVal.trim()) return;
+    const text = inputVal;
+    setInputVal("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+    await triggerSendMessage(text);
+  };
+
+  const handleStartAnalyze = async (errorLog: string) => {
+    const promptText = `Tôi phát hiện lỗi hệ thống dưới đây. Hãy phân tích nguyên nhân và tìm cách sửa lỗi này giúp tôi:\n\n${errorLog}`;
+    await triggerSendMessage(promptText);
   };
 
   const handleApproveTool = async (id: string) => {
@@ -581,6 +593,82 @@ export default function AiAgent({ onBack, activeProjectCwd }: AiAgentProps) {
                 whiteSpace: "pre-wrap"
               }}>
                 {item.text}
+              </div>
+            );
+          }
+
+          if (item.type === "alouette_error") {
+            return (
+              <div key={item.id} style={{
+                padding: "12px 14px",
+                backgroundColor: "var(--bg-primary)",
+                border: "1px solid var(--border-primary)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                margin: "4px 0",
+                borderRadius: "4px"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                    🤖 <span>Alouette A1 phát hiện lỗi</span>
+                  </span>
+                  <span style={{ fontSize: "9px", color: "var(--text-muted)" }}>{item.timestamp}</span>
+                </div>
+
+                <div style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+                  Phát hiện lỗi tại dự án <strong style={{ color: "var(--text-primary)" }}>{item.projectName}</strong>. Bạn có muốn bắt đầu tìm hiểu nguyên nhân lỗi này không?
+                </div>
+
+                <div style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10.5px",
+                  color: "#ef4444",
+                  backgroundColor: "rgba(239, 68, 68, 0.04)",
+                  padding: "8px 10px",
+                  border: "1px solid rgba(239, 68, 68, 0.15)",
+                  borderRadius: "3px",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                  maxHeight: "120px",
+                  overflowY: "auto"
+                }}>
+                  {item.errorText}
+                </div>
+
+                <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                  <button
+                    onClick={() => {
+                      setChatHistory(prev => prev.filter(m => m.id !== item.id));
+                    }}
+                    style={{
+                      padding: "5px 10px",
+                      fontSize: "11px",
+                      backgroundColor: "transparent",
+                      border: "1px solid var(--border-primary)",
+                      color: "var(--text-secondary)",
+                      cursor: "pointer",
+                      borderRadius: "3px"
+                    }}
+                  >
+                    Bỏ qua
+                  </button>
+                  <button
+                    onClick={() => handleStartAnalyze(item.errorText || "")}
+                    style={{
+                      padding: "5px 12px",
+                      fontSize: "11px",
+                      backgroundColor: "var(--text-primary)",
+                      border: "1px solid var(--text-primary)",
+                      color: "var(--bg-primary)",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      borderRadius: "3px"
+                    }}
+                  >
+                    🔍 Bắt đầu tìm hiểu
+                  </button>
+                </div>
               </div>
             );
           }
