@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use tauri::{State, WebviewWindow, Emitter};
 use serde::{Serialize, Deserialize};
 use serde_json::{json, Value};
-use core_engine::{AgentHarness, ChatMessage, AgentSession};
+use core_engine::{agent_harness::HarnessMode, AgentHarness, ChatMessage, AgentSession};
 use crate::state::AppState;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -37,7 +37,7 @@ pub async fn agent_send_message(
     let workspace = active_cwd
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
-    let harness = AgentHarness::new(&workspace);
+    let mut harness = AgentHarness::new(&workspace);
 
     // Initialize or load session (in a short scope to release MutexGuard before async awaits)
     let session_store = get_session_store();
@@ -48,6 +48,9 @@ pub async fn agent_send_message(
             history: Vec::new(),
             current_thought: None,
             pending_tool: None,
+            mode: HarnessMode::Standard,
+            plan: None,
+            autonomous_state: None,
         });
 
         // Add user message to history
@@ -62,7 +65,7 @@ pub async fn agent_send_message(
 
     // Load configuration for Custom AI
     let ai_cfg = load_custom_ai_config();
-    
+
     // Get the config for the active model or fallback to standard parameters
     let active_model_name = ai_cfg.active_model.clone();
     let model_config = ai_cfg.models.get(&active_model_name).cloned().unwrap_or_else(|| ModelConfig {
@@ -82,7 +85,7 @@ pub async fn agent_send_message(
 
     // Construct the full prompt (System prompt + History)
     let system_prompt = harness.assemble_system_prompt();
-    
+
     // Call LLM (Gemini or fallback simulator)
     let api_key = if !model_config.api_key.is_empty() && model_config.api_key != "none" {
         Some(model_config.api_key.clone())
@@ -161,22 +164,22 @@ pub async fn agent_send_message(
         if is_safe && is_autonomous {
             // Autonomous execute and continue
             let activity_text = format!("🔍 Harness executing tool [自主运行]: {} with arguments: {}", tool.name, tool.arguments);
-            
+
             // Emit executing activity
             let _ = window.emit("agent-activity", serde_json::json!({
                 "status": "executing",
                 "tool_name": tool.name.clone(),
                 "args": tool.arguments.to_string(),
             }));
-            
+
             // Execute tool (Awaiting here is safe since MutexGuard is released)
             let result = harness.execute_tool(&session.session_id, &tool).await.unwrap_or_else(|e| e);
-            
+
             // Emit idle activity
             let _ = window.emit("agent-activity", serde_json::json!({
                 "status": "idle",
             }));
-            
+
             // Push observation to history and save
             session.history.push(ChatMessage {
                 id: format!("obs_{}", Local::now().timestamp_millis()),
@@ -215,7 +218,7 @@ pub async fn agent_send_message(
         let mut session_guard = session_store.lock().unwrap();
         *session_guard = Some(session);
     }
-    
+
     Ok(response)
 }
 
@@ -229,7 +232,7 @@ pub async fn agent_approve_tool(
     let workspace = active_cwd
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
-    let harness = AgentHarness::new(&workspace);
+    let mut harness = AgentHarness::new(&workspace);
 
     let session_store = get_session_store();
     let (mut session, tool) = {
@@ -258,7 +261,7 @@ pub async fn agent_approve_tool(
 
         // Execute tool (Awaiting here is safe since MutexGuard is released)
         let result = harness.execute_tool(&session.session_id, &tool).await.unwrap_or_else(|e| e);
-        
+
         // Emit idle activity
         let _ = window.emit("agent-activity", serde_json::json!({
             "status": "idle",
@@ -290,7 +293,7 @@ pub async fn agent_approve_tool(
         let mut session_guard = session_store.lock().unwrap();
         *session_guard = Some(session);
     }
-    
+
     Ok(response)
 }
 
@@ -303,7 +306,7 @@ pub fn get_custom_ai_config() -> Result<CustomAiConfig, String> {
 pub fn save_custom_ai_config(config: CustomAiConfig) -> Result<(), String> {
     let mut current = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut config_path = None;
-    
+
     for _ in 0..10 {
         let check_path = current.join("core_engine/app_data/ai_config.yml");
         if check_path.exists() {
@@ -366,7 +369,7 @@ pub struct CustomAiConfig {
 fn load_custom_ai_config() -> CustomAiConfig {
     let mut current = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut config_path = None;
-    
+
     for _ in 0..10 {
         let check_path = current.join("core_engine/app_data/ai_config.yml");
         if check_path.exists() {
@@ -422,7 +425,7 @@ async fn call_gemini_api(
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
     let model_name = if model.is_empty() { "gemini-1.5-flash" } else { model };
-    
+
     // Support either clean base url or direct model url
     let url = if api_url.contains("generateContent") {
         format!("{}?key={}", api_url, api_key)
@@ -435,7 +438,7 @@ async fn call_gemini_api(
 
     // Build the request contents structure matching Google Gemini API spec
     let mut contents = Vec::new();
-    
+
     // Add history
     for msg in history {
         let role = if msg.role == "user" { "user" } else { "model" };
@@ -486,7 +489,7 @@ async fn call_openai_api(
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
     let model_name = if model.is_empty() { "gpt-4o" } else { model };
-    
+
     let url = if api_url.contains("/chat/completions") {
         api_url.to_string()
     } else {
@@ -494,7 +497,7 @@ async fn call_openai_api(
     };
 
     let mut messages = Vec::new();
-    
+
     // Add system prompt first
     messages.push(json!({
         "role": "system",
@@ -552,7 +555,7 @@ async fn call_claude_api(
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
     let model_name = if model.is_empty() { "claude-3-5-sonnet" } else { model };
-    
+
     let url = if api_url.contains("/v1/messages") {
         api_url.to_string()
     } else {
@@ -560,7 +563,7 @@ async fn call_claude_api(
     };
 
     let mut messages = Vec::new();
-    
+
     // Add history
     for msg in history {
         let role = if msg.role == "user" { "user" } else { "assistant" };
@@ -636,9 +639,9 @@ r#"
 <thought>
 Đây là một câu hỏi thông thường. Tôi sẽ giải thích trực tiếp cách bộ Harness Core này vận hành dựa trên các nguyên tắc thiết kế được lấy cảm hứng từ cấu trúc prompt nâng cao của Claude Code.
 </thought>
-Xin chào! Tôi là AI Agent hoạt động trên nền tảng **Harness Core** tùy biến của bạn. 
+Xin chào! Tôi là AI Agent hoạt động trên nền tảng **Harness Core** tùy biến của bạn.
 
-Tôi hiện đang đọc trực tiếp cấu hình từ các file System Prompt tĩnh (`identity.txt`, `tools.txt`) cùng với bối cảnh của tệp `CLAUDE.md` trong dự án của bạn để đưa ra những quyết định tối ưu nhất. 
+Tôi hiện đang đọc trực tiếp cấu hình từ các file System Prompt tĩnh (`identity.txt`, `tools.txt`) cùng với bối cảnh của tệp `CLAUDE.md` trong dự án của bạn để đưa ra những quyết định tối ưu nhất.
 
 Bộ lõi Harness này hỗ trợ các công cụ như:
 1. `check_port` (Kiểm tra cổng mạng)

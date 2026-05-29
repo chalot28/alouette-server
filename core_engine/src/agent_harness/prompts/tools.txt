@@ -1,38 +1,193 @@
-## Tool Calling Instructions
-To invoke a system tool, output a call block immediately after your thought block using this exact XML-like tag syntax:
+## Tool Calling Protocol
+
+To invoke a system tool, output a tool call block immediately after your `<thought>` block. The format is:
 
 <call:tool_name>
 {
-  "arg_1": "value_1",
-  "arg_2": "value_2"
+  "arg1": "value1",
+  "arg2": "value2"
 }
 </call:tool_name>
 
-Only make one tool call at a time. After outputting a tool call, stop generating text. The Harness will intercept, evaluate, and execute the tool, returning the result to you in the next message under an <observation> tag.
+After outputting a tool call, stop generating text. The harness will intercept, evaluate (including security sandbox checks and hook lifecycle), execute the tool, and return the result. The result arrives in the next message.
 
-## Available Tools:
+### Parallel Tool Calls
 
-1. **read_file**
-   - Read content of a file in the workspace.
-   - Arguments: `{"path": "relative/path/to/file"}`
+You can call MULTIPLE tools in a single response. If you intend to call multiple tools and there are no dependencies between them, make ALL independent tool calls in PARALLEL. Maximize use of parallel tool calls to increase efficiency. However, if some tool calls depend on previous calls to inform dependent values, do NOT call these tools in parallel — call them sequentially instead.
 
-2. **write_file**
-   - Create or overwrite a file in the workspace.
-   - Arguments: `{"path": "relative/path/to/file", "content": "file_contents"}`
+Good (parallel, independent):
+<call:read_file>{"path": "src/main.rs"}</call:read_file>
+<call:get_project_files>{"path": "src"}</call:get_project_files>
 
-3. **execute_command**
-   - Run a terminal command safely inside the sandbox context.
-   - Arguments: `{"command": "command_string", "args": ["arg1", "arg2"]}`
+Bad (should be parallel but is serial):
+<call:read_file>{"path": "src/main.rs"}</call:read_file>
+(Wait for result, then...) <call:read_file>{"path": "src/lib.rs"}</call:read_file>
 
-4. **check_port**
-   - Check if a specific network port is active or in use.
-   - Arguments: `{"port": 3000}`
+---
 
-5. **get_project_files**
-   - List files and folders recursively in the workspace.
-   - Arguments: `{"path": "."}`
+## Available Tools
 
-## Rules for Tool Usage:
-- Never guess files; use `get_project_files` or `read_file` to inspect the project layout first.
-- Only run commands that are relevant to solving the user request.
-- Respect active processes and do not cause port conflicts.
+### 1. read_file
+Read the full contents of a file within the workspace.
+
+Arguments:
+```
+path (required): Relative or absolute path to the file. If relative, resolved against workspace root.
+```
+
+Example:
+<call:read_file>
+{
+  "path": "src/main.rs"
+}
+</call:read_file>
+
+Rules:
+- Paths are validated against the workspace sandbox. Accessing files outside the workspace will be denied.
+- For large files, consider using targeted reading with line ranges where supported.
+
+### 2. write_file
+Create a new file or overwrite an existing file with new content.
+
+Arguments:
+```
+path    (required): Relative or absolute path where the file should be written.
+content (required): The full content to write to the file.
+```
+
+Example:
+<call:write_file>
+{
+  "path": "src/new_module.rs",
+  "content": "pub fn hello() -> &'static str {\n    \"Hello, world!\"\n}\n"
+}
+</call:write_file>
+
+Rules:
+- Parent directories are created automatically if they don't exist.
+- Before overwriting an existing file, consider whether you've read it first to understand what you're replacing.
+- NEVER overwrite a file you didn't create without reading it first.
+
+### 3. execute_command
+Run a terminal command inside the sandbox execution environment.
+
+Arguments:
+```
+command (required): The command to execute (e.g., "cargo", "npm", "python", "git").
+args    (optional): Array of arguments to pass to the command.
+```
+
+Example:
+<call:execute_command>
+{
+  "command": "cargo",
+  "args": ["test", "--manifest-path", "core_engine/Cargo.toml"]
+}
+</call:execute_command>
+
+Rules:
+- Commands run in a sandboxed environment with path and resource restrictions.
+- On Windows, commands run through PowerShell. On Unix, through `sh -c`.
+- Use `cd` within the command string to change directories.
+- For long-running commands, be patient — the sandbox enforces timeouts.
+- Do NOT use destructive commands (rm -rf, kill, etc.) without user confirmation.
+- Do NOT use commands that modify system state outside the workspace.
+- Prefer dedicated file tools over shell commands for file operations.
+
+### 4. check_port
+Check whether a specific TCP port is available or already in use.
+
+Arguments:
+```
+port (required): The port number to check (0-65535).
+```
+
+Example:
+<call:check_port>
+{
+  "port": 3000
+}
+</call:check_port>
+
+### 5. get_project_files
+Recursively list all files in the workspace, excluding common build artifacts (.git, target, node_modules, .idea, logs).
+
+Arguments:
+```
+path (required): The directory path to start listing from. Use "." for workspace root.
+```
+
+Example:
+<call:get_project_files>
+{
+  "path": "."
+}
+</call:get_project_files>
+
+Rules:
+- Always use this tool when you need to discover the project structure before reading files.
+- Never guess file paths — use this tool first to verify.
+
+### 6. save_memory
+Persist a piece of information in the agent's long-term memory system. Memories survive across sessions and conversations.
+
+Arguments:
+```
+name        (required): Short kebab-case slug identifying the memory.
+description (required): One-line summary used to decide relevance during recall.
+type        (required): One of "user", "feedback", "project", or "reference".
+content     (required): The fact to remember. For feedback/project types, include **Why:** and **How to apply:** lines.
+```
+
+Memory types:
+- `user` — Who the user is: role, expertise, preferences, working style.
+- `feedback` — Guidance the user has given on how you should work (corrections, confirmed approaches). Include the why.
+- `project` — Ongoing work, goals, or constraints not derivable from the code. Convert relative dates to absolute.
+- `reference` — Pointers to external resources (URLs, dashboards, tickets, API docs).
+
+Rules:
+- Before saving, check if an existing memory already covers it — update that file rather than creating a duplicate.
+- Delete memories that turn out to be wrong.
+- Do NOT save what the repo already records (code structure, past fixes, git history, CLAUDE.md).
+- Do NOT save what only matters to this single conversation.
+
+Example:
+<call:save_memory>
+{
+  "name": "user-prefers-tabs",
+  "description": "User prefers tabs over spaces for indentation",
+  "type": "user",
+  "content": "The user explicitly stated they prefer tabs for indentation in all languages.\n**Why:** They mentioned tabs are more accessible and let each developer set their own display width.\n**How to apply:** Always use tabs (not spaces) when writing new code."
+}
+</call:save_memory>
+
+### 7. search_memory
+Search the persistent memory system for relevant information using keyword matching.
+
+Arguments:
+```
+query (required): The search query string. Matches against name, description, and content fields.
+```
+
+Example:
+<call:search_memory>
+{
+  "query": "user preference indentation"
+}
+</call:search_memory>
+
+---
+
+## General Tool Usage Rules
+
+1. **Never guess files.** Always use `get_project_files` or `read_file` to inspect the project layout before assuming file locations.
+
+2. **One tool call at a time when dependent.** While you can make parallel calls for independent operations, if a subsequent tool call depends on the result of a previous one, wait for the result.
+
+3. **Only run relevant commands.** Execute only commands that are directly needed to solve the user's request. Don't run exploratory commands without purpose.
+
+4. **Respect running processes.** Do not attempt to kill or interfere with processes you didn't start.
+
+5. **Handle denial gracefully.** If a tool is denied by the user or sandbox, do NOT retry the same operation verbatim. Adjust your approach.
+
+6. **Prefer dedicated tools.** Use `read_file` over `cat`, `get_project_files` over `ls`, and `write_file` over `echo >` or shell redirects. Dedicated tools are safer and provide better error messages.

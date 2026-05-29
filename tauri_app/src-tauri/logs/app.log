@@ -1268,3 +1268,22 @@
 [2026-05-29 09:07:49.331] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
 [2026-05-29 09:07:51.086] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
 [2026-05-29 09:08:01.806] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:47:02.067] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 09:47:02.073] Proto CLI verified and active.
+[2026-05-29 09:47:02.218] Toolchains checked / verified stable.
+[2026-05-29 09:47:06.039] Cloudflared binary verified / updated successfully.
+[2026-05-29 09:47:06.041] Isolated environment initialized successfully!
+[2026-05-29 09:47:07.341] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:47:07.368] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:47:07.786] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:49:16.535] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 09:49:16.539] Proto CLI verified and active.
+[2026-05-29 09:49:16.707] Toolchains checked / verified stable.
+[2026-05-29 09:49:17.593] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:49:17.612] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:49:17.892] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:49:20.516] Cloudflared binary verified / updated successfully.
+[2026-05-29 09:49:20.539] Isolated environment initialized successfully!
+[2026-05-29 10:17:56.166] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 10:17:58.446] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 10:17:59.052] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
