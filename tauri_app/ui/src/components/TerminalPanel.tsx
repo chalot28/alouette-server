@@ -335,6 +335,18 @@ function SimplePing() {
   );
 }
 
+const CONFIG_PATH = "d:/alouette-server/core_engine/app_data/cloudflare_config.yml";
+
+const stringToBase64 = (str: string): string => {
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+};
+
 export default function TerminalPanel({
   theme,
   activeProject,
@@ -352,7 +364,7 @@ export default function TerminalPanel({
   onDeleteAllTerminals,
   onRenameTerminal,
 }: TerminalPanelProps) {
-  const [viewMode, setViewMode] = useState<"terminal" | "post" | "log">("terminal");
+  const [viewMode, setViewMode] = useState<"terminal" | "post" | "log" | "tunnel">("terminal");
   // ── Map of xterm instances, one per session ─────────────────────────
   const instancesRef = useRef<{ [sessionId: string]: XtermInstance }>({});
   // Container refs: sessionId → HTMLDivElement
@@ -363,6 +375,154 @@ export default function TerminalPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameRef = useRef<HTMLInputElement>(null);
+
+  // Cloudflare Tunnels states inside sidebar
+  const [cloudflareMode, setCloudflareMode] = useState("default");
+  const [globalToken, setGlobalToken] = useState("");
+  const [tunnels, setTunnels] = useState<any[]>([]);
+  const [tunnelEditingId, setTunnelEditingId] = useState<string | null>(null);
+  const [tunnelRenameValue, setTunnelRenameValue] = useState("");
+  const tunnelRenameRef = useRef<HTMLInputElement>(null);
+
+  const loadCloudflareConfig = async () => {
+    try {
+      const base64Data = await invoke<string>("read_file_content", { path: CONFIG_PATH });
+      const binaryString = window.atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const decodedText = new TextDecoder("utf-8").decode(bytes);
+      
+      let mode = "default";
+      let globalToken = "";
+      let tunnelsList: any[] = [];
+      
+      const lines = decodedText.split("\n");
+      let currentTunnel: any = null;
+      
+      for (let line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        
+        if (trimmed.startsWith("mode:")) {
+          mode = trimmed.replace("mode:", "").replace(/["']/g, "").trim();
+        } else if (trimmed.startsWith("tunnel_token:")) {
+          globalToken = trimmed.replace("tunnel_token:", "").replace(/["']/g, "").trim();
+        } else if (trimmed.startsWith("- id:") || (line.startsWith("  -") && trimmed.startsWith("id:"))) {
+          if (currentTunnel) {
+            tunnelsList.push(currentTunnel);
+          }
+          const idVal = trimmed.replace("- id:", "").replace("id:", "").replace(/["']/g, "").trim();
+          currentTunnel = { id: idVal, project_id: "", name: "", port: 3000, token: "", active: false };
+        } else if (currentTunnel && trimmed.startsWith("project_id:")) {
+          currentTunnel.project_id = trimmed.replace("project_id:", "").replace(/["']/g, "").trim();
+        } else if (currentTunnel && trimmed.startsWith("name:")) {
+          currentTunnel.name = trimmed.replace("name:", "").replace(/["']/g, "").trim();
+        } else if (currentTunnel && trimmed.startsWith("port:")) {
+          currentTunnel.port = parseInt(trimmed.replace("port:", "").trim(), 10) || 3000;
+        } else if (currentTunnel && trimmed.startsWith("token:")) {
+          currentTunnel.token = trimmed.replace("token:", "").replace(/["']/g, "").trim();
+        } else if (currentTunnel && trimmed.startsWith("active:")) {
+          currentTunnel.active = trimmed.replace("active:", "").trim() === "true";
+        }
+      }
+      if (currentTunnel) {
+        tunnelsList.push(currentTunnel);
+      }
+      
+      setCloudflareMode(mode);
+      setGlobalToken(globalToken);
+      setTunnels(tunnelsList);
+    } catch (e) {
+      console.warn("Failed to load cloudflare config in TerminalPanel:", e);
+    }
+  };
+
+  const saveCloudflareConfig = async (updatedTunnels: any[]) => {
+    try {
+      let yaml = `mode: "${cloudflareMode}"\n`;
+      yaml += `tunnel_token: "${globalToken}"\n`;
+      yaml += `tunnels:\n`;
+      updatedTunnels.forEach((t) => {
+        yaml += `  - id: "${t.id}"\n`;
+        yaml += `    project_id: "${t.project_id || ""}"\n`;
+        yaml += `    name: "${t.name || ""}"\n`;
+        yaml += `    port: ${t.port || 3000}\n`;
+        yaml += `    token: "${t.token || ""}"\n`;
+        yaml += `    active: ${t.active ? "true" : "false"}\n`;
+      });
+      
+      const base64Content = stringToBase64(yaml);
+      await invoke("write_file_content", { path: CONFIG_PATH, content: base64Content });
+      setTunnels(updatedTunnels);
+    } catch (e) {
+      console.error("Failed to save cloudflare config in TerminalPanel:", e);
+    }
+  };
+
+  useEffect(() => {
+    loadCloudflareConfig();
+  }, [activeProject?.id]);
+
+  const handleAddTunnelProfile = () => {
+    if (!activeProject) return;
+    const newTunnel = {
+      id: "tunnel-" + Date.now(),
+      project_id: activeProject.id,
+      name: `Port ${activeProject.port || 3000}`,
+      port: activeProject.port || 3000,
+      token: "",
+      active: false
+    };
+    const updated = [...tunnels, newTunnel];
+    saveCloudflareConfig(updated);
+  };
+
+  const handleDeleteTunnelProfile = (id: string) => {
+    const updated = tunnels.filter((t) => t.id !== id);
+    saveCloudflareConfig(updated);
+  };
+
+  const handleDeleteAllTunnelProfiles = () => {
+    if (!activeProject) return;
+    const updated = tunnels.filter((t) => t.project_id !== activeProject.id);
+    saveCloudflareConfig(updated);
+  };
+
+  const handleToggleTunnelProfile = (id: string) => {
+    if (!activeProject) return;
+    const updated = tunnels.map((t) => {
+      if (t.project_id === activeProject.id) {
+        // Toggle only the clicked one, turn off others for the same project
+        return {
+          ...t,
+          active: t.id === id ? !t.active : false
+        };
+      }
+      return t;
+    });
+    saveCloudflareConfig(updated);
+  };
+
+  const startTunnelRename = (id: string, name: string) => {
+    setTunnelEditingId(id);
+    setTunnelRenameValue(name);
+    setTimeout(() => tunnelRenameRef.current?.select(), 50);
+  };
+
+  const submitTunnelRename = () => {
+    if (tunnelEditingId && tunnelRenameValue.trim()) {
+      const updated = tunnels.map((t) => {
+        if (t.id === tunnelEditingId) {
+          return { ...t, name: tunnelRenameValue.trim() };
+        }
+        return t;
+      });
+      saveCloudflareConfig(updated);
+    }
+    setTunnelEditingId(null);
+  };
 
   const startRename = (id: string, name: string) => {
     setEditingId(id);
@@ -713,6 +873,12 @@ export default function TerminalPanel({
           >
             Log System
           </button>
+          <button
+            className={`sandbox-btn ${viewMode === "tunnel" ? "active" : ""}`}
+            onClick={() => setViewMode("tunnel")}
+          >
+            Tunnel
+          </button>
         </div>
         {viewMode === "terminal" && (
           <div className="sandbox-terminal-header-right">
@@ -735,143 +901,252 @@ export default function TerminalPanel({
       </header>
 
       <div className="sandbox-terminal-body">
-        <div style={{ display: viewMode === "terminal" ? "flex" : "none", flex: 1, width: "100%", height: "100%" }}>
+        <div style={{ display: (viewMode === "terminal" || viewMode === "tunnel") ? "flex" : "none", flex: 1, width: "100%", height: "100%" }}>
           <div className="sandbox-terminal-main">
-            {activeStatus !== "connected" && (
-              <div className="sandbox-overlay">
-                {activeStatus === "connecting" && (
-                  <>
-                    <Loader2 size={32} className="sandbox-spinner" />
-                    <span className="sandbox-overlay-title">
-                      Connecting sandbox shell...
-                    </span>
-                    <span className="sandbox-overlay-sub">
-                      Spawning PowerShell PTY at <code>{workspacePath}</code>
-                    </span>
-                  </>
+            {viewMode === "terminal" && (
+              <>
+                {activeStatus !== "connected" && (
+                  <div className="sandbox-overlay">
+                    {activeStatus === "connecting" && (
+                      <>
+                        <Loader2 size={32} className="sandbox-spinner" />
+                        <span className="sandbox-overlay-title">
+                          Connecting sandbox shell...
+                        </span>
+                        <span className="sandbox-overlay-sub">
+                          Spawning PowerShell PTY at <code>{workspacePath}</code>
+                        </span>
+                      </>
+                    )}
+                    {activeStatus === "error" && (
+                      <>
+                        <AlertTriangle size={32} className="sandbox-error-icon" />
+                        <span className="sandbox-overlay-title sandbox-error-text">
+                          Connection failed
+                        </span>
+                        <span className="sandbox-overlay-sub sandbox-error-detail">
+                          {activeError || "Unknown error"}
+                        </span>
+                        <button
+                          className="sandbox-retry-btn"
+                          onClick={() => onRetrySpawn(activeTerminalId)}
+                        >
+                          <RefreshCw size={12} /> Retry
+                        </button>
+                      </>
+                    )}
+                    {activeStatus === "disconnected" && (
+                      <span className="sandbox-overlay-sub">
+                        No active terminal session
+                      </span>
+                    )}
+                  </div>
                 )}
-                {activeStatus === "error" && (
-                  <>
-                    <AlertTriangle size={32} className="sandbox-error-icon" />
-                    <span className="sandbox-overlay-title sandbox-error-text">
-                      Connection failed
-                    </span>
-                    <span className="sandbox-overlay-sub sandbox-error-detail">
-                      {activeError || "Unknown error"}
-                    </span>
-                    <button
-                      className="sandbox-retry-btn"
-                      onClick={() => onRetrySpawn(activeTerminalId)}
-                    >
-                      <RefreshCw size={12} /> Retry
-                    </button>
-                  </>
-                )}
-                {activeStatus === "disconnected" && (
-                  <span className="sandbox-overlay-sub">
-                    No active terminal session
-                  </span>
-                )}
-              </div>
+
+                {/* Render a separate xterm container for each terminal session.
+                    Only the active one is visible; others are hidden offscreen/via opacity to preserve layout measurements. */}
+                <div className="sandbox-xterm-wrapper">
+                  {terminals.map((t) => (
+                    <div
+                      key={t.id}
+                      ref={(el) => {
+                        containerRefs.current[t.id] = el;
+                      }}
+                      className={`sandbox-xterm-viewport ${t.id === activeTerminalId ? "active" : ""}`}
+                    />
+                  ))}
+                </div>
+              </>
             )}
 
-            {/* Render a separate xterm container for each terminal session.
-                Only the active one is visible; others are hidden offscreen/via opacity to preserve layout measurements. */}
-            <div className="sandbox-xterm-wrapper">
-              {terminals.map((t) => (
-                <div
-                  key={t.id}
-                  ref={(el) => {
-                    containerRefs.current[t.id] = el;
-                  }}
-                  className={`sandbox-xterm-viewport ${t.id === activeTerminalId ? "active" : ""}`}
-                />
-              ))}
-            </div>
+            {viewMode === "tunnel" && (
+              <LogViewer
+                logs={
+                  activeProject
+                    ? (projectLogs?.[activeProject.id] || []).filter(
+                        (log) =>
+                          log.text.toLowerCase().includes("watchdog") ||
+                          log.text.toLowerCase().includes("cloudflare") ||
+                          log.text.toLowerCase().includes("tunnel")
+                      )
+                    : []
+                }
+              />
+            )}
           </div>
 
           <aside className="sandbox-sidebar">
-            <div className="sandbox-sidebar-section">
-              <div className="sandbox-sidebar-actions">
-                <button
-                  className="sandbox-sidebar-btn"
-                  onClick={onAddTerminal}
-                  title="New terminal"
-                >
-                  <Plus size={13} />
-                </button>
-                <button
-                  className="sandbox-sidebar-btn"
-                  onClick={onDeleteAllTerminals}
-                  title="Kill all terminals"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-              <div className="sandbox-terminal-list">
-                {terminals.map((t) => {
-                  const isActive = t.id === activeTerminalId;
-                  return (
-                    <div
-                      key={t.id}
-                      className={`sandbox-terminal-item ${isActive ? "active" : ""}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setActiveTerminalId(t.id);
-                      }}
-                      onDoubleClick={() => startRename(t.id, t.name)}
-                    >
-                      {editingId === t.id ? (
-                        <input
-                          ref={renameRef}
-                          className="sandbox-rename-input"
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onBlur={submitRename}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") submitRename();
-                            if (e.key === "Escape") setEditingId(null);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        <>
-                          <div className="sandbox-terminal-item-left">
-                            <span className="sandbox-terminal-dot" />
-                            <span className="sandbox-terminal-name">
-                              {t.name}
-                            </span>
-                          </div>
-                          <button
-                            className="sandbox-terminal-close"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteTerminal(t.id);
+            {viewMode === "terminal" && (
+              <div className="sandbox-sidebar-section">
+                <div className="sandbox-sidebar-actions">
+                  <button
+                    className="sandbox-sidebar-btn"
+                    onClick={onAddTerminal}
+                    title="New terminal"
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <button
+                    className="sandbox-sidebar-btn"
+                    onClick={onDeleteAllTerminals}
+                    title="Kill all terminals"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+                <div className="sandbox-terminal-list">
+                  {terminals.map((t) => {
+                    const isActive = t.id === activeTerminalId;
+                    return (
+                      <div
+                        key={t.id}
+                        className={`sandbox-terminal-item ${isActive ? "active" : ""}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActiveTerminalId(t.id);
+                        }}
+                        onDoubleClick={() => startRename(t.id, t.name)}
+                      >
+                        {editingId === t.id ? (
+                          <input
+                            ref={renameRef}
+                            className="sandbox-rename-input"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={submitRename}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") submitRename();
+                              if (e.key === "Escape") setEditingId(null);
                             }}
-                          >
-                            <X size={11} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <>
+                            <div className="sandbox-terminal-item-left">
+                              <span className="sandbox-terminal-dot" />
+                              <span className="sandbox-terminal-name">
+                                {t.name}
+                              </span>
+                            </div>
+                            <button
+                              className="sandbox-terminal-close"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteTerminal(t.id);
+                              }}
+                            >
+                              <X size={11} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
+
+            {viewMode === "tunnel" && (
+              <div className="sandbox-sidebar-section">
+                <div className="sandbox-sidebar-actions">
+                  <button
+                    className="sandbox-sidebar-btn"
+                    onClick={handleAddTunnelProfile}
+                    title="New tunnel"
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <button
+                    className="sandbox-sidebar-btn"
+                    onClick={handleDeleteAllTunnelProfiles}
+                    title="Delete all project tunnels"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+                <div className="sandbox-terminal-list">
+                  {tunnels
+                    .filter((t) => t.project_id === activeProject?.id)
+                    .map((t) => {
+                      const isActive = t.active;
+                      return (
+                        <div
+                          key={t.id}
+                          className={`sandbox-terminal-item ${isActive ? "active" : ""}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleToggleTunnelProfile(t.id);
+                          }}
+                          onDoubleClick={() => startTunnelRename(t.id, t.name)}
+                        >
+                          {tunnelEditingId === t.id ? (
+                            <input
+                              ref={tunnelRenameRef}
+                              className="sandbox-rename-input"
+                              value={tunnelRenameValue}
+                              onChange={(e) => setTunnelRenameValue(e.target.value)}
+                              onBlur={submitTunnelRename}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") submitTunnelRename();
+                                if (e.key === "Escape") setTunnelEditingId(null);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            <>
+                              <div className="sandbox-terminal-item-left" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isActive}
+                                  onChange={() => handleToggleTunnelProfile(t.id)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ width: "12px", height: "12px", cursor: "pointer" }}
+                                />
+                                <span className="sandbox-terminal-name" style={{ fontSize: "11px", fontWeight: isActive ? "bold" : "normal" }}>
+                                  {t.name}
+                                </span>
+                              </div>
+                              <button
+                                className="sandbox-terminal-close"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteTunnelProfile(t.id);
+                                }}
+                              >
+                                <X size={11} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {tunnels.filter((t) => t.project_id === activeProject?.id).length === 0 && (
+                    <div style={{ padding: "8px", fontSize: "10px", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center" }}>
+                      Chưa có Tunnel. Nhấp "+" để thêm!
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="sandbox-sidebar-footer">
               <div className="sandbox-status-row">
-                <span className="sandbox-status-label">Shell</span>
-                <span className={`sandbox-status-value ${activeStatus}`}>
-                  {activeStatus === "connected" && "Active"}
-                  {activeStatus === "connecting" && "Spawning..."}
-                  {activeStatus === "error" && "Error"}
-                  {activeStatus === "disconnected" && "Off"}
+                <span className="sandbox-status-label">{viewMode === "tunnel" ? "Mode" : "Shell"}</span>
+                <span className={`sandbox-status-value ${viewMode === "terminal" ? activeStatus : "connected"}`}>
+                  {viewMode === "tunnel" 
+                    ? cloudflareMode.toUpperCase() 
+                    : (activeStatus === "connected" ? "Active" : (activeStatus === "connecting" ? "Spawning..." : (activeStatus === "error" ? "Error" : "Off")))}
                 </span>
               </div>
               <div className="sandbox-status-row">
-                <span className="sandbox-status-label">PID</span>
-                <span className="sandbox-status-value mono">&mdash;</span>
+                <span className="sandbox-status-label">{viewMode === "tunnel" ? "Active Tunnels" : "PID"}</span>
+                <span className="sandbox-status-value mono">
+                  {viewMode === "tunnel" 
+                    ? tunnels.filter((t) => t.project_id === activeProject?.id && t.active).length 
+                    : "\u2014"}
+                </span>
               </div>
             </div>
           </aside>

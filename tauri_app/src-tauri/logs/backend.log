@@ -225,3 +225,159 @@
 [2026-05-28 23:25:39.794] SYSTEM: --- Stopping Process Tree... ---
 [23:25:40.159] [stdout] [31m[nodemon] app crashed - waiting for file changes before starting...[39m
 [2026-05-28 23:25:41.833] SYSTEM: --- Process Tree Terminated Successfully ---
+[2026-05-29 02:01:10.433] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-29 02:01:11.412] SYSTEM: --- Spawning Primary Command ---
+[02:01:12.403] [stdout] 
+[02:01:12.404] [stdout] > server-dvtn@1.0.0 dev
+[02:01:12.404] [stdout] > nodemon src/index.js
+[02:01:12.405] [stdout] 
+[02:01:13.053] [stdout] [33m[nodemon] 3.1.14[39m
+[02:01:13.054] [stdout] [33m[nodemon] to restart at any time, enter `rs`[39m
+[02:01:13.055] [stdout] [33m[nodemon] watching path(s): src\**\* .env[39m
+[02:01:13.056] [stdout] [33m[nodemon] watching extensions: js,json[39m
+[02:01:13.056] [stdout] [32m[nodemon] starting `node src/index.js`[39m
+[02:01:16.694] [stdout] [32minfo[39m: [ai_test.route] LOG_CHECK=demo_ai_2.0 | VERSION=2.0 | FILE=ai_test.route.js | PATH=/api/2/test/AI
+[02:01:16.700] [stdout] [32minfo[39m: [chatbot_test.route] LOG_CHECK=demo_ai_2.0 | VERSION=2.0 | FILE=chatbot_test.route.js | PATH=/api/1/chatbot
+[02:01:16.726] [stdout] [32minfo[39m: Initializing databases...
+[02:01:16.856] [stdout] [32minfo[39m:   [user] ready
+[02:01:16.871] [stdout] [32minfo[39m:   [login] ready
+[02:01:16.881] [stdout] [32minfo[39m:   [date] ready
+[02:01:16.890] [stdout] [32minfo[39m:   [tin_tuc] ready
+[02:01:16.897] [stdout] [32minfo[39m:   [thong_bao] ready
+[02:01:16.904] [stdout] [32minfo[39m:   [tai_lieu] ready
+[02:01:16.914] [stdout] [32minfo[39m:   [so_tay] ready
+[02:01:16.923] [stdout] [32minfo[39m:   [binh_luan] ready
+[02:01:16.932] [stdout] [32minfo[39m:   [thanh_vien] ready
+[02:01:16.941] [stdout] [32minfo[39m:   [danh_thiep] ready
+[02:01:16.949] [stdout] [32minfo[39m:   [avt_db] ready
+[02:01:16.956] [stdout] [32minfo[39m:   [su_kien] ready
+[02:01:16.963] [stdout] [32minfo[39m:   [diem_danh] ready
+[02:01:16.970] [stdout] [32minfo[39m:   [danh_sach_dk] ready
+[02:01:16.977] [stdout] [32minfo[39m:   [quan_tri_sk] ready
+[02:01:16.992] [stdout] [32minfo[39m:   [tailieu_new] ready
+[02:01:16.993] [stdout] [32minfo[39m: All databases initialized.
+[02:01:17.028] [stdout] [33mwarn[39m: CF_TUNNEL_TOKEN is not set. Cloudflare tunnel cannot start without a token.
+[02:01:17.072] [stdout] [32minfo[39m: Server development → http://localhost:3000
+[02:01:17.073] [stdout] [32minfo[39m: Health → http://localhost:3000/api/health
+[02:01:17.073] [stdout] [32minfo[39m: Uploads → http://localhost:3000/public
+[02:01:17.074] [stdout] [32minfo[39m: [WS] Voice stream ready → ws://localhost:3000/api/2/test/AI/voice/stream
+[2026-05-29 02:01:32.311] SYSTEM: --- Stopping Process Tree... ---
+[02:01:32.788] [stdout] [31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[2026-05-29 02:01:34.752] SYSTEM: --- Process Tree Terminated Successfully ---
+[2026-05-29 02:07:00.928] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-29 02:07:01.203] SYSTEM: --- Spawning Primary Command ---
+[02:07:02.016] [stdout] 
+[02:07:02.017] [stdout] > server-dvtn@1.0.0 dev
+[02:07:02.018] [stdout] > nodemon src/index.js
+[02:07:02.018] [stdout] 
+[02:07:02.669] [stdout] [33m[nodemon] 3.1.14[39m
+[02:07:02.671] [stdout] [33m[nodemon] to restart at any time, enter `rs`[39m
+[02:07:02.673] [stdout] [33m[nodemon] watching path(s): src\**\* .env[39m
+[02:07:02.674] [stdout] [33m[nodemon] watching extensions: js,json[39m
+[02:07:02.675] [stdout] [32m[nodemon] starting `node src/index.js`[39m
+[02:07:03.841] [stdout] [32minfo[39m: [ai_test.route] LOG_CHECK=demo_ai_2.0 | VERSION=2.0 | FILE=ai_test.route.js | PATH=/api/2/test/AI
+[02:07:03.849] [stdout] [32minfo[39m: [chatbot_test.route] LOG_CHECK=demo_ai_2.0 | VERSION=2.0 | FILE=chatbot_test.route.js | PATH=/api/1/chatbot
+[02:07:03.873] [stdout] [32minfo[39m: Initializing databases...
+[02:07:03.959] [stdout] [32minfo[39m:   [user] ready
+[02:07:03.967] [stdout] [32minfo[39m:   [login] ready
+[02:07:03.971] [stdout] [32minfo[39m:   [date] ready
+[02:07:03.977] [stdout] [32minfo[39m:   [tin_tuc] ready
+[02:07:03.984] [stdout] [32minfo[39m:   [thong_bao] ready
+[02:07:03.989] [stdout] [32minfo[39m:   [tai_lieu] ready
+[02:07:04.000] [stdout] [32minfo[39m:   [so_tay] ready
+[02:07:04.003] [stdout] [32minfo[39m:   [binh_luan] ready
+[02:07:04.007] [stdout] [32minfo[39m:   [thanh_vien] ready
+[02:07:04.011] [stdout] [32minfo[39m:   [danh_thiep] ready
+[02:07:04.015] [stdout] [32minfo[39m:   [avt_db] ready
+[02:07:04.018] [stdout] [32minfo[39m:   [su_kien] ready
+[02:07:04.024] [stdout] [32minfo[39m:   [diem_danh] ready
+[02:07:04.027] [stdout] [32minfo[39m:   [danh_sach_dk] ready
+[02:07:04.031] [stdout] [32minfo[39m:   [quan_tri_sk] ready
+[02:07:04.048] [stdout] [32minfo[39m:   [tailieu_new] ready
+[02:07:04.049] [stdout] [32minfo[39m: All databases initialized.
+[02:07:04.101] [stdout] [33mwarn[39m: CF_TUNNEL_TOKEN is not set. Cloudflare tunnel cannot start without a token.
+[02:07:04.147] [stdout] [32minfo[39m: Server development → http://localhost:3000
+[02:07:04.147] [stdout] [32minfo[39m: Health → http://localhost:3000/api/health
+[02:07:04.148] [stdout] [32minfo[39m: Uploads → http://localhost:3000/public
+[02:07:04.149] [stdout] [32minfo[39m: [WS] Voice stream ready → ws://localhost:3000/api/2/test/AI/voice/stream
+[2026-05-29 02:07:11.813] SYSTEM: --- Stopping Process Tree... ---
+[02:07:12.289] [stdout] [31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[2026-05-29 02:07:14.259] SYSTEM: --- Process Tree Terminated Successfully ---
+[2026-05-29 02:07:21.113] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-29 02:07:21.386] SYSTEM: --- Spawning Primary Command ---
+[02:07:22.259] [stdout] 
+[02:07:22.259] [stdout] > server-dvtn@1.0.0 dev
+[02:07:22.260] [stdout] > nodemon src/index.js
+[02:07:22.261] [stdout] 
+[02:07:22.910] [stdout] [33m[nodemon] 3.1.14[39m
+[02:07:22.912] [stdout] [33m[nodemon] to restart at any time, enter `rs`[39m
+[02:07:22.914] [stdout] [33m[nodemon] watching path(s): src\**\* .env[39m
+[02:07:22.915] [stdout] [33m[nodemon] watching extensions: js,json[39m
+[02:07:22.916] [stdout] [32m[nodemon] starting `node src/index.js`[39m
+[02:07:24.181] [stdout] [32minfo[39m: [ai_test.route] LOG_CHECK=demo_ai_2.0 | VERSION=2.0 | FILE=ai_test.route.js | PATH=/api/2/test/AI
+[02:07:24.188] [stdout] [32minfo[39m: [chatbot_test.route] LOG_CHECK=demo_ai_2.0 | VERSION=2.0 | FILE=chatbot_test.route.js | PATH=/api/1/chatbot
+[02:07:24.208] [stdout] [32minfo[39m: Initializing databases...
+[02:07:24.288] [stdout] [32minfo[39m:   [user] ready
+[02:07:24.294] [stdout] [32minfo[39m:   [login] ready
+[02:07:24.298] [stdout] [32minfo[39m:   [date] ready
+[02:07:24.303] [stdout] [32minfo[39m:   [tin_tuc] ready
+[02:07:24.306] [stdout] [32minfo[39m:   [thong_bao] ready
+[02:07:24.311] [stdout] [32minfo[39m:   [tai_lieu] ready
+[02:07:24.322] [stdout] [32minfo[39m:   [so_tay] ready
+[02:07:24.328] [stdout] [32minfo[39m:   [binh_luan] ready
+[02:07:24.338] [stdout] [32minfo[39m:   [thanh_vien] ready
+[02:07:24.344] [stdout] [32minfo[39m:   [danh_thiep] ready
+[02:07:24.348] [stdout] [32minfo[39m:   [avt_db] ready
+[02:07:24.352] [stdout] [32minfo[39m:   [su_kien] ready
+[02:07:24.358] [stdout] [32minfo[39m:   [diem_danh] ready
+[02:07:24.364] [stdout] [32minfo[39m:   [danh_sach_dk] ready
+[02:07:24.370] [stdout] [32minfo[39m:   [quan_tri_sk] ready
+[02:07:24.383] [stdout] [32minfo[39m:   [tailieu_new] ready
+[02:07:24.384] [stdout] [32minfo[39m: All databases initialized.
+[02:07:24.430] [stdout] [33mwarn[39m: CF_TUNNEL_TOKEN is not set. Cloudflare tunnel cannot start without a token.
+[02:07:24.473] [stdout] [32minfo[39m: Server development → http://localhost:3000
+[02:07:24.474] [stdout] [32minfo[39m: Health → http://localhost:3000/api/health
+[02:07:24.475] [stdout] [32minfo[39m: Uploads → http://localhost:3000/public
+[02:07:24.475] [stdout] [32minfo[39m: [WS] Voice stream ready → ws://localhost:3000/api/2/test/AI/voice/stream
+[2026-05-29 02:07:35.106] SYSTEM: --- Stopping Process Tree... ---
+[02:07:35.411] [stdout] [31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[2026-05-29 02:07:36.939] SYSTEM: --- Installing Toolchain node@stable ---
+[2026-05-29 02:07:37.114] SYSTEM: --- Process Tree Terminated Successfully ---
+[2026-05-29 02:07:37.237] SYSTEM: --- Spawning Primary Command ---
+[02:07:38.067] [stdout] 
+[02:07:38.068] [stdout] > server-dvtn@1.0.0 dev
+[02:07:38.068] [stdout] > nodemon src/index.js
+[02:07:38.069] [stdout] 
+[02:07:38.680] [stdout] [33m[nodemon] 3.1.14[39m
+[02:07:38.681] [stdout] [33m[nodemon] to restart at any time, enter `rs`[39m
+[02:07:38.682] [stdout] [33m[nodemon] watching path(s): src\**\* .env[39m
+[02:07:38.683] [stdout] [33m[nodemon] watching extensions: js,json[39m
+[02:07:38.683] [stdout] [32m[nodemon] starting `node src/index.js`[39m
+[02:07:39.901] [stdout] [32minfo[39m: [ai_test.route] LOG_CHECK=demo_ai_2.0 | VERSION=2.0 | FILE=ai_test.route.js | PATH=/api/2/test/AI
+[02:07:39.907] [stdout] [32minfo[39m: [chatbot_test.route] LOG_CHECK=demo_ai_2.0 | VERSION=2.0 | FILE=chatbot_test.route.js | PATH=/api/1/chatbot
+[02:07:39.936] [stdout] [32minfo[39m: Initializing databases...
+[02:07:39.998] [stdout] [32minfo[39m:   [user] ready
+[02:07:40.004] [stdout] [32minfo[39m:   [login] ready
+[02:07:40.009] [stdout] [32minfo[39m:   [date] ready
+[02:07:40.015] [stdout] [32minfo[39m:   [tin_tuc] ready
+[02:07:40.021] [stdout] [32minfo[39m:   [thong_bao] ready
+[02:07:40.025] [stdout] [32minfo[39m:   [tai_lieu] ready
+[02:07:40.029] [stdout] [32minfo[39m:   [so_tay] ready
+[02:07:40.035] [stdout] [32minfo[39m:   [binh_luan] ready
+[02:07:40.039] [stdout] [32minfo[39m:   [thanh_vien] ready
+[02:07:40.055] [stdout] [32minfo[39m:   [danh_thiep] ready
+[02:07:40.059] [stdout] [32minfo[39m:   [avt_db] ready
+[02:07:40.063] [stdout] [32minfo[39m:   [su_kien] ready
+[02:07:40.066] [stdout] [32minfo[39m:   [diem_danh] ready
+[02:07:40.072] [stdout] [32minfo[39m:   [danh_sach_dk] ready
+[02:07:40.077] [stdout] [32minfo[39m:   [quan_tri_sk] ready
+[02:07:40.093] [stdout] [32minfo[39m:   [tailieu_new] ready
+[02:07:40.094] [stdout] [32minfo[39m: All databases initialized.
+[02:07:40.140] [stdout] [33mwarn[39m: CF_TUNNEL_TOKEN is not set. Cloudflare tunnel cannot start without a token.
+[02:07:40.180] [stdout] [32minfo[39m: Server development → http://localhost:3000
+[02:07:40.181] [stdout] [32minfo[39m: Health → http://localhost:3000/api/health
+[02:07:40.181] [stdout] [32minfo[39m: Uploads → http://localhost:3000/public
+[02:07:40.182] [stdout] [32minfo[39m: [WS] Voice stream ready → ws://localhost:3000/api/2/test/AI/voice/stream
+[2026-05-29 02:07:44.605] SYSTEM: --- Stopping Process Tree... ---
+[02:07:44.955] [stdout] [31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[2026-05-29 02:07:46.804] SYSTEM: --- Process Tree Terminated Successfully ---

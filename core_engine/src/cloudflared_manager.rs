@@ -3,6 +3,7 @@ use tokio::process::Command;
 use tokio::sync::broadcast;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
+#[derive(Clone)]
 pub struct CloudflaredManager {
     // Path to the cloudflared executable.
     pub executable_path: PathBuf,
@@ -62,22 +63,40 @@ impl CloudflaredManager {
         }
     }
 
-    /// Spawns a tunnel and returns a receiver for the tunnel URL
-    pub async fn spawn_tunnel(&self, port: u16, _project_id: &str) -> Result<(tokio::task::JoinHandle<()>, broadcast::Receiver<String>), String> {
+    /// Spawns a tunnel and returns the PID and a receiver for the tunnel URL
+    pub async fn spawn_tunnel(&self, port: u16, token: Option<String>, _project_id: &str) -> Result<(u32, broadcast::Receiver<String>), String> {
         let mut cmd = Command::new(&self.executable_path);
-        cmd.args(["tunnel", "--url", &format!("http://localhost:{}", port)]);
+        
+        if let Some(ref t) = token {
+            let trimmed_token = t.trim();
+            if !trimmed_token.is_empty() {
+                cmd.args(["tunnel", "run", "--token", trimmed_token]);
+            } else {
+                cmd.args(["tunnel", "--url", &format!("http://localhost:{}", port)]);
+            }
+        } else {
+            cmd.args(["tunnel", "--url", &format!("http://localhost:{}", port)]);
+        }
+
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
         let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn cloudflared: {}", e))?;
+        let tunnel_pid = child.id().unwrap_or(0);
         
         let stderr = child.stderr.take().expect("Failed to capture cloudflared stderr");
         let (url_tx, url_rx) = broadcast::channel(10);
         let url_tx_clone = url_tx.clone();
 
-        let handle = tokio::spawn(async move {
+        let token_mode = token.is_some() && !token.unwrap().trim().is_empty();
+
+        tokio::spawn(async move {
             let mut reader = BufReader::new(stderr).lines();
             
+            if token_mode {
+                let _ = url_tx_clone.send("Named Tunnel Active (Configured with Token)".to_string());
+            }
+
             // Cloudflared prints the tunnel URL to stderr
             while let Ok(Some(line)) = reader.next_line().await {
                 // Look for: "https://some-random-words.trycloudflare.com"
@@ -92,6 +111,6 @@ impl CloudflaredManager {
             let _ = child.wait().await;
         });
 
-        Ok((handle, url_rx))
+        Ok((tunnel_pid, url_rx))
     }
 }

@@ -21,7 +21,8 @@ import {
   Settings,
   SlidersHorizontal,
   Hammer,
-  Database
+  Database,
+  Cloud
 } from "lucide-react";
 
 // Components
@@ -38,6 +39,7 @@ import SqliteEditor from "./components/SqliteEditor";
 import MiniPostman from "./components/MiniPostman";
 import AiAgent from "./components/AiAgent";
 import ProjectResources from "./components/ProjectResources";
+import CloudflareTunnel from "./components/CloudflareTunnel";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 function ZenIcon({ size = 14 }: { size?: number }) {
@@ -487,24 +489,6 @@ export default function App() {
     setOpenFilePath(path);
   };
 
-  const handleToggleTunnel = async () => {
-    if (!activeProject) return;
-    const updated = {
-      ...activeProject,
-      enable_tunnel: !activeProject.enable_tunnel
-    };
-    try {
-      await invoke("register_project", { config: updated });
-      await projectHook.loadProjects();
-      triggerToast(
-        updated.enable_tunnel ? "Cloudflare Tunnel enabled!" : "Cloudflare Tunnel disabled.",
-        "success"
-      );
-    } catch (e) {
-      triggerToast(`Failed to update tunnel: ${e}`, "error");
-    }
-  };
-
 
 
   // ── System Uptime Counter ──
@@ -687,7 +671,7 @@ export default function App() {
         triggerConfirm={triggerConfirm}
         triggerToast={triggerToast}
         onOpenResources={() => handleFileOpenCustom("__resources__")}
-        onToggleTunnel={handleToggleTunnel}
+        onToggleTunnel={() => handleFileOpenCustom("__cloudflare_tunnel__")}
       />
 
       {/* 2. Main Workspace — Full Dashboard Grid */}
@@ -904,11 +888,13 @@ export default function App() {
                                 >
                                   {path === "__resources__" ? (
                                     <Database size={12} className="tab-icon" />
+                                  ) : path === "__cloudflare_tunnel__" ? (
+                                    <Cloud size={12} className="tab-icon" style={{ color: "#F38020" }} />
                                   ) : (
                                     <FileCode size={12} className="tab-icon" />
                                   )}
                                   <span className="tab-name">
-                                    {path === "__resources__" ? "Tài nguyên" : path.split(/[\\/]/).pop()}
+                                    {path === "__resources__" ? "Tài nguyên" : path === "__cloudflare_tunnel__" ? "Cloudflare Tunnel" : path.split(/[\\/]/).pop()}
                                   </span>
                                   <button
                                     className="tab-close-btn"
@@ -990,6 +976,8 @@ export default function App() {
                               activeState={activeState}
                               resourceHistory={resourceHistory}
                             />
+                          ) : paneOpenFilePath === "__cloudflare_tunnel__" ? (
+                            <CloudflareTunnel />
                           ) : paneIsSqliteFile ? (
                             <SqliteEditor
                               filePath={paneOpenFilePath}

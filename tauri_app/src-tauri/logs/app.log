@@ -1211,3 +1211,60 @@
 [2026-05-29 07:53:10.147] Toolchains checked / verified stable.
 [2026-05-29 07:53:13.215] Cloudflared binary verified / updated successfully.
 [2026-05-29 07:53:13.217] Isolated environment initialized successfully!
+[2026-05-29 08:08:03.318] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 08:08:03.319] Reading file: __cloudflare_tunnel__
+[2026-05-29 08:08:03.319] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 08:57:06.891] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 08:57:06.896] Proto CLI verified and active.
+[2026-05-29 08:57:06.937] Toolchains checked / verified stable.
+[2026-05-29 08:57:10.143] Cloudflared binary verified / updated successfully.
+[2026-05-29 08:57:10.144] Isolated environment initialized successfully!
+[2026-05-29 08:57:50.574] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 08:57:50.576] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 08:57:50.577] Reading file: __cloudflare_tunnel__
+[2026-05-29 09:01:06.402] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:01:10.426] Tauri command received: start_project_process for project_id: backend
+[2026-05-29 09:01:10.431] Process successfully started for project_id: backend
+[2026-05-29 09:01:32.309] Tauri command received: stop_project_process for project_id: backend
+[2026-05-29 09:01:32.310] Process successfully stopped for project_id: backend
+[2026-05-29 09:06:32.288] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 09:06:32.292] Proto CLI verified and active.
+[2026-05-29 09:06:32.349] Toolchains checked / verified stable.
+[2026-05-29 09:06:33.175] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:06:33.194] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:06:33.443] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:06:35.352] Cloudflared binary verified / updated successfully.
+[2026-05-29 09:06:35.355] Isolated environment initialized successfully!
+[2026-05-29 09:06:38.415] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:06:48.913] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:06:48.915] Reading file: __cloudflare_tunnel__
+[2026-05-29 09:06:48.917] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:06:54.138] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:00.919] Tauri command received: start_project_process for project_id: backend
+[2026-05-29 09:07:00.926] Process successfully started for project_id: backend
+[2026-05-29 09:07:11.812] Tauri command received: stop_project_process for project_id: backend
+[2026-05-29 09:07:11.814] Process successfully stopped for project_id: backend
+[2026-05-29 09:07:13.786] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:15.080] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:16.541] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:16.707] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:17.355] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:21.107] Tauri command received: start_project_process for project_id: backend
+[2026-05-29 09:07:21.112] Process successfully started for project_id: backend
+[2026-05-29 09:07:24.703] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:26.713] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:26.869] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:31.493] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:33.357] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:35.104] Tauri command received: stop_project_process for project_id: backend
+[2026-05-29 09:07:35.105] Process successfully stopped for project_id: backend
+[2026-05-29 09:07:36.930] Tauri command received: start_project_process for project_id: backend
+[2026-05-29 09:07:36.938] Process successfully started for project_id: backend
+[2026-05-29 09:07:44.604] Tauri command received: stop_project_process for project_id: backend
+[2026-05-29 09:07:44.606] Process successfully stopped for project_id: backend
+[2026-05-29 09:07:46.596] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:48.047] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:48.535] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:49.331] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:07:51.086] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 09:08:01.806] Writing file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml

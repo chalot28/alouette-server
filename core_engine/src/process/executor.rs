@@ -42,6 +42,7 @@ impl ProcessManager {
         let log_dir = self.log_dir.clone();
         let project_id_str = project_id.to_string();
         let max_log_size = self.max_log_size.unwrap_or(20 * 1024 * 1024);
+        let cloudflared_manager = self.cloudflared_manager.clone();
 
         // Generate Spoofed ENV
         let spoofed_envs = self.proto_manager.get_spoofed_env();
@@ -223,11 +224,105 @@ impl ProcessManager {
                             max_log_size,
                         ));
 
+                        // Check if Cloudflare Tunnel is enabled
+                        let mut tunnel_pid: Option<u32> = None;
+                        if config.enable_tunnel == Some(true) {
+                            let (mode, token, active_port) = {
+                                let path = std::path::Path::new("d:/alouette-server/core_engine/app_data/cloudflare_config.yml");
+                                if path.exists() {
+                                    let mut mode = "default".to_string();
+                                    let mut global_token = None;
+                                    let mut active_token = None;
+                                    let mut active_port = None;
+                                    if let Ok(content) = std::fs::read_to_string(path) {
+                                        let mut current_id = String::new();
+                                        let mut current_project_id = String::new();
+                                        let mut current_port = None;
+                                        let mut current_token = None;
+                                        let mut current_active = false;
+                                        for line in content.lines() {
+                                            let trimmed = line.trim();
+                                            if trimmed.starts_with("mode:") {
+                                                mode = trimmed.replace("mode:", "").replace('"', "").replace('\'', "").trim().to_string();
+                                            } else if trimmed.starts_with("tunnel_token:") || trimmed.starts_with("api_key:") {
+                                                let val = trimmed.replace("tunnel_token:", "").replace("api_key:", "").replace('"', "").replace('\'', "").trim().to_string();
+                                                if !val.is_empty() {
+                                                    global_token = Some(val);
+                                                }
+                                            } else if trimmed.starts_with("- id:") || trimmed.starts_with("id:") {
+                                                if !current_id.is_empty() && current_project_id == project_id_str && current_active {
+                                                    active_port = current_port;
+                                                    active_token = current_token.clone();
+                                                }
+                                                current_id = trimmed.replace("- id:", "").replace("id:", "").replace('"', "").replace('\'', "").trim().to_string();
+                                                current_project_id.clear();
+                                                current_port = None;
+                                                current_token = None;
+                                                current_active = false;
+                                            } else if trimmed.starts_with("project_id:") {
+                                                current_project_id = trimmed.replace("project_id:", "").replace('"', "").replace('\'', "").trim().to_string();
+                                            } else if trimmed.starts_with("port:") {
+                                                current_port = trimmed.replace("port:", "").trim().parse::<u16>().ok();
+                                            } else if trimmed.starts_with("token:") {
+                                                let val = trimmed.replace("token:", "").replace('"', "").replace('\'', "").trim().to_string();
+                                                if !val.is_empty() {
+                                                    current_token = Some(val);
+                                                }
+                                            } else if trimmed.starts_with("active:") {
+                                                current_active = trimmed.replace("active:", "").trim() == "true";
+                                            }
+                                        }
+                                        if !current_id.is_empty() && current_project_id == project_id_str && current_active {
+                                            active_port = current_port;
+                                            active_token = current_token;
+                                        }
+                                    }
+                                    (mode, active_token.or(global_token), active_port)
+                                } else {
+                                    ("default".to_string(), None, None)
+                                }
+                            };
+
+                            let port = active_port.unwrap_or(config.port.unwrap_or(3000));
+                            log_system!(format!("Watchdog: Khởi động Cloudflare Tunnel (Chế độ: {}) trên cổng: {}...", mode, port));
+                            
+                            let pass_token = if mode == "token" || mode == "api" { token } else { None };
+                            match cloudflared_manager.spawn_tunnel(port, pass_token, &project_id_str).await {
+                                Ok((t_pid, mut url_rx)) => {
+                                    tunnel_pid = Some(t_pid);
+                                    let log_sender_c = log_sender.clone();
+                                    let project_id_c = project_id_str.clone();
+                                    let log_file_c = log_file.clone();
+                                    // Spawn a background task to listen to the url broadcast and print it
+                                    tokio::spawn(async move {
+                                        if let Ok(url) = url_rx.recv().await {
+                                            let text = format!("Watchdog: Cloudflare Tunnel hoạt động thành công! Đường truyền công khai của bạn: \n👉 {} 👈", url);
+                                            let _ = append_log_line(&log_file_c, &text, max_log_size).await;
+                                            let _ = log_sender_c.send(ProcessLog {
+                                                project_id: project_id_c,
+                                                stream: "system".to_string(),
+                                                text,
+                                                timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                                            });
+                                        }
+                                    });
+                                }
+                                Err(e) => {
+                                    log_system!(format!("Watchdog ERROR: Khởi động Cloudflare Tunnel thất bại: {}", e));
+                                }
+                            }
+                        }
+
                         // Wait for process exit or manual stop command
                         tokio::select! {
                             exit_status = child.wait() => {
                                 let _ = stdout_task.await;
                                 let _ = stderr_task.await;
+
+                                if let Some(t_pid) = tunnel_pid {
+                                    log_system!("Watchdog: Đang dừng Cloudflare Tunnel...");
+                                    terminate_process_tree(t_pid).await;
+                                }
 
                                 let exit_code = match exit_status {
                                     Ok(status) => status.code(),
@@ -281,6 +376,10 @@ impl ProcessManager {
                             _ = &mut stop_rx => {
                                 // Terminate active process tree recursively
                                 log_system!("--- Stopping Process Tree... ---");
+                                if let Some(t_pid) = tunnel_pid {
+                                    log_system!("Watchdog: Đang dừng Cloudflare Tunnel...");
+                                    terminate_process_tree(t_pid).await;
+                                }
                                 terminate_process_tree(pid).await;
                                 let _ = child.kill().await;
                                 let _ = stdout_task.await;
