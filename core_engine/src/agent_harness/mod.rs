@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
+use std::future::Future;
 
 pub mod parser;
 pub mod telemetry;
@@ -11,6 +12,55 @@ pub mod hooks;
 pub mod plan;
 pub mod autonomous;
 pub mod compaction;
+pub mod skills;
+
+// ─── Agent Loop Types ─────────────────────────────────────────────────
+
+/// Kết quả của một vòng lặp agent hoàn chỉnh
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentLoopResult {
+    pub session_id: String,
+    pub iterations: Vec<AgentLoopIteration>,
+    pub final_text: Option<String>,
+    pub total_iterations: u32,
+    pub tool_calls_made: u32,
+    pub stopped_early: bool,
+    pub stop_reason: Option<String>,
+}
+
+/// Một lần lặp trong vòng lặp agent
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentLoopIteration {
+    pub iteration: u32,
+    pub thought: Option<String>,
+    pub tool_name: Option<String>,
+    pub tool_args: Option<String>,
+    pub tool_result: Option<String>,
+    pub tool_success: bool,
+    pub timestamp: String,
+}
+
+/// Cấu hình cho vòng lặp agent
+#[derive(Debug, Clone)]
+pub struct AgentLoopConfig {
+    pub max_iterations: u32,
+    pub auto_approve_reads: bool,
+    pub auto_approve_writes: bool,
+    pub auto_approve_all: bool,
+    pub session_id: String,
+}
+
+impl Default for AgentLoopConfig {
+    fn default() -> Self {
+        Self {
+            max_iterations: 25,
+            auto_approve_reads: true,
+            auto_approve_writes: false,
+            auto_approve_all: false,
+            session_id: String::new(),
+        }
+    }
+}
 
 /// Operating modes for the agent harness
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -85,6 +135,7 @@ pub struct AgentHarness {
     telemetry: telemetry::TelemetryManager,
     memory_manager: memory::MemoryManager,
     hook_manager: Option<hooks::HookManager>,
+    skill_engine: skills::SkillEngine,
     mode: HarnessMode,
     subagents: HashMap<String, Subagent>,
 }
@@ -96,10 +147,12 @@ impl AgentHarness {
         let telemetry = telemetry::TelemetryManager::new(&canonical_root);
         let memory_manager = memory::MemoryManager::new(&canonical_root);
 
+        let skill_engine = skills::SkillEngine::new(canonical_root.clone());
         Self {
             workspace_root: canonical_root,
             telemetry,
             memory_manager,
+            skill_engine,
             hook_manager: None,
             mode: HarnessMode::Standard,
             subagents: HashMap::new(),
@@ -425,6 +478,13 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
             "save_memory" => self.execute_save_memory(tool),
             "search_memory" => self.execute_search_memory(tool),
             "compact_history" => self.execute_compact_history(tool),
+            // Skill tools
+            "scan_directory_tree" => Ok(self.skill_engine.scan_directory_tree().tree_string),
+            "scan_subdirectory" => self.execute_scan_subdirectory(tool),
+            "search_files" => self.execute_search_files(tool),
+            "extract_symbol" => self.execute_extract_symbol(tool),
+            "read_file_range" => self.execute_read_file_range(tool),
+            "search_symbol" => self.execute_search_symbol(tool),
             _ => Err(format!("Unknown tool: {}", tool.name)),
         };
 
@@ -606,6 +666,113 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         Ok("History compaction requested. Use compaction::CompactionManager for structured summaries.".to_string())
     }
 
+    // ─── Skill Tool Executions ───────────────────────────────────────────
+
+    fn execute_scan_subdirectory(&self, tool: &parser::ToolCall) -> Result<String, String> {
+        let path = tool.arguments["path"].as_str()
+            .ok_or_else(|| "Missing 'path' argument".to_string())?;
+        let tree = self.skill_engine.scan_subdirectory(path)?;
+        Ok(tree.tree_string)
+    }
+
+    fn execute_search_files(&self, tool: &parser::ToolCall) -> Result<String, String> {
+        let pattern = tool.arguments["pattern"].as_str()
+            .or_else(|| tool.arguments["query"].as_str())
+            .ok_or_else(|| "Missing 'pattern' argument".to_string())?;
+
+        let result = self.skill_engine.search_files(pattern);
+        if result.matches.is_empty() {
+            return Ok(format!("📁 No files found matching '{}'", pattern));
+        }
+
+        let mut output = format!("📁 Found {} file(s) matching '{}':\n\n", result.total, pattern);
+        for (i, path) in result.matches.iter().enumerate() {
+            output.push_str(&format!("  {}. {}\n", i + 1, path.display()));
+        }
+        output.push_str(&format!("\n--- {} file(s) total ---", result.total));
+        Ok(output)
+    }
+
+    fn execute_extract_symbol(&self, tool: &parser::ToolCall) -> Result<String, String> {
+        let file = tool.arguments["file"].as_str()
+            .ok_or_else(|| "Missing 'file' argument".to_string())?;
+        let symbol = tool.arguments["symbol"].as_str()
+            .or_else(|| tool.arguments["name"].as_str())
+            .ok_or_else(|| "Missing 'symbol' argument".to_string())?;
+
+        let extraction = self.skill_engine.extract_symbol(file, symbol)?;
+
+        let mut output = String::new();
+        output.push_str(&format!(
+            "📖 Symbol: **{}** ({}) | File: `{}` | Lines {}-{}\n\n",
+            extraction.symbol,
+            extraction.symbol_type.unwrap_or_else(|| "unknown".to_string()),
+            extraction.file.display(),
+            extraction.start_line,
+            extraction.end_line
+        ));
+
+        // Context before
+        if !extraction.context_before.is_empty() {
+            output.push_str("Context before:\n");
+            for line in extraction.context_before.lines() {
+                output.push_str(&format!("  {}\n", line));
+            }
+            output.push('\n');
+        }
+
+        // The actual code block
+        output.push_str("```\n");
+        // Add line numbers
+        for (i, line) in extraction.code_block.lines().enumerate() {
+            let line_num = extraction.start_line + i;
+            output.push_str(&format!("{:>6} | {}\n", line_num, line));
+        }
+        output.push_str("```\n");
+
+        output.push_str(&format!("\n--- Extracted {} lines ({}:{}-{}) ---",
+            extraction.code_block.lines().count(),
+            extraction.file.display(),
+            extraction.start_line,
+            extraction.end_line
+        ));
+        Ok(output)
+    }
+
+    fn execute_read_file_range(&self, tool: &parser::ToolCall) -> Result<String, String> {
+        let file = tool.arguments["file"].as_str()
+            .ok_or_else(|| "Missing 'file' argument".to_string())?;
+        let start = tool.arguments["start_line"].as_u64()
+            .ok_or_else(|| "Missing 'start_line' argument".to_string())? as usize;
+        let end = tool.arguments["end_line"].as_u64()
+            .ok_or_else(|| "Missing 'end_line' argument".to_string())? as usize;
+
+        self.skill_engine.read_file_range(file, start, end)
+    }
+
+    fn execute_search_symbol(&self, tool: &parser::ToolCall) -> Result<String, String> {
+        let symbol = tool.arguments["symbol"].as_str()
+            .or_else(|| tool.arguments["name"].as_str())
+            .ok_or_else(|| "Missing 'symbol' argument".to_string())?;
+
+        let results = self.skill_engine.search_symbol_across_project(symbol);
+        if results.is_empty() {
+            return Ok(format!("🔍 Symbol '{}' not found anywhere in project.", symbol));
+        }
+
+        let mut output = format!("🔍 Found symbol **'{}'** in {} file(s):\n\n", symbol, results.len());
+        for (i, (path, line_num, line_text)) in results.iter().enumerate() {
+            output.push_str(&format!("  {}. `{}:{}` → {}\n",
+                i + 1,
+                path.display(),
+                line_num,
+                line_text
+            ));
+        }
+        output.push_str(&format!("\nUse `extract_symbol` with the file path and symbol name to see the full definition."));
+        Ok(output)
+    }
+
     // ─── Subagent Management ─────────────────────────────────────────────
 
     /// Spawn a subagent for coordinator mode
@@ -661,10 +828,195 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         plan::Plan::new(title)
     }
 
+    // ─── Agent Loop Engine ──────────────────────────────────────────────
+
+    /// Chạy vòng lặp agent hoàn chỉnh: think → act → observe → repeat
+    /// Cho đến khi LLM trả về text response (không phải tool call)
+    /// hoặc đạt max_iterations.
+    ///
+    /// `llm_call_fn` là async closure nhận (system_prompt, history) và trả về LLM response string.
+    /// `on_iteration_fn` là callback để emit sự kiện real-time ra UI.
+    pub async fn run_agent_loop<F1, Fut1, F2>(
+        &mut self,
+        system_prompt: &str,
+        history: &mut Vec<ChatMessage>,
+        config: AgentLoopConfig,
+        llm_call_fn: F1,
+        on_iteration_fn: Option<F2>,
+    ) -> AgentLoopResult
+    where
+        F1: Fn(String, Vec<ChatMessage>) -> Fut1,
+        Fut1: Future<Output = Result<String, String>>,
+        F2: Fn(AgentLoopIteration),
+    {
+        let mut iterations = Vec::new();
+        let mut tool_calls_made = 0u32;
+        let mut stopped_early = false;
+        let mut stop_reason: Option<String> = None;
+        let mut final_text: Option<String> = None;
+        let session_id = config.session_id.clone();
+
+        for iteration in 0..config.max_iterations {
+            // 1. Compact history nếu quá dài
+            let max_msgs = if history.len() > 80 { 40 } else { 80 };
+            Self::compact_history(history, max_msgs);
+
+            // 2. Gọi LLM
+            let llm_reply = match llm_call_fn(
+                system_prompt.to_string(),
+                history.clone(),
+            ).await {
+                Ok(reply) => reply,
+                Err(e) => {
+                    stop_reason = Some(format!("LLM call failed: {}", e));
+                    stopped_early = true;
+                    break;
+                }
+            };
+
+            // 3. Parse response
+            let parsed = parser::parse_model_response(&llm_reply);
+
+            let iteration_record = AgentLoopIteration {
+                iteration: (iteration + 1) as u32,
+                thought: parsed.thought.clone(),
+                tool_name: None,
+                tool_args: None,
+                tool_result: None,
+                tool_success: false,
+                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+            };
+
+            if let Some(ref tool) = parsed.tool_call {
+                // ─── TOOL CALL ────────────────────────────────────────
+                tool_calls_made += 1;
+
+                // Kiểm tra auto-approve
+                let is_read_tool = matches!(tool.name.as_str(),
+                    "check_port" | "read_file" | "get_project_files"
+                    | "scan_directory_tree" | "scan_subdirectory"
+                    | "search_files" | "extract_symbol" | "read_file_range"
+                    | "search_symbol" | "search_memory"
+                );
+                let is_write_tool = matches!(tool.name.as_str(),
+                    "write_file" | "save_memory"
+                );
+
+                let can_execute = config.auto_approve_all
+                    || (config.auto_approve_reads && is_read_tool)
+                    || (config.auto_approve_writes && (is_read_tool || is_write_tool));
+
+                if !can_execute {
+                    // Dừng vòng lặp, chờ user approve
+                    iterations.push(AgentLoopIteration {
+                        tool_name: Some(tool.name.clone()),
+                        tool_args: Some(tool.arguments.to_string()),
+                        ..iteration_record
+                    });
+                    stop_reason = Some(format!("Tool '{}' needs user approval", tool.name));
+                    stopped_early = true;
+                    break;
+                }
+
+                // Execute tool
+                let tool_result = self.execute_tool(&session_id, tool).await;
+                let (result_text, success) = match tool_result {
+                    Ok(r) => (r, true),
+                    Err(e) => (e, false),
+                };
+
+                // Ghi tool result vào iteration
+                iterations.push(AgentLoopIteration {
+                    tool_name: Some(tool.name.clone()),
+                    tool_args: Some(tool.arguments.to_string()),
+                    tool_result: Some(result_text.clone()),
+                    tool_success: success,
+                    ..iteration_record
+                });
+
+                // Callback real-time
+                if let Some(ref cb) = on_iteration_fn {
+                    cb(iterations.last().unwrap().clone());
+                }
+
+                // Feed result back to history
+                history.push(ChatMessage {
+                    id: format!("obs_{}_{}", chrono::Local::now().timestamp_millis(), iteration),
+                    role: "system".to_string(),
+                    content: format!(
+                        "<call:{}><result success={}>{}</result>",
+                        tool.name, success, result_text
+                    ),
+                    timestamp: chrono::Local::now().format("%H:%M").to_string(),
+                });
+
+                // Continue loop - cho LLM thấy kết quả và quyết định bước tiếp
+                continue;
+            } else {
+                // ─── TEXT RESPONSE ────────────────────────────────────
+                let text = parsed.plain_text.unwrap_or_else(|| {
+                    "Task completed.".to_string()
+                });
+
+                final_text = Some(text.clone());
+
+                // Ghi text response vào history
+                history.push(ChatMessage {
+                    id: format!("model_{}", chrono::Local::now().timestamp_millis()),
+                    role: "model".to_string(),
+                    content: text.clone(),
+                    timestamp: chrono::Local::now().format("%H:%M").to_string(),
+                });
+
+                iterations.push(AgentLoopIteration {
+                    tool_name: None,
+                    tool_args: None,
+                    tool_result: Some(text.clone()),
+                    tool_success: true,
+                    ..iteration_record
+                });
+
+                // Callback real-time
+                if let Some(ref cb) = on_iteration_fn {
+                    cb(iterations.last().unwrap().clone());
+                }
+
+                break; // LLM trả về text → hoàn thành
+            }
+        }
+
+        // Kiểm tra nếu đạt max iterations
+            let total_iters = iterations.len() as u32;
+            if total_iters >= config.max_iterations && final_text.is_none() {
+                stopped_early = true;
+                stop_reason = Some(format!(
+                    "Reached maximum iterations ({})", config.max_iterations
+                ));
+            }
+
+            AgentLoopResult {
+                session_id,
+                iterations,
+                final_text,
+                total_iterations: total_iters,
+                tool_calls_made,
+                stopped_early,
+                stop_reason,
+            }
+    }
+
     // ─── Memory Management ───────────────────────────────────────────────
 
     pub fn memory_manager(&self) -> &memory::MemoryManager {
         &self.memory_manager
+    }
+
+    pub fn skill_engine(&self) -> &skills::SkillEngine {
+        &self.skill_engine
+    }
+
+    pub fn telemetry_manager(&self) -> &telemetry::TelemetryManager {
+        &self.telemetry
     }
 
     // ─── Telemetry ───────────────────────────────────────────────────────

@@ -178,6 +178,143 @@ Example:
 
 ---
 
+### 8. scan_directory_tree
+Scan the PROJECT ROOT and return ONLY ONE LEVEL (immediate children).
+Returns ONLY structure (folder/file names), NO file contents.
+This is the FIRST tool AI should call to understand the top-level project layout.
+
+Arguments:
+```
+(no arguments required)
+```
+
+Example:
+<call:scan_directory_tree>
+{}
+</call:scan_directory_tree>
+
+Rules:
+- ⚠️  This only shows TOP-LEVEL items (depth=1) to keep context small.
+- Hidden folders (.git, .idea) and build artifacts (target, node_modules, logs) are excluded.
+- Use this FIRST to see the big picture — then drill deeper with `scan_subdirectory`.
+
+### 9. scan_subdirectory
+Scan a SPECIFIC subdirectory (one level deep) to explore its contents.
+Use this after `scan_directory_tree` to drill into folders of interest.
+
+Arguments:
+```
+path (required): Relative path to the subdirectory to scan.
+```
+
+Example workflow:
+1. <call:scan_directory_tree>{}</call:scan_directory_tree>
+   → Shows: alouette-server/ ├── core_engine/ ├── tauri_app/ └── docs/
+2. <call:scan_subdirectory>{"path": "core_engine"}</call:scan_subdirectory>
+   → Shows: core_engine/ ├── Cargo.toml └── src/
+3. <call:scan_subdirectory>{"path": "core_engine/src"}</call:scan_subdirectory>
+   → Shows: src/ ├── lib.rs ├── config.rs └── process/
+
+Rules:
+- Always start with `scan_directory_tree` to get the top-level view.
+- Then drill into specific directories that seem relevant to your task.
+- Path must be within the workspace (security enforced).
+
+### 10. search_files
+Search for files by name or pattern across the project.
+
+Arguments:
+```
+pattern (required): Part of filename or full name to search for (case-insensitive).
+```
+
+Example:
+<call:search_files>
+{
+  "pattern": "mod.rs"
+}
+</call:search_files>
+
+Rules:
+- Matching is case-insensitive and matches any part of the filename.
+- Returns full relative paths to all matching files.
+- Use this to find files when you know the name but not the location.
+
+### 11. extract_symbol
+Extract a specific symbol (function, struct, trait, impl, variable) from a file.
+AI does NOT need to know line numbers — just say what symbol you need.
+The tool automatically finds the symbol definition and extracts ONLY that block.
+
+Arguments:
+```
+file   (required): Relative path to the file containing the symbol.
+symbol (required): The symbol name to find and extract (e.g., function name, struct name, variable).
+```
+
+Example:
+<call:extract_symbol>
+{
+  "file": "core_engine/src/agent_harness/mod.rs",
+  "symbol": "execute_tool"
+}
+</call:extract_symbol>
+
+Rules:
+- You NEVER need to specify line numbers. The tool finds the symbol automatically.
+- Works with: functions, structs, enums, traits, impl blocks, const, type aliases, mod declarations.
+- Returns the full code block with proper brace matching + 2 lines of context.
+- If the symbol is used in multiple places, the first definition match is returned.
+- Use this FIRST to understand specific code before using read_file_range.
+
+### 12. read_file_range
+Read a specific range of lines from a file.
+Typically used AFTER extract_symbol told you the exact line numbers.
+
+Arguments:
+```
+file       (required): Relative path to the file.
+start_line (required): First line number (1-based) to read.
+end_line   (required): Last line number (1-based, exclusive) to read.
+```
+
+Example:
+<call:read_file_range>
+{
+  "file": "core_engine/src/agent_harness/mod.rs",
+  "start_line": 400,
+  "end_line": 450
+}
+</call:read_file_range>
+
+Rules:
+- Line numbers are 1-based.
+- Returns each line prefixed with its line number.
+- Always use extract_symbol FIRST to find relevant line numbers.
+
+### 13. search_symbol
+Search for a symbol (function, struct, variable name) across the ENTIRE project.
+Returns which files reference or define that symbol.
+
+Arguments:
+```
+symbol (required): The symbol name to search for across all source files.
+```
+
+Example:
+<call:search_symbol>
+{
+  "symbol": "AgentHarness"
+}
+</call:search_symbol>
+
+Rules:
+- Searches all .rs, .ts, .js, .tsx, .jsx files in the project.
+- Returns file path, line number, and first matching line for each file.
+- Use this to find where something is defined or used before extracting details.
+- After this, call extract_symbol to see the full definition.
+
+---
+
 ## General Tool Usage Rules
 
 1. **Never guess files.** Always use `get_project_files` or `read_file` to inspect the project layout before assuming file locations.
