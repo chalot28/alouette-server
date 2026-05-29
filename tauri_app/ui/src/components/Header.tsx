@@ -33,6 +33,26 @@ interface HeaderProps {
   triggerConfirm: (message: string, onConfirm: () => void) => void;
   triggerToast: (message: string, type: "success" | "error" | "info") => void;
   onOpenResources: () => void;
+  onToggleTunnel?: () => void;
+}
+
+function CloudflareIcon({ size = 16, active = false }: { size?: number; active?: boolean }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={active ? "#F38020" : "currentColor"}
+      style={{
+        opacity: active ? 1 : 0.55,
+        color: active ? "#F38020" : "inherit",
+        transition: "all 0.2s ease"
+      }}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M22.025 14.156c-.035-.3-.081-.606-.151-.9-.372-1.63-1.488-2.975-3.003-3.615a5.556 5.556 0 0 0 .151-1.28c0-2.825-2.22-5.115-4.965-5.115-.99 0-1.921.3-2.715.82a6.38 6.38 0 0 0-6.195-2.05A6.091 6.091 0 0 0 1.005 8.163a6.837 6.837 0 0 0-.93 3.385c0 3.515 2.76 6.376 6.165 6.376h12.39c3.003-.001 5.395-2.316 5.395-5.127 0-.226-.012-.446-.035-.66l-.01-.081z" />
+    </svg>
+  );
 }
 
 export default function Header({
@@ -53,7 +73,8 @@ export default function Header({
   handleStop,
   triggerConfirm,
   triggerToast,
-  onOpenResources
+  onOpenResources,
+  onToggleTunnel
 }: HeaderProps) {
   const appWindow = getCurrentWindow();
 
@@ -203,6 +224,23 @@ export default function Header({
 
         {activeProject && (
           <div className="header-process-controls">
+            <button
+              style={{
+                background: "transparent",
+                border: "none",
+                padding: "0 4px",
+                marginRight: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                color: "inherit"
+              }}
+              onClick={onToggleTunnel}
+              title={activeProject.enable_tunnel ? "Cloudflare Tunnel Enabled (Click to Disable)" : "Cloudflare Tunnel Disabled (Click to Enable)"}
+            >
+              <CloudflareIcon active={!!activeProject.enable_tunnel} size={15} />
+            </button>
             <span className="header-process-name" title={activeProject.name}>
               {activeProject.name}
             </span>

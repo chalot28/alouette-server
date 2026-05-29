@@ -1196,3 +1196,18 @@
 [2026-05-29 06:25:03.268] Process successfully started for project_id: backend
 [2026-05-29 06:25:39.791] Tauri command received: stop_project_process for project_id: backend
 [2026-05-29 06:25:39.793] Process successfully stopped for project_id: backend
+[2026-05-29 06:31:17.513] Reading file: D:/server_dvtn/.eslintrc.json
+[2026-05-29 06:31:19.619] Reading file: D:/server_dvtn/.gitignore
+[2026-05-29 06:33:00.399] Reading file: D:/server_dvtn/.env.example
+[2026-05-29 06:40:48.123] Reading file: D:/server_dvtn/.env.example
+[2026-05-29 06:41:01.888] Reading file: D:/server_dvtn/.eslintrc.json
+[2026-05-29 06:41:33.071] Reading file: D:/server_dvtn/.env
+[2026-05-29 06:43:36.848] Reading file: D:/server_dvtn/.env.example
+[2026-05-29 06:43:44.888] Reading file: D:/server_dvtn/.eslintrc.json
+[2026-05-29 06:46:58.715] Reading file: __resources__
+[2026-05-29 07:47:15.865] Reading file: __resources__
+[2026-05-29 07:53:10.010] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 07:53:10.017] Proto CLI verified and active.
+[2026-05-29 07:53:10.147] Toolchains checked / verified stable.
+[2026-05-29 07:53:13.215] Cloudflared binary verified / updated successfully.
+[2026-05-29 07:53:13.217] Isolated environment initialized successfully!

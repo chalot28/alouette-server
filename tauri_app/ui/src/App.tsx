@@ -240,15 +240,11 @@ export default function App() {
     activeProject,
     openFilePath,
     setOpenFilePath,
-    openFiles,
     setOpenFiles,
-    openFileContent,
     isFileLoading,
     fileError,
-    isSqliteFile,
     filesContent,
     setFilesContent,
-    filesOriginalContent,
     setFilesOriginalContent,
     showTabsMenu,
     setShowTabsMenu,
@@ -260,14 +256,8 @@ export default function App() {
     setNewProjArgs,
     newProjCwd,
     setNewProjCwd,
-    newProjSetup,
-    setNewProjSetup,
-    newProjSetupArgs,
-    setNewProjSetupArgs,
     newProjRestart,
     setNewProjRestart,
-    newProjEnv,
-    setNewProjEnv,
     newProjCpu,
     setNewProjCpu,
     newProjRam,
@@ -282,8 +272,6 @@ export default function App() {
     setNewProjToolchain,
     newProjToolchainVersion,
     setNewProjToolchainVersion,
-    newProjEnableTunnel,
-    setNewProjEnableTunnel,
     newProjMaxLogLines,
     setNewProjMaxLogLines,
     portConflict,
@@ -299,9 +287,6 @@ export default function App() {
     wipeConfig,
     handleResetSetupForm,
     handleForceKillAndStart,
-    handleFileOpen,
-    handleFileClose,
-    handleCloseAllTabs,
     handleSaveAndCloseAllTabs,
   } = projectHook;
 
@@ -342,6 +327,185 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  // Split Editor Pane structures
+  interface EditorPane {
+    openFiles: string[];
+    openFilePath: string | null;
+  }
+
+  const [panes, setPanes] = useState<EditorPane[]>([
+    { openFiles: [], openFilePath: null }
+  ]);
+  const [activePaneIndex, setActivePaneIndex] = useState<number>(0);
+  const [draggedOverPaneIndex, setDraggedOverPaneIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    targetPaneIndex: number | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    targetPaneIndex: null
+  });
+
+  // Sync back to projectHook when active pane or its selected file changes
+  useEffect(() => {
+    const activePane = panes[activePaneIndex];
+    if (activePane) {
+      setOpenFilePath(activePane.openFilePath);
+      setOpenFiles(activePane.openFiles);
+    }
+  }, [activePaneIndex, panes]);
+
+  // Handle opening file in the active pane
+  const handleFileOpenCustom = (path: string) => {
+    const normalizedPath = path.replace(/\\/g, "/");
+    setPanes((prevPanes) => {
+      const copy = [...prevPanes];
+      const pane = { ...copy[activePaneIndex] };
+      if (!pane.openFiles.includes(normalizedPath)) {
+        pane.openFiles = [...pane.openFiles, normalizedPath];
+      }
+      pane.openFilePath = normalizedPath;
+      copy[activePaneIndex] = pane;
+      return copy;
+    });
+    setOpenFilePath(normalizedPath);
+  };
+
+  // Close tab in a specific pane
+  const handleFileCloseCustom = (paneIdx: number, path: string) => {
+    const normalizedPath = path.replace(/\\/g, "/");
+    setPanes((prevPanes) => {
+      const copy = [...prevPanes];
+      const pane = { ...copy[paneIdx] };
+      const newOpenFiles = pane.openFiles.filter((f) => f !== normalizedPath);
+      pane.openFiles = newOpenFiles;
+      if (pane.openFilePath === normalizedPath) {
+        pane.openFilePath = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
+      }
+      copy[paneIdx] = pane;
+      return copy;
+    });
+  };
+
+  // Close all tabs across all panes
+  const handleCloseAllTabsCustom = () => {
+    setPanes([{ openFiles: [], openFilePath: null }]);
+    setActivePaneIndex(0);
+    setOpenFilePath(null);
+    setOpenFiles([]);
+    setFilesContent({});
+    setFilesOriginalContent({});
+  };
+
+  // Tab container context menu handler
+  const handleTabContainerContextMenu = (e: React.MouseEvent, paneIdx: number) => {
+    e.preventDefault();
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      targetPaneIndex: paneIdx
+    });
+  };
+
+  // Close custom context menu on outside click
+  useEffect(() => {
+    const handleCloseMenu = () => {
+      setContextMenu((prev) => ({ ...prev, visible: false }));
+    };
+    window.addEventListener("click", handleCloseMenu);
+    return () => window.removeEventListener("click", handleCloseMenu);
+  }, []);
+
+  // Split active pane into another side-by-side pane
+  const handleSplit = () => {
+    if (panes.length >= 3) {
+      triggerToast("Chỉ hỗ trợ tối đa 3 phân vùng màn hình", "info");
+      return;
+    }
+    setPanes((prev) => {
+      const currentActive = prev[activePaneIndex];
+      const newPane: EditorPane = {
+        openFiles: currentActive.openFilePath ? [currentActive.openFilePath] : [],
+        openFilePath: currentActive.openFilePath
+      };
+      return [...prev, newPane];
+    });
+    setActivePaneIndex(panes.length);
+  };
+
+  // Close a split pane and consolidate layout
+  const handleClosePane = (paneIdx: number) => {
+    if (panes.length <= 1) return;
+    setPanes((prev) => prev.filter((_, idx) => idx !== paneIdx));
+    setActivePaneIndex(0);
+  };
+
+  // Tab HTML5 Drag & Drop handlers
+  const handleDragStart = (e: React.DragEvent, sourcePaneIdx: number, path: string) => {
+    e.dataTransfer.setData("text/plain", path);
+    e.dataTransfer.setData("sourcePaneIndex", String(sourcePaneIdx));
+  };
+
+  const handleDrop = (e: React.DragEvent, targetPaneIdx: number) => {
+    e.preventDefault();
+    const path = e.dataTransfer.getData("text/plain");
+    const sourcePaneIdxStr = e.dataTransfer.getData("sourcePaneIndex");
+    if (!path || sourcePaneIdxStr === "") return;
+    const sourcePaneIdx = parseInt(sourcePaneIdxStr, 10);
+
+    if (sourcePaneIdx === targetPaneIdx) return;
+
+    setPanes((prevPanes) => {
+      const copy = [...prevPanes];
+      const sourcePane = { ...copy[sourcePaneIdx] };
+      const targetPane = { ...copy[targetPaneIdx] };
+
+      // Remove from source
+      sourcePane.openFiles = sourcePane.openFiles.filter((f) => f !== path);
+      if (sourcePane.openFilePath === path) {
+        sourcePane.openFilePath = sourcePane.openFiles.length > 0 ? sourcePane.openFiles[sourcePane.openFiles.length - 1] : null;
+      }
+
+      // Add to target
+      if (!targetPane.openFiles.includes(path)) {
+        targetPane.openFiles = [...targetPane.openFiles, path];
+      }
+      targetPane.openFilePath = path;
+
+      copy[sourcePaneIdx] = sourcePane;
+      copy[targetPaneIdx] = targetPane;
+      return copy;
+    });
+
+    setActivePaneIndex(targetPaneIdx);
+    setOpenFilePath(path);
+  };
+
+  const handleToggleTunnel = async () => {
+    if (!activeProject) return;
+    const updated = {
+      ...activeProject,
+      enable_tunnel: !activeProject.enable_tunnel
+    };
+    try {
+      await invoke("register_project", { config: updated });
+      await projectHook.loadProjects();
+      triggerToast(
+        updated.enable_tunnel ? "Cloudflare Tunnel enabled!" : "Cloudflare Tunnel disabled.",
+        "success"
+      );
+    } catch (e) {
+      triggerToast(`Failed to update tunnel: ${e}`, "error");
+    }
+  };
+
+
 
   // ── System Uptime Counter ──
   useEffect(() => {
@@ -522,7 +686,8 @@ export default function App() {
         handleStop={handleStop}
         triggerConfirm={triggerConfirm}
         triggerToast={triggerToast}
-        onOpenResources={() => handleFileOpen("__resources__")}
+        onOpenResources={() => handleFileOpenCustom("__resources__")}
+        onToggleTunnel={handleToggleTunnel}
       />
 
       {/* 2. Main Workspace — Full Dashboard Grid */}
@@ -589,7 +754,7 @@ export default function App() {
           >
             <FileExplorer
               activeCwd={activeProject?.cwd}
-              onFileSelect={handleFileOpen}
+              onFileSelect={handleFileOpenCustom}
             />
           </div>
 
@@ -658,8 +823,6 @@ export default function App() {
                   setNewProjToolchain={setNewProjToolchain}
                   newProjToolchainVersion={newProjToolchainVersion}
                   setNewProjToolchainVersion={setNewProjToolchainVersion}
-                  newProjEnableTunnel={newProjEnableTunnel}
-                  setNewProjEnableTunnel={setNewProjEnableTunnel}
                   newProjMaxLogLines={newProjMaxLogLines}
                   setNewProjMaxLogLines={setNewProjMaxLogLines}
                   handleResetSetupForm={handleResetSetupForm}
@@ -679,110 +842,194 @@ export default function App() {
                   position: "relative",
                 }}
               >
-                {openFiles.length > 0 && (
-                  <div className="tabs-header-container">
-                    <div className="editor-tabs-bar">
-                      {openFiles.map((path) => (
-                        <div
-                          key={`tab-${encodeURIComponent(path)}`}
-                          className={`editor-tab ${openFilePath === path ? "active" : ""}`}
-                          onClick={() => setOpenFilePath(path)}
-                          title={path}
-                        >
-                          {path === "__resources__" ? (
-                            <Database size={12} className="tab-icon" />
-                          ) : (
-                            <FileCode size={12} className="tab-icon" />
-                          )}
-                          <span className="tab-name">
-                            {path === "__resources__" ? "Tài nguyên" : path.split(/[\\/]/).pop()}
-                          </span>
-                          <button
-                            className="tab-close-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleFileClose(path);
-                            }}
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                <div className="split-editor-container">
+                  {panes.map((pane, paneIdx) => {
+                    const isActivePane = paneIdx === activePaneIndex;
+                    const paneOpenFilePath = pane.openFilePath;
+                    const paneOpenFiles = pane.openFiles;
+                    const paneIsSqliteFile = paneOpenFilePath ? (
+                      paneOpenFilePath.toLowerCase().endsWith(".db") ||
+                      paneOpenFilePath.toLowerCase().endsWith(".sqlite") ||
+                      paneOpenFilePath.toLowerCase().endsWith(".sqlite3")
+                    ) : false;
 
-                    <div className="tabs-actions-container">
-                      <button
-                        className={`btn-tabs-actions ${showTabsMenu ? "active" : ""}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowTabsMenu(!showTabsMenu);
+                    return (
+                      <div
+                        key={`pane-${paneIdx}`}
+                        className={`editor-pane ${isActivePane ? "active" : ""} ${draggedOverPaneIndex === paneIdx ? "drag-over" : ""}`}
+                        onClick={() => {
+                          if (!isActivePane) {
+                            setActivePaneIndex(paneIdx);
+                            setOpenFilePath(paneOpenFilePath);
+                          }
                         }}
-                        title="Tab actions"
+                        onDragEnter={(e) => {
+                          e.preventDefault();
+                          setDraggedOverPaneIndex(paneIdx);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                        }}
+                        onDragLeave={() => {
+                          setDraggedOverPaneIndex(null);
+                        }}
+                        onDrop={(e) => {
+                          setDraggedOverPaneIndex(null);
+                          handleDrop(e, paneIdx);
+                        }}
                       >
-                        <MoreHorizontal size={14} />
-                      </button>
-                      {showTabsMenu && (
-                        <div className="tabs-dropdown-menu">
-                          <button
-                            className="tabs-dropdown-item"
-                            onClick={handleCloseAllTabs}
+                        {paneOpenFiles.length > 0 && (
+                          <div
+                            className="tabs-header-container"
+                            onContextMenu={(e) => handleTabContainerContextMenu(e, paneIdx)}
                           >
-                            Delete All
-                          </button>
-                          <button
-                            className="tabs-dropdown-item font-semibold"
-                            onClick={handleSaveAndCloseAllTabs}
-                          >
-                            Save and Delete All
-                          </button>
+                            <div className="editor-tabs-bar">
+                              {paneOpenFiles.map((path) => (
+                                <div
+                                  key={`tab-${paneIdx}-${encodeURIComponent(path)}`}
+                                  className={`editor-tab ${paneOpenFilePath === path ? "active" : ""}`}
+                                  draggable
+                                  onDragStart={(e) => handleDragStart(e, paneIdx, path)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActivePaneIndex(paneIdx);
+                                    setPanes((prev) => {
+                                      const copy = [...prev];
+                                      copy[paneIdx] = { ...copy[paneIdx], openFilePath: path };
+                                      return copy;
+                                    });
+                                    setOpenFilePath(path);
+                                  }}
+                                  title={path}
+                                >
+                                  {path === "__resources__" ? (
+                                    <Database size={12} className="tab-icon" />
+                                  ) : (
+                                    <FileCode size={12} className="tab-icon" />
+                                  )}
+                                  <span className="tab-name">
+                                    {path === "__resources__" ? "Tài nguyên" : path.split(/[\\/]/).pop()}
+                                  </span>
+                                  <button
+                                    className="tab-close-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleFileCloseCustom(paneIdx, path);
+                                    }}
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="tabs-actions-container">
+                              <button
+                                className={`btn-tabs-actions ${showTabsMenu ? "active" : ""}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowTabsMenu(!showTabsMenu);
+                                }}
+                                title="Tab actions"
+                              >
+                                <MoreHorizontal size={14} />
+                              </button>
+                              {showTabsMenu && (
+                                <div className="tabs-dropdown-menu">
+                                  <button
+                                    className="tabs-dropdown-item"
+                                    onClick={handleCloseAllTabsCustom}
+                                  >
+                                    Delete All
+                                  </button>
+                                  <button
+                                    className="tabs-dropdown-item font-semibold"
+                                    onClick={handleSaveAndCloseAllTabs}
+                                  >
+                                    Save and Delete All
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="editor-pane-body" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                          {!paneOpenFilePath ? (
+                            <div
+                              className="code-editor-empty"
+                              onContextMenu={(e) => handleTabContainerContextMenu(e, paneIdx)}
+                            >
+                              <FileCode size={32} className="empty-icon" />
+                              <h3>No File Selected</h3>
+                              <p>Click on any file in the Project Explorer or right-click to Split screen.</p>
+                              {panes.length > 1 && (
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{
+                                    marginTop: "16px",
+                                    padding: "6px 14px",
+                                    fontSize: "11px",
+                                    fontWeight: 600,
+                                    borderColor: "var(--border-primary)",
+                                    color: "var(--text-primary)",
+                                    backgroundColor: "transparent"
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleClosePane(paneIdx);
+                                  }}
+                                >
+                                  Đóng phân vùng này
+                                </button>
+                              )}
+                            </div>
+                          ) : paneOpenFilePath === "__resources__" ? (
+                            <ProjectResources
+                              activeProject={activeProject || null}
+                              activeState={activeState}
+                              resourceHistory={resourceHistory}
+                            />
+                          ) : paneIsSqliteFile ? (
+                            <SqliteEditor
+                              filePath={paneOpenFilePath}
+                              triggerConfirm={triggerConfirm}
+                              triggerToast={triggerToast}
+                            />
+                          ) : (
+                            <CodeEditor
+                              theme={theme}
+                              filePath={paneOpenFilePath}
+                              content={
+                                paneOpenFilePath ? (filesContent[paneOpenFilePath] ?? null) : null
+                              }
+                              isLoading={isFileLoading && openFilePath === paneOpenFilePath}
+                              error={openFilePath === paneOpenFilePath ? fileError : null}
+                              onChange={(newVal) => {
+                                if (paneOpenFilePath) {
+                                  setFilesContent((prev) => ({
+                                    ...prev,
+                                    [paneOpenFilePath]: newVal,
+                                  }));
+                                }
+                              }}
+                              onSave={(savedVal) => {
+                                if (paneOpenFilePath) {
+                                  setFilesOriginalContent((prev) => ({
+                                    ...prev,
+                                    [paneOpenFilePath]: savedVal,
+                                  }));
+                                }
+                              }}
+                              scrollPositionsRef={editorScrollPositionsRef}
+                              cursorPositionsRef={editorCursorPositionsRef}
+                            />
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {openFilePath === "__resources__" ? (
-                  <ProjectResources
-                    activeProject={activeProject}
-                    activeState={activeState}
-                    resourceHistory={resourceHistory}
-                    handleStart={handleStart}
-                    handleStop={handleStop}
-                  />
-                ) : isSqliteFile && openFilePath ? (
-                  <SqliteEditor
-                    filePath={openFilePath}
-                    triggerConfirm={triggerConfirm}
-                    triggerToast={triggerToast}
-                  />
-                ) : (
-                  <CodeEditor
-                    theme={theme}
-                    filePath={openFilePath}
-                    content={
-                      openFilePath ? (filesContent[openFilePath] ?? null) : null
-                    }
-                    isLoading={isFileLoading}
-                    error={fileError}
-                    onChange={(newVal) => {
-                      if (openFilePath) {
-                        setFilesContent((prev) => ({
-                          ...prev,
-                          [openFilePath]: newVal,
-                        }));
-                      }
-                    }}
-                    onSave={(savedVal) => {
-                      if (openFilePath) {
-                        setFilesOriginalContent((prev) => ({
-                          ...prev,
-                          [openFilePath]: savedVal,
-                        }));
-                      }
-                    }}
-                    scrollPositionsRef={editorScrollPositionsRef}
-                    cursorPositionsRef={editorCursorPositionsRef}
-                  />
-                )}
+                      </div>
+                    );
+                  })}
+                </div>
                 {isBottomPanelOpen && (
                   <div
                     className={`resizer-h ${isDraggingMonitor ? "dragging" : ""}`}
@@ -879,8 +1126,6 @@ export default function App() {
                     setNewProjToolchain={setNewProjToolchain}
                     newProjToolchainVersion={newProjToolchainVersion}
                     setNewProjToolchainVersion={setNewProjToolchainVersion}
-                    newProjEnableTunnel={newProjEnableTunnel}
-                    setNewProjEnableTunnel={setNewProjEnableTunnel}
                     newProjMaxLogLines={newProjMaxLogLines}
                     setNewProjMaxLogLines={setNewProjMaxLogLines}
                     handleResetSetupForm={handleResetSetupForm}
@@ -1276,6 +1521,27 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Custom Right-Click Context Menu for Splitting Editor Panes */}
+      {contextMenu.visible && (
+        <div
+          className="custom-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button className="context-menu-item" onClick={handleSplit}>
+            <span>Split (Chia đôi)</span>
+          </button>
+          {panes.length > 1 && (
+            <button
+              className="context-menu-item"
+              onClick={() => handleClosePane(contextMenu.targetPaneIndex!)}
+            >
+              <span>Close Split Pane</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+

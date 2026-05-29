@@ -25,8 +25,6 @@ interface ConfigSetupProps {
   setNewProjToolchain: (v: string) => void;
   newProjToolchainVersion: string;
   setNewProjToolchainVersion: (v: string) => void;
-  newProjEnableTunnel: boolean;
-  setNewProjEnableTunnel: (v: boolean) => void;
   newProjMaxLogLines: string;
   setNewProjMaxLogLines: (v: string) => void;
   handleResetSetupForm: () => void;
@@ -58,8 +56,6 @@ export default function ConfigSetup({
   setNewProjToolchain,
   newProjToolchainVersion,
   setNewProjToolchainVersion,
-  newProjEnableTunnel,
-  setNewProjEnableTunnel,
   newProjMaxLogLines,
   setNewProjMaxLogLines,
   handleResetSetupForm,
@@ -184,19 +180,6 @@ export default function ConfigSetup({
               <option value="log">Piped Log Stream (Mode B)</option>
               <option value="pty">Interactive PTY (Mode A)</option>
             </select>
-          </div>
-          <div className="form-group flex-1" style={{ alignSelf: "flex-end", paddingBottom: "6px" }}>
-            <div className="checkbox-wrapper">
-              <input
-                type="checkbox"
-                id="enable_tunnel_sw"
-                checked={newProjEnableTunnel}
-                onChange={(e) => setNewProjEnableTunnel(e.target.checked)}
-              />
-              <label htmlFor="enable_tunnel_sw" className="checkbox-label">
-                Enable Cloudflare Tunnel
-              </label>
-            </div>
           </div>
         </div>
 
