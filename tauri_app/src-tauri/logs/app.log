@@ -1384,3 +1384,254 @@
 [2026-05-29 12:42:17.984] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
 [2026-05-29 12:42:17.996] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
 [2026-05-29 12:42:18.212] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:06:34.702] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 13:06:34.712] Proto CLI verified and active.
+[2026-05-29 13:06:34.808] Toolchains checked / verified stable.
+[2026-05-29 13:06:38.211] Cloudflared binary verified / updated successfully.
+[2026-05-29 13:06:38.284] Isolated environment initialized successfully!
+[2026-05-29 13:06:39.401] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:06:39.417] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:06:39.645] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:09:38.187] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 13:09:38.193] Proto CLI verified and active.
+[2026-05-29 13:09:38.235] Toolchains checked / verified stable.
+[2026-05-29 13:09:39.201] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:09:39.211] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:09:39.428] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:09:56.584] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:09:59.845] Cloudflared binary verified / updated successfully.
+[2026-05-29 13:09:59.866] Isolated environment initialized successfully!
+[2026-05-29 13:10:49.051] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 13:10:49.057] Proto CLI verified and active.
+[2026-05-29 13:10:49.140] Toolchains checked / verified stable.
+[2026-05-29 13:10:49.806] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:10:49.814] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:10:50.007] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:10:52.915] Cloudflared binary verified / updated successfully.
+[2026-05-29 13:10:52.930] Isolated environment initialized successfully!
+[2026-05-29 13:10:53.006] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:12:24.715] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 13:12:24.720] Proto CLI verified and active.
+[2026-05-29 13:12:24.771] Toolchains checked / verified stable.
+[2026-05-29 13:12:25.580] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:12:25.584] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:12:25.791] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:12:29.299] Cloudflared binary verified / updated successfully.
+[2026-05-29 13:12:29.300] Isolated environment initialized successfully!
+[2026-05-29 13:14:36.752] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 13:14:36.764] Proto CLI verified and active.
+[2026-05-29 13:14:36.846] Toolchains checked / verified stable.
+[2026-05-29 13:14:37.787] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:14:37.800] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:14:38.170] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:36:18.154] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 13:36:18.158] Proto CLI verified and active.
+[2026-05-29 13:36:18.493] Toolchains checked / verified stable.
+[2026-05-29 13:36:30.227] Cloudflared binary verified / updated successfully.
+[2026-05-29 13:36:30.361] Isolated environment initialized successfully!
+[2026-05-29 13:36:38.968] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:36:39.003] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:36:39.412] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 13:39:28.112] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:15:34.395] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 17:15:34.410] Proto CLI verified and active.
+[2026-05-29 17:15:34.512] Toolchains checked / verified stable.
+[2026-05-29 17:15:43.096] Cloudflared binary verified / updated successfully.
+[2026-05-29 17:15:43.207] Isolated environment initialized successfully!
+[2026-05-29 17:15:43.881] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:15:43.900] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:15:44.340] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:20:56.926] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:40:10.425] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 17:40:10.429] Proto CLI verified and active.
+[2026-05-29 17:40:10.545] Toolchains checked / verified stable.
+[2026-05-29 17:40:11.477] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:40:11.509] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:40:11.800] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:40:15.899] Cloudflared binary verified / updated successfully.
+[2026-05-29 17:40:15.902] Isolated environment initialized successfully!
+[2026-05-29 17:46:02.137] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 17:46:02.140] Proto CLI verified and active.
+[2026-05-29 17:46:02.429] Toolchains checked / verified stable.
+[2026-05-29 17:46:03.146] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:46:03.161] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:46:03.421] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:46:07.029] Cloudflared binary verified / updated successfully.
+[2026-05-29 17:46:07.053] Isolated environment initialized successfully!
+[2026-05-29 17:46:11.708] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:48:13.358] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 17:48:13.365] Proto CLI verified and active.
+[2026-05-29 17:48:13.522] Toolchains checked / verified stable.
+[2026-05-29 17:48:14.146] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:48:14.156] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:48:14.387] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:48:17.300] Cloudflared binary verified / updated successfully.
+[2026-05-29 17:48:17.303] Isolated environment initialized successfully!
+[2026-05-29 17:48:20.502] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:54:05.105] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 17:54:05.108] Proto CLI verified and active.
+[2026-05-29 17:54:05.217] Toolchains checked / verified stable.
+[2026-05-29 17:54:05.916] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:54:05.946] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:54:06.358] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:54:11.459] Cloudflared binary verified / updated successfully.
+[2026-05-29 17:54:11.462] Isolated environment initialized successfully!
+[2026-05-29 17:55:05.255] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 17:55:05.262] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:04:13.968] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 18:04:13.972] Proto CLI verified and active.
+[2026-05-29 18:04:14.206] Toolchains checked / verified stable.
+[2026-05-29 18:04:16.179] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:04:16.197] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:04:16.446] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:04:18.882] Cloudflared binary verified / updated successfully.
+[2026-05-29 18:04:18.899] Isolated environment initialized successfully!
+[2026-05-29 18:06:40.987] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:06:40.997] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:08:29.860] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 18:08:29.864] Proto CLI verified and active.
+[2026-05-29 18:08:30.007] Toolchains checked / verified stable.
+[2026-05-29 18:08:30.707] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:08:30.724] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:08:31.001] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:08:33.875] Cloudflared binary verified / updated successfully.
+[2026-05-29 18:08:33.877] Isolated environment initialized successfully!
+[2026-05-29 18:13:23.863] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 18:13:23.866] Proto CLI verified and active.
+[2026-05-29 18:13:24.153] Toolchains checked / verified stable.
+[2026-05-29 18:13:24.893] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:13:24.906] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:13:25.117] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:13:27.394] Cloudflared binary verified / updated successfully.
+[2026-05-29 18:13:27.395] Isolated environment initialized successfully!
+[2026-05-29 18:17:05.884] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 18:17:05.888] Proto CLI verified and active.
+[2026-05-29 18:17:05.913] Toolchains checked / verified stable.
+[2026-05-29 18:17:06.310] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:17:06.329] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:17:06.616] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:17:09.274] Cloudflared binary verified / updated successfully.
+[2026-05-29 18:17:09.275] Isolated environment initialized successfully!
+[2026-05-29 18:29:26.903] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:29:27.410] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:29:29.591] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:29:30.491] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:58:58.199] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:58:58.203] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 18:58:58.306] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:00:39.436] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:00:39.453] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:20:06.328] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 19:20:06.333] Proto CLI verified and active.
+[2026-05-29 19:20:06.437] Toolchains checked / verified stable.
+[2026-05-29 19:20:07.484] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:20:07.525] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:20:07.766] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:20:10.810] Cloudflared binary verified / updated successfully.
+[2026-05-29 19:20:10.811] Isolated environment initialized successfully!
+[2026-05-29 19:21:45.237] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 19:21:45.245] Proto CLI verified and active.
+[2026-05-29 19:21:45.375] Toolchains checked / verified stable.
+[2026-05-29 19:21:46.964] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:21:47.028] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:21:47.569] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:21:56.563] Cloudflared binary verified / updated successfully.
+[2026-05-29 19:21:56.565] Isolated environment initialized successfully!
+[2026-05-29 19:22:54.439] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 19:22:54.444] Proto CLI verified and active.
+[2026-05-29 19:22:54.516] Toolchains checked / verified stable.
+[2026-05-29 19:22:57.904] Cloudflared binary verified / updated successfully.
+[2026-05-29 19:22:57.906] Isolated environment initialized successfully!
+[2026-05-29 19:22:59.529] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:22:59.578] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:22:59.826] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:23:04.034] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:23:04.053] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:23:20.533] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:28:34.902] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:28:34.913] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:33:33.017] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 19:33:33.021] Proto CLI verified and active.
+[2026-05-29 19:33:33.099] Toolchains checked / verified stable.
+[2026-05-29 19:33:34.862] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:33:34.882] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:33:35.142] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:33:37.491] Cloudflared binary verified / updated successfully.
+[2026-05-29 19:33:37.493] Isolated environment initialized successfully!
+[2026-05-29 19:33:50.358] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:33:50.380] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:42:20.053] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 19:42:20.056] Proto CLI verified and active.
+[2026-05-29 19:42:20.166] Toolchains checked / verified stable.
+[2026-05-29 19:42:22.661] Cloudflared binary verified / updated successfully.
+[2026-05-29 19:42:22.663] Isolated environment initialized successfully!
+[2026-05-29 19:42:24.381] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:42:24.404] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:42:24.581] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:42:44.157] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:42:44.169] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:43:23.989] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:46:18.378] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 19:46:18.383] Proto CLI verified and active.
+[2026-05-29 19:46:18.523] Toolchains checked / verified stable.
+[2026-05-29 19:46:19.153] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:46:19.170] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:46:19.459] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:46:22.122] Cloudflared binary verified / updated successfully.
+[2026-05-29 19:46:22.124] Isolated environment initialized successfully!
+[2026-05-29 19:53:12.197] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 19:53:12.207] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:24:08.026] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 20:24:08.035] Proto CLI verified and active.
+[2026-05-29 20:24:08.297] Toolchains checked / verified stable.
+[2026-05-29 20:24:09.122] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:24:09.136] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:24:09.510] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:24:11.454] Cloudflared binary verified / updated successfully.
+[2026-05-29 20:24:11.479] Isolated environment initialized successfully!
+[2026-05-29 20:28:05.805] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 20:28:05.808] Proto CLI verified and active.
+[2026-05-29 20:28:05.969] Toolchains checked / verified stable.
+[2026-05-29 20:28:06.477] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:28:06.487] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:28:06.668] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:28:08.548] Cloudflared binary verified / updated successfully.
+[2026-05-29 20:28:08.549] Isolated environment initialized successfully!
+[2026-05-29 20:30:31.668] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 20:30:31.673] Proto CLI verified and active.
+[2026-05-29 20:30:31.789] Toolchains checked / verified stable.
+[2026-05-29 20:30:32.354] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:30:32.355] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:30:32.632] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:30:36.222] Cloudflared binary verified / updated successfully.
+[2026-05-29 20:30:36.223] Isolated environment initialized successfully!
+[2026-05-29 20:47:00.059] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 20:47:00.065] Proto CLI verified and active.
+[2026-05-29 20:47:00.214] Toolchains checked / verified stable.
+[2026-05-29 20:47:00.948] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:47:00.971] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:47:01.257] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:47:04.726] Cloudflared binary verified / updated successfully.
+[2026-05-29 20:47:04.728] Isolated environment initialized successfully!
+[2026-05-29 20:48:59.146] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 20:48:59.150] Proto CLI verified and active.
+[2026-05-29 20:48:59.316] Toolchains checked / verified stable.
+[2026-05-29 20:49:00.237] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:49:00.247] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:49:00.496] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:49:03.858] Cloudflared binary verified / updated successfully.
+[2026-05-29 20:49:03.863] Isolated environment initialized successfully!
+[2026-05-29 20:49:44.907] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 20:49:44.912] Proto CLI verified and active.
+[2026-05-29 20:49:45.090] Toolchains checked / verified stable.
+[[2026-05-29 20:49:45.916] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+2026-05-29 20:49:45.916] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:49:46.172] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:49:49.551] Cloudflared binary verified / updated successfully.
+[2026-05-29 20:49:49.552] Isolated environment initialized successfully!
+[2026-05-29 20:50:53.635] Initializing isolated proto toolchains and latest cloudflared tunnel binary in background...
+[2026-05-29 20:50:53.639] Proto CLI verified and active.
+[2026-05-29 20:50:53.692] Toolchains checked / verified stable.
+[2026-05-29 20:50:54.623] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:50:54.640] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml
+[2026-05-29 20:50:54.898] Reading file: d:/alouette-server/core_engine/app_data/cloudflare_config.yml

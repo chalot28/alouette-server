@@ -353,6 +353,17 @@ export default function AiAgent({
     setChatHistory((prev) => [...prev, userMsg]);
     setIsTyping(true);
 
+    // Map custom model ID to its actual name before sending to backend
+    let backendModelName = selectedModel;
+    if (selectedModel.startsWith("custom-")) {
+      const savedCustom = localStorage.getItem("alouette_custom_models");
+      const customs: any[] = savedCustom ? JSON.parse(savedCustom) : [];
+      const found = customs.find((c) => c.id === selectedModel);
+      if (found) {
+        backendModelName = found.name;
+      }
+    }
+
     try {
       const response: {
         session_id: string;
@@ -381,7 +392,7 @@ export default function AiAgent({
         total_iterations?: number;
       } = await invoke("agent_send_message", {
         message: messageText,
-        model: selectedModel,
+        model: backendModelName,
         mode: selectedMode,
         activeCwd: activeProjectCwd,
       });
@@ -553,6 +564,17 @@ export default function AiAgent({
 
     setIsTyping(true);
 
+    // Map custom model ID to its actual name before sending to backend
+    let backendModelName = selectedModel;
+    if (selectedModel.startsWith("custom-")) {
+      const savedCustom = localStorage.getItem("alouette_custom_models");
+      const customs: any[] = savedCustom ? JSON.parse(savedCustom) : [];
+      const found = customs.find((c) => c.id === selectedModel);
+      if (found) {
+        backendModelName = found.name;
+      }
+    }
+
     try {
       const response: {
         text?: string;
@@ -576,6 +598,7 @@ export default function AiAgent({
         };
       } = await invoke("agent_approve_tool", {
         approved: true,
+        model: backendModelName,
         activeCwd: activeProjectCwd,
       });
 
@@ -676,11 +699,23 @@ export default function AiAgent({
 
     setIsTyping(true);
 
+    // Map custom model ID to its actual name before sending to backend
+    let backendModelName = selectedModel;
+    if (selectedModel.startsWith("custom-")) {
+      const savedCustom = localStorage.getItem("alouette_custom_models");
+      const customs: any[] = savedCustom ? JSON.parse(savedCustom) : [];
+      const found = customs.find((c) => c.id === selectedModel);
+      if (found) {
+        backendModelName = found.name;
+      }
+    }
+
     try {
       const response: {
         text?: string;
       } = await invoke("agent_approve_tool", {
         approved: false,
+        model: backendModelName,
         activeCwd: activeProjectCwd,
       });
 

@@ -443,13 +443,13 @@ interface PredefinedModel {
   }[];
 }
 
-const PREDEFINED_MODELS: PredefinedModel[] = [
+const STATIC_PREDEFINED_MODELS: PredefinedModel[] = [
   {
     provider: "DeepSeek",
     id: "deepseek",
     models: [
       { id: "deepseek-v4-pro", name: "DeepSeek-V4 Pro", context: "1000k", desc: "Mô hình nguồn mở hàng đầu năm 2026, tối ưu hóa suy luận logic vượt bậc." },
-      { id: "deepseek-v4", name: "DeepSeek-V4", context: "1000k", desc: "Mô hình suy luận tốc độ nhanh và tối ưu hóa chi phí." },
+      { id: "deepseek-v4-flash", name: "DeepSeek-V4 Flash", context: "1000k", desc: "Mô hình suy luận tốc độ nhanh và tối ưu hóa chi phí." },
       { id: "deepseek-r1", name: "DeepSeek-R1 (Reasoning)", context: "1000k", desc: "Mô hình suy luận sâu chuyên biệt cho toán học và code." }
     ]
   },
@@ -500,13 +500,26 @@ interface CustomModel {
 }
 
 function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
-  const [activeModels, setActiveModels] = useState<string[]>(["deepseek-v4-pro", "claude-opus-4.7", "gemini-3.5-flash"]);
-  const [customModels, setCustomModels] = useState<CustomModel[]>([]);
+  const [predefinedModels, setPredefinedModels] = useState<PredefinedModel[]>(STATIC_PREDEFINED_MODELS);
   const [expandedProviders, setExpandedProviders] = useState<string[]>([]);
   const [alouetteOpenEnabled, setAlouetteOpenEnabled] = useState(() => {
     const saved = localStorage.getItem("alouette_open_enabled");
     return saved ? JSON.parse(saved) : true;
   });
+
+  const [providerApiKeys, setProviderApiKeys] = useState<{ [id: string]: string }>({
+    deepseek: "",
+    claude: "",
+    "gpt-chatgpt": "",
+    gemini: "",
+    qwen: ""
+  });
+
+  const handleApiKeyChange = (providerId: string, newKey: string) => {
+    const updatedKeys = { ...providerApiKeys, [providerId]: newKey };
+    setProviderApiKeys(updatedKeys);
+    autoSave(activeModels, updatedKeys);
+  };
 
   const handleToggleAlouetteOpen = async () => {
     const nextVal = !alouetteOpenEnabled;
@@ -532,7 +545,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
 
   const handleToggleProvider = (providerId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const provider = PREDEFINED_MODELS.find(p => p.id === providerId);
+    const provider = predefinedModels.find(p => p.id === providerId);
     if (!provider) return;
 
     const modelIds = provider.models.map(m => m.id);
@@ -548,7 +561,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
     }
 
     setActiveModels(updatedActive);
-    autoSave(updatedActive, customModels);
+    autoSave(updatedActive);
   };
 
   const handleToggleModel = (modelId: string, e?: React.MouseEvent) => {
@@ -558,18 +571,11 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
       : [...activeModels, modelId];
     
     setActiveModels(updatedActive);
-    autoSave(updatedActive, customModels);
+    autoSave(updatedActive);
   };
 
-  // Custom model form fields
-  const [custProvider, setCustProvider] = useState("");
-  const [custName, setCustName] = useState("");
-  const [custEndpoint, setCustEndpoint] = useState("");
-  const [custApiKey, setCustApiKey] = useState("");
-  const [custLimit, setCustLimit] = useState("128k");
-  const [custVision, setCustVision] = useState(false);
-  const [custStandard, setCustStandard] = useState("openai");
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [activeModels, setActiveModels] = useState<string[]>(["deepseek-v4-pro", "claude-opus-4.7", "gemini-3.5-flash"]);
+  const customModels: CustomModel[] = [];
 
   // Load configurations
   useEffect(() => {
@@ -586,168 +592,189 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
     // Fetch from backend ai_config.yml
     (async () => {
       try {
-        interface RustModelConfig {
-          provider: string;
-          api_key: string;
-          api_url: string;
+        interface RustModelDetail {
           context_limit: number;
           supports_vision: boolean;
-          temperature: number;
-          top_p: number;
           api_standard?: string;
+          api_url?: string;
+          temperature?: number;
+          top_p?: number;
+        }
+        interface RustProviderConfig {
+          api_key: string;
+          api_url?: string;
+          models: { [key: string]: RustModelDetail };
         }
         interface RustCustomAiConfig {
           active_model: string;
-          models: { [key: string]: RustModelConfig };
+          providers: { [key: string]: RustProviderConfig };
         }
         
         const config = await invoke<RustCustomAiConfig>("get_custom_ai_config");
-        if (config && config.models) {
-          const loadedCustoms: CustomModel[] = Object.entries(config.models).map(([name, item]) => ({
-            id: name,
-            provider: item.provider,
-            name: name,
-            endpoint: item.api_url,
-            apiKey: item.api_key,
-            contextLimit: `${Math.round(item.context_limit / 1000)}k`,
-            supportsVision: item.supports_vision,
-            apiStandard: item.api_standard || "openai"
-          }));
-          setCustomModels(loadedCustoms);
+        if (config && config.providers) {
+          // Extract provider keys
+          const keys: { [key: string]: string } = {};
+          Object.entries(config.providers).forEach(([providerId, providerCfg]) => {
+            keys[providerId] = providerCfg.api_key || "";
+          });
           
+          setProviderApiKeys(keys);
+          localStorage.setItem("alouette_provider_api_keys", JSON.stringify(keys));
+
+          // Dynamically construct predefined models list from YAML providers
+          const loadedProviders: PredefinedModel[] = Object.entries(config.providers).map(([providerId, providerCfg]) => {
+            let providerName = providerId.charAt(0).toUpperCase() + providerId.slice(1);
+            if (providerId === "gpt-chatgpt") {
+              providerName = "ChatGPT";
+            } else if (providerId === "deepseek") {
+              providerName = "DeepSeek";
+            } else if (providerId === "claude") {
+              providerName = "Claude";
+            } else if (providerId === "gemini") {
+              providerName = "Gemini";
+            } else if (providerId === "qwen") {
+              providerName = "Qwen";
+            }
+
+            return {
+              provider: providerName,
+              id: providerId,
+              models: Object.entries(providerCfg.models).map(([modelId, detail]) => {
+                let modelName = modelId.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+                if (modelId.startsWith("gpt-")) {
+                  modelName = "GPT-" + modelId.substring(4).toUpperCase();
+                } else if (modelId.startsWith("gemini-")) {
+                  modelName = "Gemini " + modelId.substring(7).split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+                } else if (modelId.startsWith("claude-")) {
+                  modelName = "Claude " + modelId.substring(7).split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+                } else if (modelId.startsWith("deepseek-")) {
+                  modelName = "DeepSeek-" + modelId.substring(9).toUpperCase();
+                } else if (modelId.startsWith("qwen-")) {
+                  modelName = "Qwen " + modelId.substring(5).toUpperCase();
+                }
+
+                return {
+                  id: modelId,
+                  name: modelName,
+                  context: `${Math.round(detail.context_limit / 1000)}k`,
+                  vision: detail.supports_vision,
+                  desc: `Mô hình ${modelName} nạp động từ file ai_config.yml.`
+                };
+              })
+            };
+          });
+
+          setPredefinedModels(loadedProviders);
+
           // Also dynamically set active model if active_model is specified in yml
           if (config.active_model && !savedActive) {
             setActiveModels([config.active_model]);
           }
+        } else {
+          const savedKeys = localStorage.getItem("alouette_provider_api_keys");
+          if (savedKeys) setProviderApiKeys(JSON.parse(savedKeys));
         }
       } catch (err) {
         console.error("Failed to load YAML config:", err);
-        // Fallback to localStorage if invoke fails
-        const savedCustom = localStorage.getItem("alouette_custom_models");
-        if (savedCustom) setCustomModels(JSON.parse(savedCustom));
+        const savedKeys = localStorage.getItem("alouette_provider_api_keys");
+        if (savedKeys) setProviderApiKeys(JSON.parse(savedKeys));
       }
     })();
   }, []);
 
   // Instant Auto-Save Helper
-  const autoSave = async (newActive: string[], newCustoms: CustomModel[]) => {
+  const autoSave = async (newActive: string[], apiKeys = providerApiKeys) => {
     localStorage.setItem("alouette_active_models", JSON.stringify(newActive));
-    localStorage.setItem("alouette_custom_models", JSON.stringify(newCustoms));
+    localStorage.setItem("alouette_provider_api_keys", JSON.stringify(apiKeys));
     
     // Trigger dynamic storage event for current window
     window.dispatchEvent(new Event("storage"));
 
     // Save to backend YAML
     try {
-      interface RustModelConfig {
-        provider: string;
-        api_key: string;
-        api_url: string;
+      interface RustModelDetail {
         context_limit: number;
         supports_vision: boolean;
+        api_standard: string;
+        api_url: string;
         temperature: number;
         top_p: number;
-        api_standard: string;
       }
-      const modelsMap: { [key: string]: RustModelConfig } = {};
-      newCustoms.forEach(m => {
-        let limit = 128000;
-        if (m.contextLimit) {
-          const val = parseInt(m.contextLimit.replace(/[^0-9]/g, ""), 10);
-          if (!isNaN(val)) {
-            limit = val * 1000;
-          }
+      interface RustProviderConfig {
+        api_key: string;
+        api_url: string;
+        models: { [key: string]: RustModelDetail };
+      }
+      
+      const providersMap: { [key: string]: RustProviderConfig } = {};
+      
+      // Map each predefined model
+      predefinedModels.forEach((providerGroup) => {
+        const apiKey = apiKeys[providerGroup.id] || "";
+        
+        let apiStandard = "openai";
+        let apiUrl = "https://api.openai.com/v1";
+        
+        if (providerGroup.id === "deepseek") {
+          apiStandard = "openai";
+          apiUrl = "https://api.deepseek.com/v1";
+        } else if (providerGroup.id === "claude") {
+          apiStandard = "claude";
+          apiUrl = "https://api.anthropic.com/v1";
+        } else if (providerGroup.id === "gpt-chatgpt") {
+          apiStandard = "openai";
+          apiUrl = "https://api.openai.com/v1";
+        } else if (providerGroup.id === "gemini") {
+          apiStandard = "gemini";
+          apiUrl = "https://generativelanguage.googleapis.com/v1beta";
+        } else if (providerGroup.id === "qwen") {
+          apiStandard = "openai";
+          apiUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
         }
-        const key = m.name || m.id;
-        modelsMap[key] = {
-          provider: m.provider,
-          api_key: m.apiKey || "",
-          api_url: m.endpoint || "",
-          context_limit: limit,
-          supports_vision: !!m.supportsVision,
-          temperature: 0.2,
-          top_p: 0.95,
-          api_standard: m.apiStandard || "openai"
+
+        const modelsMap: { [key: string]: RustModelDetail } = {};
+        providerGroup.models.forEach((subModel) => {
+          let limit = 128000;
+          if (subModel.context) {
+            const val = parseInt(subModel.context.replace(/[^0-9]/g, ""), 10);
+            if (!isNaN(val)) {
+              limit = val * 1000;
+            }
+          }
+
+          modelsMap[subModel.id] = {
+            context_limit: limit,
+            supports_vision: !!subModel.vision,
+            temperature: 0.2,
+            top_p: 0.95,
+            api_standard: apiStandard,
+            api_url: apiUrl
+          };
+        });
+
+        providersMap[providerGroup.id] = {
+          api_key: apiKey,
+          api_url: apiUrl,
+          models: modelsMap
         };
       });
 
       let activeModel = "gemini-1.5-flash";
       if (newActive.length > 0) {
-        const activeCustom = newCustoms.find(m => newActive.includes(m.id));
-        if (activeCustom) {
-          activeModel = activeCustom.name || activeCustom.id;
-        } else {
-          activeModel = newActive[0];
-        }
+        activeModel = newActive[0];
       }
 
       await invoke("save_custom_ai_config", {
         config: {
           active_model: activeModel,
-          models: modelsMap
+          providers: providersMap
         }
       });
     } catch (err) {
-      console.error("Failed to save custom AI config to backend:", err);
+      console.error("Failed to save AI config to backend:", err);
     }
   };
 
-
-
-  const handleAddCustomModel = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!custProvider || !custName || !custEndpoint) {
-      alert("Vui lòng nhập đầy đủ Tên nhà cung cấp, Tên model và Endpoint.");
-      return;
-    }
-
-    const newModel: CustomModel = {
-      id: `custom-${Date.now()}`,
-      provider: custProvider,
-      name: custName,
-      endpoint: custEndpoint,
-      apiKey: custApiKey,
-      contextLimit: custLimit,
-      supportsVision: custVision,
-      apiStandard: custStandard,
-    };
-
-    const updatedCustoms = [...customModels, newModel];
-    const updatedActive = [...activeModels, newModel.id];
-
-    setCustomModels(updatedCustoms);
-    setActiveModels(updatedActive);
-    autoSave(updatedActive, updatedCustoms);
-
-    // Reset form
-    setCustProvider("");
-    setCustName("");
-    setCustEndpoint("");
-    setCustApiKey("");
-    setCustLimit("128k");
-    setCustVision(false);
-    setCustStandard("openai");
-    setShowAddForm(false);
-
-    setToast({
-      message: "✓ Đã tự động lưu & cập nhật Model tùy chỉnh!",
-      type: "success"
-    });
-  };
-
-  const handleDeleteCustomModel = (id: string) => {
-    const updatedCustoms = customModels.filter((m) => m.id !== id);
-    const updatedActive = activeModels.filter((mid) => mid !== id);
-
-    setCustomModels(updatedCustoms);
-    setActiveModels(updatedActive);
-    autoSave(updatedActive, updatedCustoms);
-
-    setToast({
-      message: "✕ Đã xóa & cập nhật thay đổi.",
-      type: "info"
-    });
-  };
 
   return (
     <div className="admin-panel animate-fade-in" style={{ paddingBottom: "60px", display: "flex", flexDirection: "column", gap: "28px" }}>
@@ -761,336 +788,6 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
               Quản lý và kích hoạt các nhà cung cấp mô hình AI mặc định và tùy chỉnh độc lập.
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* ── PART 2: CUSTOM MODELS ── */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
-          <div>
-            <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
-              Custom AI Provider Models
-            </h3>
-            <p style={{ fontSize: "11.5px", color: "var(--text-secondary)", margin: 0, lineHeight: "1.5" }}>
-              Tự cấu hình mô hình độc lập qua API của riêng bạn. Cuộc gọi kết nối trực tiếp đến Endpoint của nhà sản xuất (Hiện có <strong style={{ color: "var(--text-primary)" }}>{customModels.length} custom model</strong> nạp từ ai_config.yml).
-            </p>
-          </div>
-
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "8px 14px",
-              backgroundColor: "transparent",
-              border: "1px solid var(--border-primary)",
-              color: "var(--text-primary)",
-              fontSize: "12px",
-              fontWeight: 600,
-              cursor: "pointer",
-              borderRadius: "4px",
-              transition: "all 0.15s ease"
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "var(--text-primary)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "var(--border-primary)";
-            }}
-          >
-            <span>{showAddForm ? "✕ Hủy nhập" : "＋ Thêm Model Tự Nhập"}</span>
-          </button>
-        </div>
-
-        {/* Form to add a new Custom Model (Smooth Dropdown Expand) */}
-        {showAddForm && (
-          <form
-            onSubmit={handleAddCustomModel}
-            className="admin-card animate-fade-in"
-            style={{
-              padding: "20px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-              border: "1px solid var(--border-primary)",
-              borderRadius: "4px",
-              background: "var(--bg-secondary)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--border-primary)", paddingBottom: "10px", marginBottom: "4px" }}>
-              <Sparkles size={14} style={{ color: "var(--text-primary)" }} />
-              <span style={{ fontSize: "12.5px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-primary)", letterSpacing: "0.5px" }}>
-                Cấu hình nhà cung cấp AI mới
-              </span>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Tên nhà cung cấp (Vendor)</label>
-                <input
-                  className="admin-input"
-                  type="text"
-                  placeholder="Ví dụ: OpenRouter, Gemini, Anthropic..."
-                  value={custProvider}
-                  onChange={(e) => setCustProvider(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Tên model</label>
-                <input
-                  className="admin-input"
-                  type="text"
-                  placeholder="Ví dụ: gemini-1.5-pro, local-ollama..."
-                  value={custName}
-                  onChange={(e) => setCustName(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Giới hạn Context (Tokens)</label>
-                <input
-                  className="admin-input"
-                  type="text"
-                  placeholder="Ví dụ: 128k, 2000k, 8k..."
-                  value={custLimit}
-                  onChange={(e) => setCustLimit(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Chuẩn hóa API (API Standard)</label>
-                <select
-                  value={custStandard}
-                  onChange={(e) => setCustStandard(e.target.value)}
-                  style={{
-                    backgroundColor: "var(--bg-primary)",
-                    border: "1px solid var(--border-primary)",
-                    color: "var(--text-primary)",
-                    fontSize: "12px",
-                    padding: "6px 10px",
-                    height: "32px",
-                    outline: "none",
-                    cursor: "pointer"
-                  }}
-                >
-                  <option value="openai">OpenAI Standard (deepseek, ollama, groq...)</option>
-                  <option value="claude">Claude Standard (anthropic, bedrock...)</option>
-                  <option value="gemini">Gemini Standard (Google AI Studio)</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>Đường gọi API (API Endpoint URL)</label>
-              <input
-                className="admin-input"
-                type="text"
-                placeholder="https://api.openai.com/v1"
-                value={custEndpoint}
-                onChange={(e) => setCustEndpoint(e.target.value)}
-                style={{ width: "100%" }}
-              />
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px", alignItems: "center" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>ApiKey của nhà sản xuất</label>
-                <input
-                  className="admin-input"
-                  type="password"
-                  placeholder="sk-... hoặc none"
-                  value={custApiKey}
-                  onChange={(e) => setCustApiKey(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", height: "100%", paddingTop: "14px" }}>
-                <CustomCheckbox
-                  checked={custVision}
-                  onChange={(val) => setCustVision(val)}
-                />
-                <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 500 }}>
-                  Hỗ trợ xem ảnh (Vision capability)
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
-              <button
-                type="submit"
-                className="admin-btn admin-btn-primary"
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: "4px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  fontWeight: 600
-                }}
-              >
-                <span>✓ Lưu & Kích Hoạt</span>
-              </button>
-              <button
-                type="button"
-                className="admin-btn"
-                onClick={() => setShowAddForm(false)}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: "4px",
-                  backgroundColor: "transparent",
-                  border: "1px solid var(--border-primary)",
-                  color: "var(--text-secondary)"
-                }}
-              >
-                Hủy bỏ
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Stored Custom Models List */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          {customModels.length > 0 ? (
-            customModels.map((model) => {
-              const isActive = activeModels.includes(model.id);
-              return (
-                <div
-                  key={model.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "14px 18px",
-                    backgroundColor: "var(--bg-secondary)",
-                    border: `1px solid ${isActive ? "var(--text-primary)" : "var(--border-primary)"}`,
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxWidth: "70%" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                      <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
-                        {model.name}
-                      </span>
-                      
-                      <span style={{
-                        fontSize: "9px",
-                        padding: "1px 5px",
-                        backgroundColor: "var(--bg-tertiary)",
-                        color: "var(--text-secondary)",
-                        border: "1px solid var(--border-primary)",
-                        fontWeight: 600
-                      }}>
-                        Standard: {model.apiStandard === "claude" ? "Claude" : model.apiStandard === "gemini" ? "Gemini" : "OpenAI"}
-                      </span>
-
-                      <span style={{
-                        fontSize: "9px",
-                        padding: "1px 5px",
-                        backgroundColor: "var(--bg-tertiary)",
-                        color: "var(--text-secondary)",
-                        border: "1px solid var(--border-primary)",
-                        fontWeight: 600
-                      }}>
-                        Vendor: {model.provider}
-                      </span>
-                      
-                      <span style={{
-                        fontSize: "9px",
-                        padding: "1px 5px",
-                        backgroundColor: "var(--bg-tertiary)",
-                        color: "var(--text-secondary)",
-                        border: "1px solid var(--border-primary)"
-                      }}>
-                        Context: {model.contextLimit}
-                      </span>
-
-                      {model.supportsVision && (
-                        <span style={{
-                          fontSize: "9px",
-                          padding: "1px 5px",
-                          backgroundColor: "var(--bg-tertiary)",
-                          color: "var(--text-secondary)",
-                          border: "1px solid var(--border-primary)",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "3px"
-                        }}>
-                          👁️ Vision
-                        </span>
-                      )}
-                    </div>
-                    
-                    <span style={{ fontSize: "11px", color: "var(--text-secondary)", wordBreak: "break-all" }}>
-                      Endpoint: {model.endpoint}
-                    </span>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                    <div
-                      onClick={() => handleToggleModel(model.id)}
-                      style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}
-                    >
-                      <span style={{ fontSize: "11px", color: isActive ? "var(--text-primary)" : "var(--text-secondary)" }}>
-                        {isActive ? "Đang bật" : "Đang tắt"}
-                      </span>
-                      <CustomCheckbox
-                        checked={isActive}
-                        onChange={() => handleToggleModel(model.id)}
-                      />
-                    </div>
-
-                    <button
-                      onClick={() => handleDeleteCustomModel(model.id)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--text-secondary)",
-                        cursor: "pointer",
-                        fontSize: "11px",
-                        padding: "4px"
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-primary)"}
-                      onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-secondary)"}
-                    >
-                      Xóa
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "30px 20px",
-              backgroundColor: "rgba(255, 255, 255, 0.01)",
-              border: "1px dashed var(--border-primary)",
-              borderRadius: "4px",
-              textAlign: "center",
-              gap: "8px"
-            }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                Chưa có mô hình tùy chỉnh nào được nhập.
-              </span>
-              <button
-                onClick={() => setShowAddForm(true)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-primary)",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  textDecoration: "underline"
-                }}
-              >
-                Nhấp để thêm ngay
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1170,7 +867,7 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
-          {PREDEFINED_MODELS.map((model) => {
+          {predefinedModels.map((model) => {
             const providerModels = model.models.map(m => m.id);
             const activeProviderModels = providerModels.filter(id => activeModels.includes(id));
             const isProviderActive = activeProviderModels.length > 0;
@@ -1244,8 +941,8 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
                   <div style={{
                     display: "flex",
                     flexDirection: "column",
-                    gap: "8px",
-                    padding: "12px 18px 16px 56px",
+                    gap: "12px",
+                    padding: "16px 18px 20px 56px",
                     backgroundColor: "rgba(255, 255, 255, 0.01)",
                     borderLeft: "2px solid var(--border-primary)",
                     borderRight: "1px solid var(--border-primary)",
@@ -1254,6 +951,28 @@ function AISection({ setToast }: { setToast: (t: ToastState | null) => void }) {
                     marginBottom: "8px",
                     transition: "all var(--transition-fast)"
                   }}>
+                    {/* API Key Input for Provider */}
+                    <div style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                      padding: "12px 14px",
+                      backgroundColor: "var(--bg-secondary)",
+                      border: "1px solid var(--border-primary)",
+                      borderRadius: "4px"
+                    }}>
+                      <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>
+                        API Key cho {model.provider}
+                      </label>
+                      <input
+                        type="password"
+                        className="admin-input"
+                        placeholder={`Nhập API Key cho ${model.provider}...`}
+                        value={providerApiKeys[model.id] || ""}
+                        onChange={(e) => handleApiKeyChange(model.id, e.target.value)}
+                        style={{ width: "100%" }}
+                      />
+                    </div>
                     {model.models.map((subModel) => {
                       const isSubModelActive = activeModels.includes(subModel.id);
                       return (

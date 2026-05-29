@@ -179,16 +179,28 @@ impl HookManager {
                 let input_json = serde_json::to_string(input)
                     .map_err(|e| format!("Failed to serialize hook input: {}", e))?;
 
-                let cmd_with_input = format!("echo '{}' | {}", input_json.replace('\'', "'\\''"), command);
+                // Spawn process with stdin piped to avoid shell injection
+                let mut cmd_parts: Vec<&str> = command.split_whitespace().collect();
+                if cmd_parts.is_empty() {
+                    return Err("Empty hook command".to_string());
+                }
+                let program = cmd_parts.remove(0);
 
-                let output = if cfg!(target_os = "windows") {
-                    Command::new("powershell")
-                        .args(["-Command", &cmd_with_input])
-                        .output()
-                } else {
-                    Command::new("sh")
-                        .args(["-c", &cmd_with_input])
-                        .output()
+                let output = {
+                    let mut child = Command::new(program)
+                        .args(&cmd_parts)
+                        .stdin(std::process::Stdio::piped())
+                        .stdout(std::process::Stdio::piped())
+                        .stderr(std::process::Stdio::piped())
+                        .spawn()
+                        .map_err(|e| format!("Failed to spawn hook command: {}", e))?;
+
+                    if let Some(mut stdin) = child.stdin.take() {
+                        use std::io::Write;
+                        let _ = stdin.write_all(input_json.as_bytes());
+                    }
+
+                    child.wait_with_output()
                 };
 
                 match output {
