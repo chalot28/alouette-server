@@ -30,6 +30,7 @@ pub struct AgentResponse {
     pub loop_result: Option<AgentLoopResultUI>,
     pub iteration: Option<u32>,
     pub total_iterations: Option<u32>,
+    pub tool_result: Option<String>,
 }
 
 /// UI-friendly version of AgentLoopResult
@@ -258,16 +259,30 @@ pub async fn agent_send_message(
         }
     }
 
+    // Build response and set pending_tool if stopped early
+    let ui_result: AgentLoopResultUI = loop_result.into();
+    let ui_iterations = ui_result.total_iterations;
+
+    if ui_result.stopped_early {
+        if let Some(last_iter) = ui_result.iterations.last() {
+            if let (Some(ref name), Some(ref args_str)) = (&last_iter.tool_name, &last_iter.tool_args) {
+                if let Ok(args_json) = serde_json::from_str::<serde_json::Value>(args_str) {
+                    session.pending_tool = Some(core_engine::agent_harness::parser::ToolCall {
+                        name: name.clone(),
+                        arguments: args_json,
+                        raw_arguments: args_str.clone(),
+                    });
+                }
+            }
+        }
+    }
+
     // Save session - save session_id before move
     let saved_session_id = session.session_id.clone();
     {
         let mut session_guard = session_store.lock().unwrap();
         *session_guard = Some(session);
     }
-
-    // Build response
-    let ui_result: AgentLoopResultUI = loop_result.into();
-    let ui_iterations = ui_result.total_iterations;
 
     if ui_result.stopped_early && ui_result.iterations.last()
         .and_then(|i| i.tool_name.as_ref())
@@ -285,6 +300,7 @@ pub async fn agent_send_message(
             loop_result: Some(ui_result),
             iteration: Some(ui_iterations),
             total_iterations: Some(25),
+            tool_result: None,
         })
     } else if let Some(ref text) = ui_result.final_text {
         Ok(AgentResponse {
@@ -297,6 +313,7 @@ pub async fn agent_send_message(
             loop_result: Some(ui_result),
             iteration: Some(ui_iterations),
             total_iterations: Some(25),
+            tool_result: None,
         })
     } else {
         Ok(AgentResponse {
@@ -309,6 +326,7 @@ pub async fn agent_send_message(
             loop_result: Some(ui_result),
             iteration: Some(ui_iterations),
             total_iterations: Some(25),
+            tool_result: None,
         })
     }
 }
@@ -387,6 +405,7 @@ pub async fn agent_approve_tool(
             loop_result: None,
             iteration: None,
             total_iterations: None,
+            tool_result: None,
         });
     }
 
@@ -503,6 +522,7 @@ pub async fn agent_approve_tool(
                 loop_result: Some(ui_result),
                 iteration: Some(ui_iter),
                 total_iterations: Some(loop_cfg.max_iterations),
+                tool_result: Some(result.clone()),
             })
         } else {
             Ok(AgentResponse {
@@ -515,6 +535,7 @@ pub async fn agent_approve_tool(
                 loop_result: Some(ui_result),
                 iteration: Some(ui_iter),
                 total_iterations: Some(loop_cfg.max_iterations),
+                tool_result: Some(result.clone()),
             })
         }
     } else {
@@ -550,6 +571,7 @@ pub async fn agent_approve_tool(
                 loop_result: None,
                 iteration: None,
                 total_iterations: None,
+                tool_result: Some(result.clone()),
             }
         } else {
             // AI trả về text → hoàn thành
@@ -571,6 +593,7 @@ pub async fn agent_approve_tool(
                 loop_result: None,
                 iteration: None,
                 total_iterations: None,
+                tool_result: Some(result.clone()),
             }
         };
 

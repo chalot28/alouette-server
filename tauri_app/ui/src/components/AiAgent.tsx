@@ -22,21 +22,23 @@ import {
   Bot,
   X,
   Search,
-  AlertTriangle,
   Copy,
   Check,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 interface ChatItem {
   id: string;
-  type: "text" | "tool_request" | "agent_activity" | "alouette_error";
+  type: "text" | "tool_request" | "agent_activity" | "alouette_error" | "skill_call";
   sender: "user" | "agent";
   text?: string;
   toolName?: string;
   args?: string;
-  toolStatus?: "waiting" | "approved" | "rejected";
+  toolStatus?: "waiting" | "approved" | "rejected" | "running" | "success" | "failed";
+  toolResult?: string;
   timestamp: string;
   projectName?: string;
   errorText?: string;
@@ -75,6 +77,7 @@ export default function AiAgent({
   const [menuOpen, setMenuOpen] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("Agent Active Session #1");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [expandedSkills, setExpandedSkills] = useState<Record<string, boolean>>({});
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -213,10 +216,10 @@ export default function AiAgent({
 
   // Listen to agent tool execution activity
   useEffect(() => {
-    let unlistenFn;
+    let unlistenFn: any;
     const setupListener = async () => {
-      unlistenFn = await listen("agent-activity", (event) => {
-        setActiveTool(event.payload);
+      unlistenFn = await listen("agent-activity", (event: any) => {
+        setActiveTool(event.payload as any);
       });
     };
     setupListener();
@@ -233,6 +236,34 @@ export default function AiAgent({
         const data = event.payload;
         setActiveThought(data.thought || null);
         setLoopIterations(data.iteration || 0);
+
+        if (data.tool_name) {
+          const status = data.tool_result ? (data.tool_success ? "success" : "failed") : "running";
+          const newSkill: ChatItem = {
+            id: `iter_${data.iteration}`,
+            type: "skill_call",
+            sender: "agent",
+            toolName: data.tool_name,
+            args: data.tool_args || "",
+            toolStatus: status,
+            toolResult: data.tool_result || undefined,
+            timestamp: data.timestamp || new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          };
+
+          setChatHistory((prev) => {
+            const idx = prev.findIndex((item) => item.id === newSkill.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = newSkill;
+              return next;
+            } else {
+              return [...prev, newSkill];
+            }
+          });
+        }
       });
     };
     setupIterationListener();
@@ -367,21 +398,34 @@ export default function AiAgent({
         // Loop result từ autonomous execution
         const loopResult = response.loop_result;
         if (loopResult) {
-          // Show each iteration as activity
-          for (const iter of loopResult.iterations) {
-            if (iter.tool_name) {
-              const statusIcon = iter.tool_success ? "✓" : "✕";
-              setChatHistory((prev) => [
-                ...prev,
-                {
-                  id: `iter_${iter.iteration}_${Date.now()}`,
-                  type: "agent_activity",
-                  sender: "agent",
-                  text: `[${iter.iteration}/${loopResult.total_iterations}] ${statusIcon} **${iter.tool_name}**\n${iter.tool_result || ""}`,
-                  timestamp: iter.timestamp,
-                },
-              ]);
-            }
+          // Show each iteration as skill_call
+          if (loopResult.iterations) {
+            setChatHistory((prev) => {
+              let nextHistory = [...prev];
+              for (const iter of loopResult.iterations) {
+                if (iter.tool_name) {
+                  const status = iter.tool_success ? "success" : "failed";
+                  const skillItem: ChatItem = {
+                    id: `iter_${iter.iteration}`,
+                    type: "skill_call",
+                    sender: "agent",
+                    toolName: iter.tool_name,
+                    args: iter.tool_args || "",
+                    toolStatus: status,
+                    toolResult: iter.tool_result || undefined,
+                    timestamp: iter.timestamp,
+                  };
+
+                  const idx = nextHistory.findIndex((item) => item.id === skillItem.id);
+                  if (idx >= 0) {
+                    nextHistory[idx] = skillItem;
+                  } else {
+                    nextHistory.push(skillItem);
+                  }
+                }
+              }
+              return nextHistory;
+            });
           }
           // Show final text
           if (loopResult.final_text) {
@@ -391,7 +435,7 @@ export default function AiAgent({
                 id: `final_${Date.now()}`,
                 type: "text",
                 sender: "agent",
-                text: loopResult.final_text,
+                text: loopResult.final_text || undefined,
                 timestamp: new Date().toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
@@ -513,6 +557,7 @@ export default function AiAgent({
       const response: {
         text?: string;
         reply_type?: string;
+        tool_result?: string;
         loop_result?: {
           iterations: Array<{
             iteration: number;
@@ -537,28 +582,55 @@ export default function AiAgent({
       setIsTyping(false);
       setActiveThought(null);
 
+      if (response.tool_result) {
+        setChatHistory((prev) =>
+          prev.map((item) => {
+            if (item.id === id) {
+              return {
+                ...item,
+                type: "skill_call",
+                toolStatus: "success",
+                toolResult: response.tool_result,
+              };
+            }
+            return item;
+          })
+        );
+      }
+
       const loopResult = response.loop_result;
       if (
         loopResult &&
         loopResult.iterations &&
         loopResult.iterations.length > 1
       ) {
-        // Show all iterations after approval
-        for (const iter of loopResult.iterations) {
-          if (iter.tool_name) {
-            const statusIcon = iter.tool_success ? "✓" : "✕";
-            setChatHistory((prev) => [
-              ...prev,
-              {
-                id: `iter_${iter.iteration}_${Date.now()}`,
-                type: "agent_activity",
+        // Show each iteration as skill_call
+        setChatHistory((prev) => {
+          let nextHistory = [...prev];
+          for (const iter of loopResult.iterations) {
+            if (iter.tool_name) {
+              const status = iter.tool_success ? "success" : "failed";
+              const skillItem: ChatItem = {
+                id: `iter_${iter.iteration}`,
+                type: "skill_call",
                 sender: "agent",
-                text: `[${iter.iteration}/${loopResult.total_iterations}] ${statusIcon} **${iter.tool_name}**\n${iter.tool_result || ""}`,
+                toolName: iter.tool_name,
+                args: iter.tool_args || "",
+                toolStatus: status,
+                toolResult: iter.tool_result || undefined,
                 timestamp: iter.timestamp,
-              },
-            ]);
+              };
+
+              const idx = nextHistory.findIndex((item) => item.id === skillItem.id);
+              if (idx >= 0) {
+                nextHistory[idx] = skillItem;
+              } else {
+                nextHistory.push(skillItem);
+              }
+            }
           }
-        }
+          return nextHistory;
+        });
         if (loopResult.final_text) {
           setChatHistory((prev) => [
             ...prev,
@@ -566,7 +638,7 @@ export default function AiAgent({
               id: `final_${Date.now()}`,
               type: "text",
               sender: "agent",
-              text: loopResult.final_text,
+              text: loopResult.final_text || undefined,
               timestamp: new Date().toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -575,17 +647,19 @@ export default function AiAgent({
           ]);
         }
       } else {
-        const successMsg: ChatItem = {
-          id: Date.now().toString(),
-          type: "agent_activity",
-          sender: "agent",
-          text: response.text || "✓ Đã chạy công cụ thành công.",
-          timestamp: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        };
-        setChatHistory((prev) => [...prev, successMsg]);
+        if (response.text) {
+          const successMsg: ChatItem = {
+            id: Date.now().toString(),
+            type: "text",
+            sender: "agent",
+            text: response.text,
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          };
+          setChatHistory((prev) => [...prev, successMsg]);
+        }
       }
     } catch (err: any) {
       setIsTyping(false);
@@ -986,6 +1060,165 @@ export default function AiAgent({
             );
           }
 
+          if (item.type === "skill_call") {
+            const isExpanded = !!expandedSkills[item.id];
+            
+            const getFriendlyToolName = (name: string) => {
+              switch (name) {
+                case "read_file":
+                case "read_file_range":
+                  return "📄 Đọc tệp tin";
+                case "write_file":
+                  return "✍️ Ghi tệp tin";
+                case "execute_command":
+                  return "💻 Chạy lệnh terminal";
+                case "search_files":
+                  return "🔍 Tìm kiếm tệp";
+                case "scan_directory_tree":
+                case "scan_subdirectory":
+                  return "📁 Quét thư mục";
+                case "extract_symbol":
+                case "search_symbol":
+                  return "🏷️ Truy xuất mã nguồn";
+                case "save_memory":
+                  return "💾 Lưu ký ức";
+                case "search_memory":
+                  return "🧠 Tìm kiếm ký ức";
+                case "check_port":
+                  return "🔌 Kiểm tra cổng mạng";
+                default:
+                  return `⚙️ Công cụ: ${name}`;
+              }
+            };
+
+            const friendlyName = getFriendlyToolName(item.toolName || "");
+            
+            return (
+              <div
+                key={item.id}
+                style={{
+                  border: "1px solid var(--border-primary)",
+                  backgroundColor: "var(--bg-primary)",
+                  display: "flex",
+                  flexDirection: "column",
+                  fontSize: "11px",
+                  fontFamily: "var(--font-sans)",
+                }}
+              >
+                {/* Header Toggle */}
+                <div
+                  onClick={() => {
+                    setExpandedSkills((prev) => ({
+                      ...prev,
+                      [item.id]: !prev[item.id],
+                    }));
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    backgroundColor: isExpanded ? "rgba(255, 255, 255, 0.02)" : "transparent",
+                    transition: "background-color 0.2s",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {isExpanded ? <ChevronDown size={12} style={{ color: "var(--text-secondary)" }} /> : <ChevronRight size={12} style={{ color: "var(--text-secondary)" }} />}
+                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                      {friendlyName}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {item.toolStatus === "running" && (
+                      <span style={{ color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <RefreshCw size={10} className="animate-spin" />
+                        <span>Đang chạy...</span>
+                      </span>
+                    )}
+                    {item.toolStatus === "success" && (
+                      <span style={{ color: "var(--text-secondary)" }}>
+                        ✓ Hoàn thành
+                      </span>
+                    )}
+                    {item.toolStatus === "failed" && (
+                      <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>
+                        ✕ Thất bại
+                      </span>
+                    )}
+                    <span style={{ fontSize: "9px", color: "var(--text-muted)", marginLeft: "4px" }}>
+                      {item.timestamp}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div
+                    style={{
+                      borderTop: "1px solid var(--border-primary)",
+                      backgroundColor: "var(--bg-secondary)",
+                      padding: "10px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    {/* Arguments */}
+                    <div>
+                      <div style={{ fontSize: "9px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700, marginBottom: "4px" }}>
+                        Tham số đầu vào:
+                      </div>
+                      <pre
+                        style={{
+                          margin: 0,
+                          padding: "6px 8px",
+                          backgroundColor: "var(--bg-primary)",
+                          border: "1px solid var(--border-primary)",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "10px",
+                          color: "var(--text-primary)",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-all",
+                        }}
+                      >
+                        {item.args}
+                      </pre>
+                    </div>
+
+                    {/* Result */}
+                    {item.toolResult && (
+                      <div>
+                        <div style={{ fontSize: "9px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700, marginBottom: "4px" }}>
+                          Kết quả trả về:
+                        </div>
+                        <pre
+                          style={{
+                            margin: 0,
+                            padding: "6px 8px",
+                            backgroundColor: "var(--bg-primary)",
+                            border: "1px solid var(--border-primary)",
+                            fontFamily: "var(--font-mono)",
+                            fontSize: "10px",
+                            color: "var(--text-secondary)",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-all",
+                            maxHeight: "180px",
+                            overflowY: "auto",
+                          }}
+                        >
+                          {item.toolResult}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           if (item.type === "tool_request") {
             return (
               <div
@@ -1190,6 +1423,11 @@ export default function AiAgent({
 
         {isTyping && (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {activeThought && (
+              <div style={{ fontSize: "10px", color: "var(--text-secondary)", fontStyle: "italic", padding: "2px 8px" }}>
+                💭 {activeThought}
+              </div>
+            )}
             {activeTool.status === "executing" ? (
               <div
                 style={{
@@ -1235,7 +1473,7 @@ export default function AiAgent({
                   color: "var(--text-muted)",
                 }}
               >
-                <span>Agent đang xử lý...</span>
+                <span>Agent đang xử lý... {loopIterations > 0 ? `(${loopIterations}/${totalIterations})` : ""}</span>
               </div>
             )}
           </div>
