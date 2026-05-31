@@ -1,11 +1,11 @@
 // Prevents additional console window on Windows in release (Trigger recompile: 2026-05-24 11:02)
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod alouette_open;
 mod commands;
 mod events;
 mod state;
 mod system_manager;
-mod alouette_open;
 
 use core_engine::{ProcessManager, ProcessState, ProjectConfig, ResourceMonitor};
 use state::AppState;
@@ -62,16 +62,20 @@ fn main() {
             crate::system_manager::init_system(&window);
 
             // Initialize System Tray (Tauri v2 API)
-            let toggle = tauri::menu::MenuItem::with_id(app, "toggle", "Show/Hide Window", true, None::<&str>)?;
+            let toggle = tauri::menu::MenuItem::with_id(
+                app,
+                "toggle",
+                "Show/Hide Window",
+                true,
+                None::<&str>,
+            )?;
             let quit = tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = tauri::menu::Menu::with_items(app, &[&toggle, &quit])?;
 
             let icon = match app.default_window_icon() {
                 Some(icon) => icon.clone(),
-                None => {
-                    tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
-                        .expect("failed to load default tray icon")
-                }
+                None => tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
+                    .expect("failed to load default tray icon"),
             };
 
             let _tray = tauri::tray::TrayIconBuilder::new()
@@ -129,7 +133,11 @@ fn main() {
             events::spawn_status_router(pm_clone.clone(), rm_clone.clone(), window_clone.clone());
 
             // 3. Spawn Resource Stats Router Task with Watchdog enforcement
-            events::spawn_resource_stats_router(rm_clone.clone(), pm_clone.clone(), window_clone.clone());
+            events::spawn_resource_stats_router(
+                rm_clone.clone(),
+                pm_clone.clone(),
+                window_clone.clone(),
+            );
 
             // 4. Spawn Terminal Event Router Task
             events::spawn_terminal_router(pm_clone.clone(), window_clone.clone());
@@ -200,10 +208,11 @@ fn main() {
             commands::agent::agent_reset_session,
             commands::agent::get_custom_ai_config,
             commands::agent::save_custom_ai_config,
+            commands::agent::agent_cancel,
+            commands::agent::agent_status,
             toggle_alouette_open,
             is_alouette_open_active,
         ])
-
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(move |app_handle, event| {

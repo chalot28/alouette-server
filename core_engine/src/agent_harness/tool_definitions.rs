@@ -249,6 +249,28 @@ pub fn all_tools() -> Vec<ToolDef> {
                 "required": ["summary"]
             }),
         },
+        ToolDef {
+            name: "edit_file",
+            description: "Replace a specific block of lines in a file with new content. More efficient than write_file for small targeted changes. Use when you only need to change a portion of a file.",
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative or absolute path to the file to edit."
+                    },
+                    "old_content": {
+                        "type": "string",
+                        "description": "The exact text to find and replace. Must match the file content exactly (including whitespace and indentation)."
+                    },
+                    "new_content": {
+                        "type": "string",
+                        "description": "The replacement text. Will replace old_content exactly."
+                    }
+                },
+                "required": ["path", "old_content", "new_content"]
+            }),
+        },
     ]
 }
 

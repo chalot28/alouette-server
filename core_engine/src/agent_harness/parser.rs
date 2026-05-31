@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::OnceLock;
 
 /// ─── CORE STRUCTS ─────────────────────────────────────────────────
 
@@ -14,7 +15,7 @@ pub struct ParsedResponse {
     pub task_notification: Option<TaskNotification>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: Value,
@@ -106,7 +107,10 @@ pub fn parse_model_response(response: &str) -> ParsedResponse {
     if tool_calls.is_empty() {
         let json_tc = parse_json_action_block(response);
         if !json_tc.is_empty() {
-            diagnostics.push(format!("Parsed {} JSON action block tool calls", json_tc.len()));
+            diagnostics.push(format!(
+                "Parsed {} JSON action block tool calls",
+                json_tc.len()
+            ));
             tool_calls = json_tc;
         }
     }
@@ -194,7 +198,8 @@ fn parse_openai_tool_calls(content: &str) -> Vec<ToolCall> {
                         .and_then(|v| v.as_str())
                         .unwrap_or("{}");
 
-                    let args_val = serde_json::from_str::<Value>(args_str).unwrap_or(Value::Object(Default::default()));
+                    let args_val = serde_json::from_str::<Value>(args_str)
+                        .unwrap_or(Value::Object(Default::default()));
                     let call_id = tc.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
 
                     results.push(ToolCall {
@@ -209,7 +214,10 @@ fn parse_openai_tool_calls(content: &str) -> Vec<ToolCall> {
             // Also check single "function" call
             if results.is_empty() {
                 if let Some(name) = val.get("name").and_then(|v| v.as_str()) {
-                    let args = val.get("arguments").cloned().unwrap_or(Value::Object(Default::default()));
+                    let args = val
+                        .get("arguments")
+                        .cloned()
+                        .unwrap_or(Value::Object(Default::default()));
                     results.push(ToolCall {
                         name: name.to_string(),
                         arguments: args.clone(),
@@ -307,7 +315,8 @@ fn parse_raw_tool_tags(content: &str) -> Vec<ToolCall> {
 
         // Skip if it's a closing tag or self-closing or a known prefix like <call: or </
         let after_open = &content[abs_start + 1..];
-        if after_open.starts_with('/') || after_open.starts_with('!') || after_open.starts_with('?') {
+        if after_open.starts_with('/') || after_open.starts_with('!') || after_open.starts_with('?')
+        {
             search_from = abs_start + 1;
             continue;
         }
@@ -362,7 +371,9 @@ fn parse_raw_tool_tags(content: &str) -> Vec<ToolCall> {
                 let sub_close = format!("</{}>", sub_name);
 
                 if let Some(sub_close_idx) = body[sub_body_start..].find(&sub_close) {
-                    let sub_value = body[sub_body_start..sub_body_start + sub_close_idx].trim().to_string();
+                    let sub_value = body[sub_body_start..sub_body_start + sub_close_idx]
+                        .trim()
+                        .to_string();
                     sub_args.insert(sub_name.clone(), Value::String(sub_value));
                     sub_search = sub_body_start + sub_close_idx + sub_close.len();
                 } else {
@@ -450,8 +461,12 @@ fn parse_isolated_json_tool(content: &str) -> Vec<ToolCall> {
         if let Ok(val) = serde_json::from_str::<Value>(&repaired) {
             // Check for "tool" field
             if let Some(tool_name) = val.get("tool").and_then(|v| v.as_str()) {
-                let args = val.get("args").or(val.get("params")).or(val.get("arguments"))
-                    .cloned().unwrap_or(Value::Object(Default::default()));
+                let args = val
+                    .get("args")
+                    .or(val.get("params"))
+                    .or(val.get("arguments"))
+                    .cloned()
+                    .unwrap_or(Value::Object(Default::default()));
                 return vec![ToolCall {
                     name: tool_name.to_string(),
                     arguments: args.clone(),
@@ -461,8 +476,11 @@ fn parse_isolated_json_tool(content: &str) -> Vec<ToolCall> {
             }
             // Check for "function" field
             if let Some(func_name) = val.get("function").and_then(|v| v.as_str()) {
-                let args = val.get("params").or(val.get("arguments"))
-                    .cloned().unwrap_or(Value::Object(Default::default()));
+                let args = val
+                    .get("params")
+                    .or(val.get("arguments"))
+                    .cloned()
+                    .unwrap_or(Value::Object(Default::default()));
                 return vec![ToolCall {
                     name: func_name.to_string(),
                     arguments: args.clone(),
@@ -478,11 +496,49 @@ fn parse_isolated_json_tool(content: &str) -> Vec<ToolCall> {
 
 /// ─── TOOL CALL CONSTRUCTOR ────────────────────────────────────────
 
+/// Fuzzy-match a tool name against known tools.
+/// Handles variations like "readfile" → "read_file", "WriteFile" → "write_file".
+pub fn fuzzy_match_tool_name(name: &str) -> Option<&'static str> {
+    let normalized: String = name
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect();
+
+    if normalized.is_empty() {
+        return None;
+    }
+
+    static FUZZY_MAP: OnceLock<Vec<(&'static str, &'static str)>> = OnceLock::new();
+    let map = FUZZY_MAP.get_or_init(|| {
+        let tools = crate::agent_harness::tool_definitions::all_tools();
+        tools
+            .iter()
+            .map(|t| {
+                let key: String = t.name.chars().filter(|c| c.is_alphanumeric()).collect();
+                let leaked: &'static str = Box::leak(key.into_boxed_str());
+                (leaked, t.name)
+            })
+            .collect()
+    });
+
+    for (key, original) in map {
+        if *key == normalized {
+            return Some(original);
+        }
+    }
+
+    None
+}
+
 fn build_tool_call(tool_name: &str, raw_args: &str) -> Option<ToolCall> {
+    // Fuzzy match the tool name
+    let canonical = fuzzy_match_tool_name(tool_name).unwrap_or(tool_name);
+
     let trimmed = raw_args.trim().to_string();
     if trimmed.is_empty() {
         return Some(ToolCall {
-            name: tool_name.to_string(),
+            name: canonical.to_string(),
             arguments: Value::Object(Default::default()),
             raw_arguments: "{}".to_string(),
             call_id: None,
@@ -492,23 +548,26 @@ fn build_tool_call(tool_name: &str, raw_args: &str) -> Option<ToolCall> {
     let repaired = robust_json_repair(&trimmed);
     match serde_json::from_str::<Value>(&repaired) {
         Ok(val) => Some(ToolCall {
-            name: tool_name.to_string(),
+            name: canonical.to_string(),
             arguments: val.clone(),
             raw_arguments: trimmed,
             call_id: None,
         }),
         Err(e) => {
             // Last resort: wrap as a string param
-            if let Some(key) = infer_key_for_tool(tool_name) {
+            if let Some(key) = infer_key_for_tool(canonical) {
                 let wrapped = serde_json::json!({ key: trimmed });
                 Some(ToolCall {
-                    name: tool_name.to_string(),
+                    name: canonical.to_string(),
                     arguments: wrapped,
                     raw_arguments: trimmed,
                     call_id: None,
                 })
             } else {
-                eprintln!("[PARSER] Failed to parse args for tool '{}': {}", tool_name, e);
+                eprintln!(
+                    "[PARSER] Failed to parse args for tool '{}': {}",
+                    canonical, e
+                );
                 None
             }
         }
@@ -517,8 +576,8 @@ fn build_tool_call(tool_name: &str, raw_args: &str) -> Option<ToolCall> {
 
 fn infer_key_for_tool(tool_name: &str) -> Option<&'static str> {
     match tool_name {
-        "read_file" | "write_file" | "get_project_files" | "scan_subdirectory" | "extract_symbol"
-        | "read_file_range" => Some("path"),
+        "read_file" | "write_file" | "get_project_files" | "scan_subdirectory"
+        | "extract_symbol" | "read_file_range" => Some("path"),
         "execute_command" | "check_command_status" => Some("command"),
         "check_port" => Some("port"),
         "search_files" => Some("pattern"),
@@ -592,39 +651,48 @@ fn normalize_action_input(tool_name: &str, input: &Value) -> Value {
 /// - Unicode escape issues
 /// - Duplicate keys (take last)
 fn robust_json_repair(raw: &str) -> String {
-    let mut s = raw.to_string();
-
     // 1. Strip markdown code blocks
-    s = strip_markdown_fences(&s);
+    let s = strip_markdown_fences(raw);
 
     // 2. Find JSON boundaries (first { or [ to last } or ])
-    s = extract_json_boundary(&s);
+    let s = extract_json_boundary(&s);
 
-    // 3. Fix single-quoted strings (but not within double-quoted)
-    s = fix_single_quotes(&s);
-
-    // 4. Fix unquoted keys: {key: "val"} -> {"key": "val"}
-    s = fix_unquoted_keys(&s);
-
-    // 5. Remove trailing commas
-    s = fix_trailing_commas(&s);
-
-    // 6. Fix missing closing brackets
-    s = fix_missing_brackets(&s);
-
-    // 7. Fix common escape issues
-    s = fix_escapes(&s);
-
-    // 8. Fix duplicate keys (keep last occurrence)
+    // 3. If already valid JSON, return immediately (re-serialized)
+    // This avoids corrupting valid escape sequences with aggressive fixes below
     if let Ok(val) = serde_json::from_str::<Value>(&s) {
-        // Already valid after repairs
         return serde_json::to_string(&val).unwrap_or(s);
     }
 
-    // 9. Try to salvage by removing problematic characters
-    s = s.chars().filter(|c| c.is_ascii() || *c == '\n' || *c == '\r' || *c == '\t').collect();
+    // ─── Only run aggressive fixes for INVALID JSON ────────────────
+    let mut s = s.to_string();
 
-    // 10. Final attempt: if still invalid, try to find any valid JSON subset
+    // 4. Fix single-quoted strings (but not within double-quoted)
+    s = fix_single_quotes(&s);
+
+    // 5. Fix unquoted keys: {key: "val"} -> {"key": "val"}
+    s = fix_unquoted_keys(&s);
+
+    // 6. Remove trailing commas
+    s = fix_trailing_commas(&s);
+
+    // 7. Fix missing closing brackets
+    s = fix_missing_brackets(&s);
+
+    // 8. Fix common escape issues
+    s = fix_escapes(&s);
+
+    // 9. Try to parse again after fixes
+    if let Ok(val) = serde_json::from_str::<Value>(&s) {
+        return serde_json::to_string(&val).unwrap_or(s);
+    }
+
+    // 10. Try to salvage by removing problematic characters
+    s = s
+        .chars()
+        .filter(|c| c.is_ascii() || *c == '\n' || *c == '\r' || *c == '\t')
+        .collect();
+
+    // 11. Final attempt: try to find any valid JSON subset
     if let Ok(val) = serde_json::from_str::<Value>(&s) {
         return serde_json::to_string(&val).unwrap_or(s);
     }
@@ -693,8 +761,14 @@ fn fix_single_quotes(s: &str) -> String {
             '\'' if !in_double_quote => {
                 // In JSON, single quotes need to become double quotes for strings
                 // Check context: is this a string delimiter?
-                if i == 0 || chars[i - 1] == ':' || chars[i - 1] == ' ' || chars[i - 1] == '{'
-                    || chars[i - 1] == '[' || chars[i - 1] == ',' || chars[i - 1] == '\n' {
+                if i == 0
+                    || chars[i - 1] == ':'
+                    || chars[i - 1] == ' '
+                    || chars[i - 1] == '{'
+                    || chars[i - 1] == '['
+                    || chars[i - 1] == ','
+                    || chars[i - 1] == '\n'
+                {
                     in_single_quote = !in_single_quote;
                     result.push('"');
                 } else {
@@ -770,13 +844,18 @@ fn find_key_start(s: &str) -> usize {
     while i > 0 && (chars[i] == ' ' || chars[i] == '\t' || chars[i] == '\n' || chars[i] == '\r') {
         i = i.saturating_sub(1);
     }
-    // Walk backwards through key characters
+    // Walk backwards through key characters (stop at boundary chars)
     while i > 0 && chars[i] != ',' && chars[i] != '{' && chars[i] != '[' && chars[i] != '\n' {
         i = i.saturating_sub(1);
     }
-    if i > 0 && (chars[i] == ',' || chars[i] == '{' || chars[i] == '[') {
+    // If we stopped at i=0, check if chars[0] is a boundary
+    if i == 0 && (chars[0] == '{' || chars[0] == '[') {
+        // Key starts right after the opening bracket
+        i = 1;
+    } else if i > 0 && (chars[i] == ',' || chars[i] == '{' || chars[i] == '[') {
         i += 1;
     }
+    // Skip leading whitespace within the key
     while i < s.len() && (chars.get(i) == Some(&' ') || chars.get(i) == Some(&'\t')) {
         i += 1;
     }
@@ -801,18 +880,43 @@ fn fix_trailing_commas(s: &str) -> String {
 
 fn fix_missing_brackets(s: &str) -> String {
     let mut result = s.to_string();
-    let open_braces = result.matches('{').count();
-    let close_braces = result.matches('}').count();
-    let open_brackets = result.matches('[').count();
-    let close_brackets = result.matches(']').count();
 
-    // Add missing closing braces
-    for _ in 0..(open_braces.saturating_sub(close_braces)) {
-        result.push('}');
+    // First: fix unclosed strings (odd number of unescaped quotes)
+    let mut quote_count = 0u32;
+    let mut escaped = false;
+    for ch in result.chars() {
+        match ch {
+            '\\' if !escaped => escaped = true,
+            '"' if !escaped => quote_count += 1,
+            _ => escaped = false,
+        }
     }
-    // Add missing closing brackets
-    for _ in 0..(open_brackets.saturating_sub(close_brackets)) {
-        result.push(']');
+    if quote_count % 2 == 1 {
+        result.push('"');
+    }
+
+    // Then: fix missing closing braces/brackets
+    // Use a state machine to properly count braces (only outside strings)
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut esc = false;
+    for ch in result.chars() {
+        if esc {
+            esc = false;
+            continue;
+        }
+        match ch {
+            '\\' if in_str => esc = true,
+            '"' => in_str = !in_str,
+            '{' if !in_str => depth += 1,
+            '}' if !in_str => depth -= 1,
+            _ => {}
+        }
+    }
+
+    // Add missing closing braces/brackets
+    for _ in 0..depth.max(0) {
+        result.push('}');
     }
 
     result
@@ -1018,12 +1122,12 @@ fn parse_task_notification(content: &str) -> Option<TaskNotification> {
     let status = extract_tag_content(content, "status")?;
     let summary = extract_tag_content(content, "summary")?;
     let result = extract_tag_content(content, "result");
-    let subagent_tokens = extract_tag_content(content, "subagent_tokens")
-        .and_then(|s| s.trim().parse::<u64>().ok());
-    let tool_uses = extract_tag_content(content, "tool_uses")
-        .and_then(|s| s.trim().parse::<u64>().ok());
-    let duration_ms = extract_tag_content(content, "duration_ms")
-        .and_then(|s| s.trim().parse::<u64>().ok());
+    let subagent_tokens =
+        extract_tag_content(content, "subagent_tokens").and_then(|s| s.trim().parse::<u64>().ok());
+    let tool_uses =
+        extract_tag_content(content, "tool_uses").and_then(|s| s.trim().parse::<u64>().ok());
+    let duration_ms =
+        extract_tag_content(content, "duration_ms").and_then(|s| s.trim().parse::<u64>().ok());
 
     Some(TaskNotification {
         task_id: task_id.trim().to_string(),
@@ -1109,7 +1213,8 @@ pub fn parse_cross_session_message(content: &str) -> Option<(String, String)> {
         let from_start = start + open_tag.len();
         if let Some(from_close) = content[from_start..].find('>') {
             let attrs = &content[from_start..from_start + from_close];
-            if let Some(from_val) = attrs.split_whitespace()
+            if let Some(from_val) = attrs
+                .split_whitespace()
                 .find(|a| a.starts_with("from="))
                 .and_then(|a| a.split('"').nth(1))
             {
@@ -1250,11 +1355,15 @@ mod tests {
 
     #[test]
     fn test_parse_raw_execute_command_with_sub_el() {
-        let response = "<execute_command>\n<command>dir /B /S \"path\"</command>\n</execute_command>";
+        let response =
+            "<execute_command>\n<command>dir /B /S \"path\"</command>\n</execute_command>";
         let parsed = parse_model_response(response);
         assert_eq!(parsed.tool_calls.len(), 1);
         assert_eq!(parsed.tool_calls[0].name, "execute_command");
-        assert_eq!(parsed.tool_calls[0].arguments["command"], "dir /B /S \"path\"");
+        assert_eq!(
+            parsed.tool_calls[0].arguments["command"],
+            "dir /B /S \"path\""
+        );
     }
 
     #[test]
@@ -1296,7 +1405,8 @@ mod tests {
 
     #[test]
     fn test_parse_raw_unknown_tag_ignored() {
-        let response = "<unknown_tag>some content</unknown_tag><read_file><path>test.txt</path></read_file>";
+        let response =
+            "<unknown_tag>some content</unknown_tag><read_file><path>test.txt</path></read_file>";
         let parsed = parse_model_response(response);
         assert_eq!(parsed.tool_calls.len(), 1);
         assert_eq!(parsed.tool_calls[0].name, "read_file");

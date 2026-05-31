@@ -1,11 +1,11 @@
-pub mod process;
-pub mod terminal;
-pub mod files;
-pub mod sqlite;
-pub mod network;
-pub mod browser;
-pub mod settings;
-pub mod language;
-pub mod sandbox;
 pub mod agent;
-
+pub mod browser;
+pub mod files;
+pub mod language;
+pub mod network;
+pub mod process;
+pub mod rig_bridge;
+pub mod sandbox;
+pub mod settings;
+pub mod sqlite;
+pub mod terminal;

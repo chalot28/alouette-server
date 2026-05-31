@@ -1,23 +1,22 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::future::Future;
 use tokio::io::AsyncBufReadExt;
 use tokio::sync::Mutex;
 
-pub mod parser;
-pub mod telemetry;
-pub mod self_heal;
-pub mod memory;
-pub mod hooks;
-pub mod plan;
 pub mod autonomous;
 pub mod compaction;
+pub mod hooks;
+pub mod memory;
+pub mod parser;
+pub mod plan;
+pub mod self_heal;
 pub mod skills;
+pub mod telemetry;
 pub mod tool_definitions;
 
 // ─── Agent Loop Types ─────────────────────────────────────────────────
@@ -46,25 +45,7 @@ pub struct AgentLoopIteration {
     pub timestamp: String,
 }
 
-/// Dual-verification completion phases
-#[derive(Debug, Clone, PartialEq)]
-enum CompletionPhase {
-    Active,       // Đang làm việc bình thường
-    FirstCheck,   // Đã hỏi "done?" lần 1, chờ AI trả lời
-    SecondCheck,  // Đã hỏi "chắc chưa?" lần 2, chờ xác nhận cuối
-    FinalCheck,   // Đợi FINAL_CONFIRMATION
-}
-
-impl CompletionPhase {
-    fn as_str(&self) -> &'static str {
-        match self {
-            CompletionPhase::Active => "active",
-            CompletionPhase::FirstCheck => "first-check",
-            CompletionPhase::SecondCheck => "second-check",
-            CompletionPhase::FinalCheck => "final-check",
-        }
-    }
-}
+// (CompletionPhase removed — simplified loop: stops when AI returns plain text with no tool calls)
 
 /// Cấu hình cho vòng lặp agent
 #[derive(Debug, Clone)]
@@ -107,11 +88,67 @@ pub enum HarnessMode {
     Minimal,
 }
 
+/// Kết quả của một lần tick() — State Machine Engine
+#[derive(Debug, Clone, Serialize)]
+pub enum TickResult {
+    /// Đã thực hiện xong một step, gọi tick() tiếp
+    Continue {
+        thought: Option<String>,
+        tool_name: Option<String>,
+        tool_result: Option<String>,
+        iteration: u32,
+    },
+    /// Agent đang chờ user phê duyệt
+    WaitForApproval {
+        tools: Vec<parser::ToolCall>,
+        iteration: u32,
+    },
+    /// Agent hoàn thành
+    Finished { text: String, total_iterations: u32 },
+    /// Có lỗi
+    Error { message: String, iteration: u32 },
+}
+
+/// Nội dung tin nhắn — phân biệt Text thuần, Tool Calls, hoặc Kết quả Tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MessageContent {
+    /// Văn bản thuần túy
+    Text(String),
+    /// Khi AI quyết định gọi một hoặc nhiều tools (Native Tool Calling)
+    ToolCalls(Vec<parser::ToolCall>),
+    /// Kết quả trả về sau khi chạy tool
+    ToolResult {
+        tool_call_id: String,
+        tool_name: String,
+        result: String,
+        success: bool,
+    },
+}
+
+/// Trạng thái hiện tại của Agent (State Machine)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum AgentState {
+    /// Chưa bắt đầu hoặc đang chờ input mới
+    Idle,
+    /// Đang đợi LLM trả lời
+    Thinking,
+    /// Đang chạy tool tự động
+    ExecutingTool,
+    /// DỪNG LẠI: Chờ user bấm Approve/Reject
+    AwaitingApproval(Vec<parser::ToolCall>),
+    /// Đang xác minh kết quả (Dual-Verification)
+    Verifying,
+    /// Hoàn thành task
+    Finished(String),
+    /// Lỗi
+    Error(String),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub id: String,
     pub role: String,
-    pub content: String,
+    pub content: MessageContent,
     pub timestamp: String,
 }
 
@@ -119,8 +156,9 @@ pub struct ChatMessage {
 pub struct AgentSession {
     pub session_id: String,
     pub history: Vec<ChatMessage>,
-    pub current_thought: Option<String>,
-    pub pending_tool: Option<parser::ToolCall>,
+    pub state: AgentState,
+    pub iteration_count: u32,
+    pub max_iterations: u32,
     pub mode: HarnessMode,
     pub plan: Option<plan::Plan>,
     pub autonomous_state: Option<autonomous::AutonomousManager>,
@@ -351,7 +389,7 @@ impl AgentHarness {
          - Research was broad but implementation narrow → **Spawn fresh**\n\
          - Correcting failure → **Continue** (worker has error context)\n\
          - Verifying different worker's code → **Spawn fresh** (fresh eyes)\n"
-        .to_string()
+            .to_string()
     }
 
     fn get_worker_prompt(&self) -> String {
@@ -368,7 +406,7 @@ impl AgentHarness {
          **Output structure:**\n\
          1. What you did/found — specific file paths, code snippets\n\
          2. Summary: One sentence the coordinator can relay\n"
-        .to_string()
+            .to_string()
     }
 
     fn get_autonomous_prompt(&self) -> String {
@@ -382,7 +420,7 @@ impl AgentHarness {
          - Reversible actions (local edits, tests): proceed freely\n\
          - Irreversible actions (push, delete): require authorization\n\n\
          **Idle handling:** After 3 consecutive idle ticks, scale back to quick CI check.\n"
-        .to_string()
+            .to_string()
     }
 
     fn get_memory_prompt(&self) -> String {
@@ -432,20 +470,31 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
                 let mut path = PathBuf::new();
                 for component in absolute_target.components() {
                     match component {
-                        std::path::Component::ParentDir => { path.pop(); }
-                        std::path::Component::Normal(c) => { path.push(c); }
+                        std::path::Component::ParentDir => {
+                            path.pop();
+                        }
+                        std::path::Component::Normal(c) => {
+                            path.push(c);
+                        }
                         std::path::Component::CurDir => {}
-                        other => { path.push(other.as_os_str()); }
+                        other => {
+                            path.push(other.as_os_str());
+                        }
                     }
                 }
                 path
             }
         };
 
-        let ws_str = self.workspace_root.to_string_lossy()
-            .replace("\\\\?\\", "").to_lowercase();
-        let target_str = canonical_target.to_string_lossy()
-            .replace("\\\\?\\", "").to_lowercase();
+        let ws_str = self
+            .workspace_root
+            .to_string_lossy()
+            .replace("\\\\?\\", "")
+            .to_lowercase();
+        let target_str = canonical_target
+            .to_string_lossy()
+            .replace("\\\\?\\", "")
+            .to_lowercase();
 
         if target_str.starts_with(&ws_str) {
             Ok(canonical_target)
@@ -458,14 +507,24 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
     }
 
     /// Assess blast radius of an action
-    pub fn assess_blast_radius(&self, tool_name: &str, arguments: &serde_json::Value) -> BlastRadius {
+    pub fn assess_blast_radius(
+        &self,
+        tool_name: &str,
+        arguments: &serde_json::Value,
+    ) -> BlastRadius {
         match tool_name {
             "write_file" | "edit_file" | "execute_command" | "check_port" => BlastRadius::Local,
             "get_project_files" | "read_file" => BlastRadius::Local,
             "delete_file" | "force_push" | "git_reset" => {
                 // Check if arguments indicate destructive operation
-                let is_destructive = arguments.get("force").and_then(|v| v.as_bool()).unwrap_or(false)
-                    || arguments.get("hard").and_then(|v| v.as_bool()).unwrap_or(false);
+                let is_destructive = arguments
+                    .get("force")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                    || arguments
+                        .get("hard")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
                 if is_destructive {
                     BlastRadius::Significant
                 } else {
@@ -496,11 +555,8 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
                 tool_input: tool.arguments.clone(),
                 tool_response: None,
             };
-            let hook_outputs = hook_manager.execute_hooks(
-                &hooks::HookEvent::PreToolUse,
-                &tool.name,
-                &hook_input,
-            );
+            let hook_outputs =
+                hook_manager.execute_hooks(&hooks::HookEvent::PreToolUse, &tool.name, &hook_input);
             if let Some(block_reason) = hook_manager.should_block(&hook_outputs) {
                 return Err(format!("PreToolUse hook blocked: {}", block_reason));
             }
@@ -527,6 +583,7 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
             "extract_symbol" => self.execute_extract_symbol(tool),
             "read_file_range" => self.execute_read_file_range(tool),
             "search_symbol" => self.execute_search_symbol(tool),
+            "edit_file" => self.execute_edit_file(tool),
             _ => Err(format!("Unknown tool: {}", tool.name)),
         };
 
@@ -575,7 +632,9 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         // 6. Self-heal if failed
         if exit_status == "Failure" {
             let healed = self_heal::SelfHealAnalyzer::analyze_failure(
-                &tool.name, &tool.arguments, &result_str,
+                &tool.name,
+                &tool.arguments,
+                &result_str,
             );
             Err(healed)
         } else {
@@ -604,8 +663,7 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         let target_path = Path::new(path_str);
         let verified_path = self.validate_path(target_path)?;
 
-        fs::read_to_string(&verified_path)
-            .map_err(|e| format!("Failed to read file: {}", e))
+        fs::read_to_string(&verified_path).map_err(|e| format!("Failed to read file: {}", e))
     }
 
     fn execute_write_file(&self, tool: &parser::ToolCall) -> Result<String, String> {
@@ -628,19 +686,70 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
             .map_err(|e| format!("Failed to write file: {}", e))
     }
 
+    fn execute_edit_file(&self, tool: &parser::ToolCall) -> Result<String, String> {
+        let path_str = tool.arguments["path"]
+            .as_str()
+            .ok_or_else(|| "Missing 'path' argument".to_string())?;
+        let old_content = tool.arguments["old_content"]
+            .as_str()
+            .ok_or_else(|| "Missing 'old_content' argument".to_string())?;
+        let new_content = tool.arguments["new_content"]
+            .as_str()
+            .ok_or_else(|| "Missing 'new_content' argument".to_string())?;
+
+        let target_path = Path::new(path_str);
+        let verified_path = self.validate_path(target_path)?;
+
+        let current_content = fs::read_to_string(&verified_path)
+            .map_err(|e| format!("Failed to read file '{}': {}", path_str, e))?;
+
+        if !current_content.contains(old_content) {
+            // Try with normalized line endings
+            let normalized_old = old_content.replace("\r\n", "\n");
+            let normalized_current = current_content.replace("\r\n", "\n");
+            if !normalized_current.contains(&normalized_old) {
+                return Err(format!(
+                    "Could not find the specified old_content in '{}'. The text may have changed or indentation may differ.",
+                    path_str
+                ));
+            }
+            // Apply with normalized endings
+            let replaced = normalized_current.replacen(&normalized_old, new_content, 1);
+            fs::write(&verified_path, replaced)
+                .map_err(|e| format!("Failed to write file: {}", e))?;
+        } else {
+            let replaced = current_content.replacen(old_content, new_content, 1);
+            fs::write(&verified_path, replaced)
+                .map_err(|e| format!("Failed to write file: {}", e))?;
+        }
+
+        Ok(format!(
+            "✓ edit_file: replaced {} chars → {} chars in '{}'",
+            old_content.len(),
+            new_content.len(),
+            path_str
+        ))
+    }
+
     fn execute_get_project_files(&self) -> Result<String, String> {
         let mut files = Vec::new();
         self.list_dir_recursive(&self.workspace_root, &mut files)?;
         Ok(files.join("\n"))
     }
 
-    async fn execute_command(&mut self, session_id: &str, tool: &parser::ToolCall) -> Result<String, String> {
+    async fn execute_command(
+        &mut self,
+        session_id: &str,
+        tool: &parser::ToolCall,
+    ) -> Result<String, String> {
         let command = tool.arguments["command"]
             .as_str()
             .ok_or_else(|| "Missing 'command' argument".to_string())?;
 
         let args: Vec<String> = if let Some(arr) = tool.arguments["args"].as_array() {
-            arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
         } else {
             Vec::new()
         };
@@ -650,7 +759,15 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         // Build async command
         let mut cmd = if cfg!(target_os = "windows") {
             let mut c = tokio::process::Command::new("powershell");
-            c.args(&["-Command"]);
+            // Use -NoProfile -NonInteractive to avoid profile loading issues
+            // Pass command as separate arg to avoid shell escaping problems
+            c.args(&[
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+            ]);
             c.arg(&cmd_str);
             c
         } else {
@@ -666,9 +783,13 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
             .spawn()
             .map_err(|e| format!("Failed to spawn command: {}", e))?;
 
-        let stdout = child.stdout.take()
+        let stdout = child
+            .stdout
+            .take()
             .ok_or_else(|| "Failed to capture stdout".to_string())?;
-        let stderr = child.stderr.take()
+        let stderr = child
+            .stderr
+            .take()
             .ok_or_else(|| "Failed to capture stderr".to_string())?;
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -697,7 +818,11 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
             }
         });
 
-        let cmd_id = format!("cmd_{}_{}", session_id, chrono::Local::now().timestamp_millis());
+        let cmd_id = format!(
+            "cmd_{}_{}",
+            session_id,
+            chrono::Local::now().timestamp_millis()
+        );
         let timeout_secs = self.command_timeout_secs;
 
         // Wait for completion with configurable timeout
@@ -709,7 +834,10 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
                 let stdout_text = output.lock().await.clone();
                 let stderr_text = stderr_output.lock().await.clone();
                 let code = status.code().unwrap_or(-1);
-                Ok(format!("Exit Code: {}\nSTDOUT:\n{}\nSTDERR:\n{}", code, stdout_text, stderr_text))
+                Ok(format!(
+                    "Exit Code: {}\nSTDOUT:\n{}\nSTDERR:\n{}",
+                    code, stdout_text, stderr_text
+                ))
             }
             Ok(Err(e)) => {
                 let _ = child.kill().await;
@@ -718,15 +846,18 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
             Err(_timeout) => {
                 // 20s timeout → store command for polling
                 let partial = output.lock().await.clone();
-                self.running_commands.insert(cmd_id.clone(), RunningCommand {
-                    child,
-                    output: output.clone(),
-                    stderr_output: stderr_output.clone(),
-                    stdout_handle: Some(stdout_handle),
-                    stderr_handle: Some(stderr_handle),
-                    start_time: std::time::Instant::now(),
-                    command: cmd_str.clone(),
-                });
+                self.running_commands.insert(
+                    cmd_id.clone(),
+                    RunningCommand {
+                        child,
+                        output: output.clone(),
+                        stderr_output: stderr_output.clone(),
+                        stdout_handle: Some(stdout_handle),
+                        stderr_handle: Some(stderr_handle),
+                        start_time: std::time::Instant::now(),
+                        command: cmd_str.clone(),
+                    },
+                );
 
                 Ok(format!(
                     "COMMAND_STILL_RUNNING\nCommand ID: {}\nCommand: {}\nThe command is still running after {} seconds.\nUse `check_command_status` with the Command ID to check if it has finished.\n\nPartial output so far:\n{}",
@@ -757,8 +888,12 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
             }
         }
 
-        let running = self.running_commands.get_mut(cmd_id)
-            .ok_or_else(|| format!("No running command found with ID: '{}'. It may have already completed or expired.", cmd_id))?;
+        let running = self.running_commands.get_mut(cmd_id).ok_or_else(|| {
+            format!(
+                "No running command found with ID: '{}'. It may have already completed or expired.",
+                cmd_id
+            )
+        })?;
 
         let elapsed = running.start_time.elapsed().as_secs();
 
@@ -777,7 +912,10 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
 
                 self.running_commands.remove(cmd_id);
 
-                Ok(format!("COMMAND_COMPLETED\nExit Code: {}\nSTDOUT:\n{}\nSTDERR:\n{}", code, stdout_text, stderr_text))
+                Ok(format!(
+                    "COMMAND_COMPLETED\nExit Code: {}\nSTDOUT:\n{}\nSTDERR:\n{}",
+                    code, stdout_text, stderr_text
+                ))
             }
             Ok(None) => {
                 // Still running
@@ -796,9 +934,11 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
     }
 
     fn execute_save_memory(&self, tool: &parser::ToolCall) -> Result<String, String> {
-        let name = tool.arguments["name"].as_str()
+        let name = tool.arguments["name"]
+            .as_str()
             .ok_or_else(|| "Missing 'name' argument".to_string())?;
-        let description = tool.arguments["description"].as_str()
+        let description = tool.arguments["description"]
+            .as_str()
             .unwrap_or("Memory entry");
         let mem_type = match tool.arguments["type"].as_str().unwrap_or("reference") {
             "user" => memory::MemoryType::User,
@@ -806,15 +946,19 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
             "project" => memory::MemoryType::Project,
             _ => memory::MemoryType::Reference,
         };
-        let content = tool.arguments["content"].as_str()
+        let content = tool.arguments["content"]
+            .as_str()
             .ok_or_else(|| "Missing 'content' argument".to_string())?;
 
-        let path = self.memory_manager.save_memory(name, description, mem_type, content)?;
+        let path = self
+            .memory_manager
+            .save_memory(name, description, mem_type, content)?;
         Ok(format!("✓ Memory saved: {}", path.display()))
     }
 
     fn execute_search_memory(&self, tool: &parser::ToolCall) -> Result<String, String> {
-        let query = tool.arguments["query"].as_str()
+        let query = tool.arguments["query"]
+            .as_str()
             .ok_or_else(|| "Missing 'query' argument".to_string())?;
 
         let results = self.memory_manager.search_memories(query);
@@ -824,9 +968,15 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
 
         let mut output = format!("Found {} memory results for '{}':\n", results.len(), query);
         for mem in &results {
-            output.push_str(&format!("\n---\n**{}** ({:?})\n", mem.name, mem.metadata.mem_type));
+            output.push_str(&format!(
+                "\n---\n**{}** ({:?})\n",
+                mem.name, mem.metadata.mem_type
+            ));
             output.push_str(&format!("_{}_\n", mem.description));
-            output.push_str(&format!("{}\n", mem.content.lines().take(3).collect::<Vec<_>>().join("\n")));
+            output.push_str(&format!(
+                "{}\n",
+                mem.content.lines().take(3).collect::<Vec<_>>().join("\n")
+            ));
         }
         Ok(output)
     }
@@ -838,14 +988,16 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
     // ─── Skill Tool Executions ───────────────────────────────────────────
 
     fn execute_scan_subdirectory(&self, tool: &parser::ToolCall) -> Result<String, String> {
-        let path = tool.arguments["path"].as_str()
+        let path = tool.arguments["path"]
+            .as_str()
             .ok_or_else(|| "Missing 'path' argument".to_string())?;
         let tree = self.skill_engine.scan_subdirectory(path)?;
         Ok(tree.tree_string)
     }
 
     fn execute_search_files(&self, tool: &parser::ToolCall) -> Result<String, String> {
-        let pattern = tool.arguments["pattern"].as_str()
+        let pattern = tool.arguments["pattern"]
+            .as_str()
             .or_else(|| tool.arguments["query"].as_str())
             .ok_or_else(|| "Missing 'pattern' argument".to_string())?;
 
@@ -854,7 +1006,10 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
             return Ok(format!("📁 No files found matching '{}'", pattern));
         }
 
-        let mut output = format!("📁 Found {} file(s) matching '{}':\n\n", result.total, pattern);
+        let mut output = format!(
+            "📁 Found {} file(s) matching '{}':\n\n",
+            result.total, pattern
+        );
         for (i, path) in result.matches.iter().enumerate() {
             output.push_str(&format!("  {}. {}\n", i + 1, path.display()));
         }
@@ -863,9 +1018,11 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
     }
 
     fn execute_extract_symbol(&self, tool: &parser::ToolCall) -> Result<String, String> {
-        let file = tool.arguments["file"].as_str()
+        let file = tool.arguments["file"]
+            .as_str()
             .ok_or_else(|| "Missing 'file' argument".to_string())?;
-        let symbol = tool.arguments["symbol"].as_str()
+        let symbol = tool.arguments["symbol"]
+            .as_str()
             .or_else(|| tool.arguments["name"].as_str())
             .ok_or_else(|| "Missing 'symbol' argument".to_string())?;
 
@@ -875,7 +1032,9 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         output.push_str(&format!(
             "📖 Symbol: **{}** ({}) | File: `{}` | Lines {}-{}\n\n",
             extraction.symbol,
-            extraction.symbol_type.unwrap_or_else(|| "unknown".to_string()),
+            extraction
+                .symbol_type
+                .unwrap_or_else(|| "unknown".to_string()),
             extraction.file.display(),
             extraction.start_line,
             extraction.end_line
@@ -899,7 +1058,8 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         }
         output.push_str("```\n");
 
-        output.push_str(&format!("\n--- Extracted {} lines ({}:{}-{}) ---",
+        output.push_str(&format!(
+            "\n--- Extracted {} lines ({}:{}-{}) ---",
             extraction.code_block.lines().count(),
             extraction.file.display(),
             extraction.start_line,
@@ -909,36 +1069,51 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
     }
 
     fn execute_read_file_range(&self, tool: &parser::ToolCall) -> Result<String, String> {
-        let file = tool.arguments["file"].as_str()
+        let file = tool.arguments["file"]
+            .as_str()
             .ok_or_else(|| "Missing 'file' argument".to_string())?;
-        let start = tool.arguments["start_line"].as_u64()
-            .ok_or_else(|| "Missing 'start_line' argument".to_string())? as usize;
-        let end = tool.arguments["end_line"].as_u64()
+        let start = tool.arguments["start_line"]
+            .as_u64()
+            .ok_or_else(|| "Missing 'start_line' argument".to_string())?
+            as usize;
+        let end = tool.arguments["end_line"]
+            .as_u64()
             .ok_or_else(|| "Missing 'end_line' argument".to_string())? as usize;
 
         self.skill_engine.read_file_range(file, start, end)
     }
 
     fn execute_search_symbol(&self, tool: &parser::ToolCall) -> Result<String, String> {
-        let symbol = tool.arguments["symbol"].as_str()
+        let symbol = tool.arguments["symbol"]
+            .as_str()
             .or_else(|| tool.arguments["name"].as_str())
             .ok_or_else(|| "Missing 'symbol' argument".to_string())?;
 
         let results = self.skill_engine.search_symbol_across_project(symbol);
         if results.is_empty() {
-            return Ok(format!("🔍 Symbol '{}' not found anywhere in project.", symbol));
+            return Ok(format!(
+                "🔍 Symbol '{}' not found anywhere in project.",
+                symbol
+            ));
         }
 
-        let mut output = format!("🔍 Found symbol **'{}'** in {} file(s):\n\n", symbol, results.len());
+        let mut output = format!(
+            "🔍 Found symbol **'{}'** in {} file(s):\n\n",
+            symbol,
+            results.len()
+        );
         for (i, (path, line_num, line_text)) in results.iter().enumerate() {
-            output.push_str(&format!("  {}. `{}:{}` → {}\n",
+            output.push_str(&format!(
+                "  {}. `{}:{}` → {}\n",
                 i + 1,
                 path.display(),
                 line_num,
                 line_text
             ));
         }
-        output.push_str(&format!("\nUse `extract_symbol` with the file path and symbol name to see the full definition."));
+        output.push_str(&format!(
+            "\nUse `extract_symbol` with the file path and symbol name to see the full definition."
+        ));
         Ok(output)
     }
 
@@ -953,15 +1128,18 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         subagent_type: Option<String>,
         prompt: &str,
     ) {
-        self.subagents.insert(id.to_string(), Subagent {
-            id: id.to_string(),
-            name: name.to_string(),
-            description: description.to_string(),
-            subagent_type,
-            status: SubagentStatus::Running,
-            prompt: prompt.to_string(),
-            result: None,
-        });
+        self.subagents.insert(
+            id.to_string(),
+            Subagent {
+                id: id.to_string(),
+                name: name.to_string(),
+                description: description.to_string(),
+                subagent_type,
+                status: SubagentStatus::Running,
+                prompt: prompt.to_string(),
+                result: None,
+            },
+        );
     }
 
     /// Mark a subagent as completed with result
@@ -997,488 +1175,274 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         plan::Plan::new(title)
     }
 
-    // ─── Agent Loop Engine (Enterprise 2026) ────────────────────────────
+    // ─── Agent State Machine (State Machine Engine) ───────────────────
     //
-    // Kiến trúc vòng lặp cải tiến:
-    //   1. Multi-strategy parser (OpenAI JSON → XML → ReAct → Isolated JSON)
-    //   2. Parallel tool call execution
-    //   3. Dual-verification: sau khi AI báo "done" → hỏi lại lần 2 "chắc chưa?"
-    //   4. Structured final report với verification bắt buộc
+    // Thay thế vòng lặp for tuần tự bằng State Machine:
+    //   tick() kiểm tra AgentState và thực hiện ĐÚNG MỘT bước.
+    //   Không có vòng lặp — mỗi lần gọi tick() = một transition.
     //
-    /// Chạy vòng lặp agent hoàn chỉnh: think → act → observe → repeat
-    /// Cho đến khi LLM trả về text response (không phải tool call)
-    /// hoặc đạt max_iterations.
+    // Flow:
+    //   Idle → Thinking → (ToolCalls? → ExecutingTool | Text → Finished)
+    //   ExecutingTool → Thinking
+    //   Thinking → AwaitingApproval (nếu cần user duyệt)
+    //   AwaitingApproval → ExecutingTool (khi user approve)
+    //                    → Thinking (khi user reject)
+    //
+    /// Kiểm tra xem tool có auto-approve không dựa trên policy
+    fn tool_needs_approval(
+        tool: &parser::ToolCall,
+        auto_approve_all: bool,
+        auto_approve_reads: bool,
+        auto_approve_writes: bool,
+    ) -> bool {
+        if auto_approve_all {
+            return false;
+        }
+        let is_read_tool = matches!(
+            tool.name.as_str(),
+            "check_port"
+                | "read_file"
+                | "get_project_files"
+                | "scan_directory_tree"
+                | "scan_subdirectory"
+                | "search_files"
+                | "extract_symbol"
+                | "read_file_range"
+                | "search_symbol"
+                | "search_memory"
+        );
+        let is_write_tool = matches!(tool.name.as_str(), "write_file" | "save_memory");
+
+        if auto_approve_reads && is_read_tool {
+            return false;
+        }
+        if auto_approve_writes && (is_read_tool || is_write_tool) {
+            return false;
+        }
+        true
+    }
+
+    /// State Machine: thực hiện một bước dựa trên trạng thái hiện tại của session
     ///
-    /// `llm_call_fn` là async closure nhận (system_prompt, history) và trả về LLM response string.
-    /// `on_iteration_fn` là callback để emit sự kiện real-time ra UI.
-    pub async fn run_agent_loop<F1, Fut1, F2>(
+    /// # Arguments
+    /// * `session` - Session chứa history, state, config
+    /// * `system_prompt` - System prompt
+    /// * `llm_call_fn` - Closure gọi LLM API, nhận (system_prompt, history) → trả về string
+    ///
+    /// # Returns
+    /// `TickResult` cho biết bước tiếp theo là gì
+    pub async fn tick<F1, Fut>(
         &mut self,
+        session: &mut AgentSession,
         system_prompt: &str,
-        history: &mut Vec<ChatMessage>,
-        config: AgentLoopConfig,
         llm_call_fn: F1,
-        on_iteration_fn: Option<F2>,
-    ) -> AgentLoopResult
+    ) -> TickResult
     where
-        F1: Fn(String, Vec<ChatMessage>) -> Fut1,
-        Fut1: Future<Output = Result<String, String>>,
-        F2: Fn(AgentLoopIteration),
+        F1: Fn(String, Vec<ChatMessage>) -> Fut,
+        Fut: Future<Output = Result<String, String>>,
     {
-        let mut iterations = Vec::new();
-        let mut tool_calls_made = 0u32;
-        let mut stopped_early = false;
-        let mut stop_reason: Option<String> = None;
-        let mut final_text: Option<String> = None;
-        let mut completion_phase: CompletionPhase = CompletionPhase::Active;
-        let session_id = config.session_id.clone();
+        // Kiểm tra max iterations
+        if session.iteration_count >= session.max_iterations {
+            session.state = AgentState::Finished(format!(
+                "Đạt giới hạn vòng lặp ({} iterations)",
+                session.max_iterations
+            ));
+            if let AgentState::Finished(ref text) = session.state {
+                return TickResult::Finished {
+                    text: text.clone(),
+                    total_iterations: session.iteration_count,
+                };
+            }
+        }
 
-        // Apply command timeout from config
-        self.command_timeout_secs = config.command_timeout_secs;
+        match session.state.clone() {
+            // ─── STATE: Idle ──────────────────────────────────────────────
+            AgentState::Idle => {
+                // Chuyển sang Thinking và gọi đệ quy tick() ngay
+                session.state = AgentState::Thinking;
+                Box::pin(self.tick(session, system_prompt, llm_call_fn)).await
+            }
 
-        // ─── MAIN LOOP ───────────────────────────────────────────────
-        for iteration in 0..config.max_iterations {
-            // 1. Compact history nếu quá dài (>80 msgs → giữ 40 gần nhất)
-            let max_msgs = if history.len() > 80 { 40 } else { 80 };
-            Self::compact_history(history, max_msgs);
+            // ─── STATE: Thinking ──────────────────────────────────────────
+            AgentState::Thinking => {
+                // Compact history nếu quá dài
+                let max_msgs = if session.history.len() > 80 { 40 } else { 80 };
+                Self::compact_history(&mut session.history, max_msgs);
 
-            // 2. Gọi LLM
-            let llm_reply = match llm_call_fn(
-                system_prompt.to_string(),
-                history.clone(),
-            ).await {
-                Ok(reply) => reply,
-                Err(e) => {
-                    stop_reason = Some(format!("LLM call failed: {}", e));
-                    stopped_early = true;
-                    break;
-                }
-            };
+                // Gọi LLM
+                let iteration = session.iteration_count + 1;
+                let llm_reply =
+                    match llm_call_fn(system_prompt.to_string(), session.history.clone()).await {
+                        Ok(reply) => reply,
+                        Err(e) => {
+                            session.state = AgentState::Error(e.clone());
+                            return TickResult::Error {
+                                message: format!("LLM call failed: {}", e),
+                                iteration,
+                            };
+                        }
+                    };
 
-            // 3. Parse response (multi-strategy)
-            let parsed = parser::parse_model_response(&llm_reply);
+                session.iteration_count = iteration;
 
-            let iteration_record = AgentLoopIteration {
-                iteration: (iteration + 1) as u32,
-                thought: parsed.thought.clone(),
-                tool_name: None,
-                tool_args: None,
-                tool_result: None,
-                tool_success: false,
-                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-            };
+                // Parse response
+                let parsed = parser::parse_model_response(&llm_reply);
 
-            // ─── PATH A: TOOL CALL(S) ──────────────────────────────────
-            // Hỗ trợ cả single tool_call (backward compat) và tool_calls (parallel)
-            let all_tools = if !parsed.tool_calls.is_empty() {
-                parsed.tool_calls.clone()
-            } else if let Some(ref tc) = parsed.tool_call {
-                vec![tc.clone()]
-            } else {
-                vec![]
-            };
+                // Lấy tất cả tool calls
+                let all_tools = if !parsed.tool_calls.is_empty() {
+                    parsed.tool_calls.clone()
+                } else if let Some(ref tc) = parsed.tool_call {
+                    vec![tc.clone()]
+                } else {
+                    vec![]
+                };
 
-            if !all_tools.is_empty() {
-                tool_calls_made += all_tools.len() as u32;
-                let mut all_results = Vec::new();
+                if !all_tools.is_empty() {
+                    // Có tool calls → kiểm tra cần approve không
+                    let any_needs_approval = all_tools.iter().any(|t| {
+                        Self::tool_needs_approval(
+                            t, false, // auto_approve_all — lấy từ session context
+                            true,  // auto_approve_reads — default true
+                            false, // auto_approve_writes — default false
+                        )
+                    });
 
-                for tool in &all_tools {
-                    // Auto-approve check
-                    let is_read_tool = matches!(tool.name.as_str(),
-                        "check_port" | "read_file" | "get_project_files"
-                        | "scan_directory_tree" | "scan_subdirectory"
-                        | "search_files" | "extract_symbol" | "read_file_range"
-                        | "search_symbol" | "search_memory"
-                    );
-                    let is_write_tool = matches!(tool.name.as_str(),
-                        "write_file" | "save_memory"
-                    );
+                    // Lưu assistant message với ToolCalls vào history
+                    session.history.push(ChatMessage {
+                        id: format!("model_{}", chrono::Local::now().timestamp_millis()),
+                        role: "assistant".to_string(),
+                        content: MessageContent::ToolCalls(all_tools.clone()),
+                        timestamp: chrono::Local::now().format("%H:%M").to_string(),
+                    });
 
-                    let can_execute = config.auto_approve_all
-                        || (config.auto_approve_reads && is_read_tool)
-                        || (config.auto_approve_writes && (is_read_tool || is_write_tool));
-
-                    if !can_execute {
-                        // Dừng vòng lặp, chờ user approve
-                        iterations.push(AgentLoopIteration {
-                            tool_name: Some(tool.name.clone()),
-                            tool_args: Some(tool.arguments.to_string()),
-                            ..iteration_record.clone()
-                        });
-                        stop_reason = Some(format!("Tool '{}' needs user approval", tool.name));
-                        stopped_early = true;
-                        // Return sớm với kết quả partial
-                        return AgentLoopResult {
-                            session_id,
-                            iterations,
-                            final_text: None,
-                            total_iterations: (iteration + 1) as u32,
-                            tool_calls_made,
-                            stopped_early,
-                            stop_reason,
+                    if any_needs_approval {
+                        // Dừng lại, chờ user approve
+                        session.state = AgentState::AwaitingApproval(all_tools.clone());
+                        return TickResult::WaitForApproval {
+                            tools: all_tools,
+                            iteration,
                         };
+                    } else {
+                        // Tự động chạy tool
+                        session.state = AgentState::ExecutingTool;
+                        Box::pin(self.tick(session, system_prompt, llm_call_fn)).await
                     }
+                } else {
+                    // Text response — hoàn thành
+                    let text = parsed
+                        .plain_text
+                        .unwrap_or_else(|| "Task completed.".to_string());
 
-                    // Execute tool
+                    session.history.push(ChatMessage {
+                        id: format!("model_{}", chrono::Local::now().timestamp_millis()),
+                        role: "assistant".to_string(),
+                        content: MessageContent::Text(text.clone()),
+                        timestamp: chrono::Local::now().format("%H:%M").to_string(),
+                    });
+
+                    session.state = AgentState::Finished(text.clone());
+                    return TickResult::Finished {
+                        text,
+                        total_iterations: session.iteration_count,
+                    };
+                }
+            }
+
+            // ─── STATE: ExecutingTool ─────────────────────────────────────
+            AgentState::ExecutingTool => {
+                let session_id = session.session_id.clone();
+
+                // Tìm tool calls từ message cuối cùng của assistant
+                let tool_calls: Vec<parser::ToolCall> = session
+                    .history
+                    .iter()
+                    .rev()
+                    .find_map(|msg| {
+                        if msg.role == "assistant" {
+                            match &msg.content {
+                                MessageContent::ToolCalls(tcs) => Some(tcs.clone()),
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default();
+
+                if tool_calls.is_empty() {
+                    session.state = AgentState::Error(
+                        "ExecutingTool state but no tool calls found in history".to_string(),
+                    );
+                    return TickResult::Error {
+                        message: "No tool calls to execute".to_string(),
+                        iteration: session.iteration_count,
+                    };
+                }
+
+                // Thực thi từng tool
+                for tool in &tool_calls {
                     let tool_result = self.execute_tool(&session_id, tool).await;
                     let (result_text, success) = match tool_result {
                         Ok(r) => (r, true),
                         Err(e) => (e, false),
                     };
 
-                    // Ghi result
-                    iterations.push(AgentLoopIteration {
-                        tool_name: Some(tool.name.clone()),
-                        tool_args: Some(tool.arguments.to_string()),
-                        tool_result: Some(result_text.clone()),
-                        tool_success: success,
-                        ..iteration_record.clone()
-                    });
+                    let call_id = tool
+                        .call_id
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_string());
 
-                    // Callback real-time
-                    if let Some(ref cb) = on_iteration_fn {
-                        cb(iterations.last().unwrap().clone());
-                    }
-
-                    all_results.push((tool.name.clone(), result_text, success, tool.call_id.clone()));
-                }
-
-                // Feed ALL results to history using proper tool role messages
-                for (_tname, tresult, tsuccess, tcall_id) in &all_results {
-                    let call_id = tcall_id.as_deref().unwrap_or("unknown");
-                    let tool_result = json!({
-                        "result": tresult,
-                        "success": tsuccess,
-                        "tool_call_id": call_id
-                    });
-                    history.push(ChatMessage {
-                        id: call_id.to_string(),
+                    // Push result vào history
+                    session.history.push(ChatMessage {
+                        id: call_id.clone(),
                         role: "tool".to_string(),
-                        content: tool_result.to_string(),
+                        content: MessageContent::ToolResult {
+                            tool_call_id: call_id,
+                            tool_name: tool.name.clone(),
+                            result: result_text,
+                            success,
+                        },
                         timestamp: chrono::Local::now().format("%H:%M").to_string(),
                     });
                 }
 
-                // ─── COMPLETION CHECK (sau MỌI tool call) ───────────
-                // Sau bất kỳ tool call nào (read hay write), hỏi AI xem đã xong chưa
-                let had_write_or_cmd = all_results.iter().any(|(name, _, _, _)| {
-                    matches!(name.as_str(), "write_file" | "save_memory" | "execute_command")
-                });
-
-                if had_write_or_cmd {
-                    // Tool write/command → hỏi completion
-                    history.push(ChatMessage {
-                        id: format!("sys_chk_{}", chrono::Local::now().timestamp_millis()),
-                        role: "system".to_string(),
-                        content: format!(
-                            "<system-reminder>Task progress check (phase: {}): Have you completed ALL required steps for this task?\n\nRespond with:\n- **YES, DONE** → if the task is fully complete and verified\n- **CONTINUE** → if more work is needed, with the next tool call\n\nDo NOT say done unless every required change, test, and verification is complete.</system-reminder>",
-                            completion_phase.as_str()
-                        ),
-                        timestamp: chrono::Local::now().format("%H:%M").to_string(),
-                    });
-                    completion_phase = CompletionPhase::FirstCheck;
-                } else {
-                    // Read-only tools → không cần check, chỉ reset phase
-                    completion_phase = CompletionPhase::Active;
-                }
-
-                // Continue loop
-                continue;
+                // Chạy xong tool → quay lại Thinking
+                session.state = AgentState::Thinking;
+                Box::pin(self.tick(session, system_prompt, llm_call_fn)).await
             }
 
-            // ─── PATH B: TEXT RESPONSE (no tool calls) ─────────────────
-            let text = parsed.plain_text.unwrap_or_else(|| {
-                "Task completed.".to_string()
-            });
-
-            // Ghi text vào history
-            history.push(ChatMessage {
-                id: format!("model_{}", chrono::Local::now().timestamp_millis()),
-                role: "model".to_string(),
-                content: text.clone(),
-                timestamp: chrono::Local::now().format("%H:%M").to_string(),
-            });
-
-            match completion_phase {
-                CompletionPhase::FirstCheck => {
-                    // ─── PHASE 1: AI vừa xác nhận "done" lần đầu ───
-                    // → DUAL-VERIFICATION: Hỏi lại lần 2 "CHẮC CHƯA?"
-                    let is_confirming = text.to_lowercase().contains("yes")
-                        || text.to_lowercase().contains("done")
-                        || text.to_lowercase().contains("complete")
-                        || text.to_lowercase().contains("xong")
-                        || text.to_lowercase().contains("hoàn thành");
-
-                    if is_confirming {
-                        // Inject câu hỏi xác nhận lần 2
-                        history.push(ChatMessage {
-                            id: format!("sys_dual_{}", chrono::Local::now().timestamp_millis()),
-                            role: "system".to_string(),
-                            content: "<system-reminder>CONFIRMATION REQUIRED: You indicated the task is complete. Before finalizing:\n\n1. **Re-check**: Are you ABSOLUTELY certain every required change has been made?\n2. **Missing anything?**: Are there any verification steps, edge cases, or documentation you may have overlooked?\n3. **Double-check files**: Did you actually read and verify every file you modified?\n\nIf yes — reply **FINAL_CONFIRMATION: YES** with a structured summary.\nIf no — state what's missing and make the appropriate tool call.</system-reminder>".to_string(),
-                            timestamp: chrono::Local::now().format("%H:%M").to_string(),
-                        });
-
-                        // Gọi LLM để lấy xác nhận lần 2
-                        let confirm_reply = match llm_call_fn(
-                            system_prompt.to_string(),
-                            history.clone(),
-                        ).await {
-                            Ok(reply) => reply,
-                            Err(e) => {
-                                stop_reason = Some(format!("Confirmation check failed: {}", e));
-                                stopped_early = true;
-                                final_text = Some(text);
-                                break;
-                            }
-                        };
-
-                        let confirm_parsed = parser::parse_model_response(&confirm_reply);
-
-                        // Nếu AI trả tool call → nó thấy còn thiếu, quay lại loop
-                        if !confirm_parsed.tool_calls.is_empty() || confirm_parsed.tool_call.is_some() {
-                            let new_tools = if !confirm_parsed.tool_calls.is_empty() {
-                                confirm_parsed.tool_calls
-                            } else {
-                                vec![confirm_parsed.tool_call.unwrap()]
-                            };
-
-                            history.push(ChatMessage {
-                                id: format!("model_dual_{}", chrono::Local::now().timestamp_millis()),
-                                role: "model".to_string(),
-                                content: confirm_reply,
-                                timestamp: chrono::Local::now().format("%H:%M").to_string(),
-                            });
-
-                            // Quay lại execution (dùng continue để loop xử lý tool)
-                            // Inject tool calls vào parsed để loop xử lý ở iteration tiếp theo
-                            // Thực tế: thêm vào history và continue loop
-                            // Loop sẽ được xử lý ở iteration sau với tool call mới
-                            // (Cần 1 iteration nữa để parse và execute)
-                            // Đơn giản nhất: push tool call vào history dạng raw
-                            // và continue để loop tự parse ở iteration sau
-
-                            // Continue loop - iteration sau sẽ parse được tool call từ confirm_reply
-                            // vì confirm_reply đã được thêm vào history
-                            // Nhưng cần parse ngay để execute tool
-                            // → gán lại parsed và reroute
-                            // Để đơn giản: execute tool ngay ở đây
-                            for tool in &new_tools {
-                                let is_read = matches!(tool.name.as_str(),
-                                    "check_port" | "read_file" | "get_project_files"
-                                    | "scan_directory_tree" | "scan_subdirectory"
-                                    | "search_files" | "extract_symbol" | "read_file_range"
-                                    | "search_symbol" | "search_memory"
-                                );
-                                let can_exec = config.auto_approve_all
-                                    || (config.auto_approve_reads && is_read);
-
-                                if can_exec {
-                                    let tresult = self.execute_tool(&session_id, tool).await;
-                                    let (rtext, rsuccess) = match tresult {
-                                        Ok(r) => (r, true),
-                                        Err(e) => (e, false),
-                                    };
-                                    tool_calls_made += 1;
-
-                                    history.push(ChatMessage {
-                                        id: format!("obs_dual_{}", chrono::Local::now().timestamp_millis()),
-                                        role: "system".to_string(),
-                                        content: format!("<call:{}><result success={}>{}</result>", tool.name, rsuccess, rtext),
-                                        timestamp: chrono::Local::now().format("%H:%M").to_string(),
-                                    });
-
-                                    iterations.push(AgentLoopIteration {
-                                        iteration: (iteration + 1) as u32,
-                                        thought: confirm_parsed.thought.clone(),
-                                        tool_name: Some(tool.name.clone()),
-                                        tool_args: Some(tool.arguments.to_string()),
-                                        tool_result: Some(rtext),
-                                        tool_success: rsuccess,
-                                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                    });
-
-                                    if let Some(ref cb) = on_iteration_fn {
-                                        cb(iterations.last().unwrap().clone());
-                                    }
-                                }
-                            }
-                            // Sau dual-check tool → hỏi lại completion
-                            history.push(ChatMessage {
-                                id: format!("sys_chk2_{}", chrono::Local::now().timestamp_millis()),
-                                role: "system".to_string(),
-                                content: "<system-reminder>After completing the missing items above, is the task now FULLY complete? Reply FINAL_CONFIRMATION: YES if done, or CONTINUE if more is needed.</system-reminder>".to_string(),
-                                timestamp: chrono::Local::now().format("%H:%M").to_string(),
-                            });
-                            completion_phase = CompletionPhase::FinalCheck;
-                            continue;
-                        }
-
-                        // AI vẫn xác nhận done → final
-                        let confirm_text = confirm_parsed.plain_text.unwrap_or_else(|| text.clone());
-                        final_text = Some(confirm_text.clone());
-
-                        history.push(ChatMessage {
-                            id: format!("model_final_{}", chrono::Local::now().timestamp_millis()),
-                            role: "model".to_string(),
-                            content: confirm_text.clone(),
-                            timestamp: chrono::Local::now().format("%H:%M").to_string(),
-                        });
-
-                        iterations.push(AgentLoopIteration {
-                            tool_name: None,
-                            tool_args: None,
-                            tool_result: Some(confirm_text),
-                            tool_success: true,
-                            ..iteration_record
-                        });
-
-                        if let Some(ref cb) = on_iteration_fn {
-                            cb(iterations.last().unwrap().clone());
-                        }
-
-                        break;
-                    } else {
-                        // AI nói "continue" hoặc không confirm → reset
-                        completion_phase = CompletionPhase::Active;
-                        continue;
-                    }
-                }
-                CompletionPhase::SecondCheck | CompletionPhase::FinalCheck => {
-                    // ─── PHASE 2/3: AI đã xác nhận lần 2 ────────────
-                    let is_final = text.to_lowercase().contains("final_confirmation")
-                        || text.to_lowercase().contains("yes")
-                        || text.to_lowercase().contains("done")
-                        || text.to_lowercase().contains("complete");
-
-                    if is_final {
-                        final_text = Some(text.clone());
-
-                        iterations.push(AgentLoopIteration {
-                            tool_name: None,
-                            tool_args: None,
-                            tool_result: Some(text.clone()),
-                            tool_success: true,
-                            ..iteration_record
-                        });
-
-                        if let Some(ref cb) = on_iteration_fn {
-                            cb(iterations.last().unwrap().clone());
-                        }
-
-                        break;
-                    } else {
-                        // Còn việc → reset
-                        completion_phase = CompletionPhase::Active;
-                        continue;
-                    }
-                }
-                CompletionPhase::Active => {
-                    // ─── NO COMPLETION CHECK PENDING ─────────────────
-                    // AI tự dừng mà không được hỏi trước → hỏi một lần
-                    let is_completion_like = text.to_lowercase().contains("done")
-                        || text.to_lowercase().contains("complete")
-                        || text.to_lowercase().contains("finished")
-                        || text.to_lowercase().contains("xong")
-                        || text.to_lowercase().contains("hoàn thành");
-
-                    if is_completion_like {
-                        // Ask "are you sure?" once
-                        history.push(ChatMessage {
-                            id: format!("sys_sure_{}", chrono::Local::now().timestamp_millis()),
-                            role: "system".to_string(),
-                            content: "<system-reminder>You seem to indicate the task is done. Please confirm with a structured summary:\n\n## Summary of Changes\n- List files changed/created and what was done\n\n## Verification\n- List verification steps and results\n\n## Final Status\n- ✅ Complete / ⚠️ Partial\n- Any remaining notes</system-reminder>".to_string(),
-                            timestamp: chrono::Local::now().format("%H:%M").to_string(),
-                        });
-
-                        // Gọi LLM để lấy final report
-                        let report_reply = match llm_call_fn(
-                            system_prompt.to_string(),
-                            history.clone(),
-                        ).await {
-                            Ok(reply) => reply,
-                            Err(e) => {
-                                stop_reason = Some(format!("Report generation failed: {}", e));
-                                stopped_early = true;
-                                final_text = Some(text);
-                                break;
-                            }
-                        };
-
-                        let report_parsed = parser::parse_model_response(&report_reply);
-
-                        // If AI makes a tool call during report → it found missing work
-                        if !report_parsed.tool_calls.is_empty() || report_parsed.tool_call.is_some() {
-                            history.push(ChatMessage {
-                                id: format!("model_rpt_{}", chrono::Local::now().timestamp_millis()),
-                                role: "model".to_string(),
-                                content: report_reply,
-                                timestamp: chrono::Local::now().format("%H:%M").to_string(),
-                            });
-                            completion_phase = CompletionPhase::Active;
-                            continue;
-                        }
-
-                        let report_text = report_parsed.plain_text.unwrap_or_else(|| text);
-                        final_text = Some(report_text.clone());
-
-                        history.push(ChatMessage {
-                            id: format!("model_rpt_{}", chrono::Local::now().timestamp_millis()),
-                            role: "model".to_string(),
-                            content: report_text.clone(),
-                            timestamp: chrono::Local::now().format("%H:%M").to_string(),
-                        });
-
-                        iterations.push(AgentLoopIteration {
-                            tool_name: None,
-                            tool_args: None,
-                            tool_result: Some(report_text),
-                            tool_success: true,
-                            ..iteration_record
-                        });
-
-                        if let Some(ref cb) = on_iteration_fn {
-                            cb(iterations.last().unwrap().clone());
-                        }
-
-                        break;
-                    } else {
-                        // Plain text, không phải done signal → kết thúc
-                        final_text = Some(text.clone());
-
-                        iterations.push(AgentLoopIteration {
-                            tool_name: None,
-                            tool_args: None,
-                            tool_result: Some(text),
-                            tool_success: true,
-                            ..iteration_record
-                        });
-
-                        if let Some(ref cb) = on_iteration_fn {
-                            cb(iterations.last().unwrap().clone());
-                        }
-
-                        break;
-                    }
+            // ─── STATE: AwaitingApproval ──────────────────────────────────
+            AgentState::AwaitingApproval(tools) => {
+                // Không thể tick khi đang chờ approve
+                TickResult::WaitForApproval {
+                    tools,
+                    iteration: session.iteration_count,
                 }
             }
-        }
 
-        // Kiểm tra nếu đạt max iterations
-        let total_iters = iterations.len() as u32;
-        if total_iters >= config.max_iterations && final_text.is_none() {
-            stopped_early = true;
-            stop_reason = Some(format!(
-                "Reached maximum iterations ({})", config.max_iterations
-            ));
-        }
+            // ─── STATE: Finished ───────────────────────────────────────────
+            AgentState::Finished(text) => TickResult::Finished {
+                text,
+                total_iterations: session.iteration_count,
+            },
 
-        AgentLoopResult {
-            session_id,
-            iterations,
-            final_text,
-            total_iterations: total_iters,
-            tool_calls_made,
-            stopped_early,
-            stop_reason,
+            // ─── STATE: Error ─────────────────────────────────────────────
+            AgentState::Error(msg) => TickResult::Error {
+                message: msg,
+                iteration: session.iteration_count,
+            },
+
+            // ─── STATE: Verifying ─────────────────────────────────────────
+            AgentState::Verifying => {
+                // Placeholder: dual-verification (sẽ mở rộng sau)
+                // Hiện tại coi như Finished
+                let text = "Task verified.".to_string();
+                session.state = AgentState::Finished(text.clone());
+                TickResult::Finished {
+                    text,
+                    total_iterations: session.iteration_count,
+                }
+            }
         }
     }
 
@@ -1512,19 +1476,55 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
         if history.len() <= max_messages {
             return;
         }
-        let mut compacted = Vec::new();
-        if !history.is_empty() {
-            compacted.push(history[0].clone());
+
+        // Always keep the first user message as context anchor
+        let first_user = history.iter().find(|m| m.role == "user").cloned();
+
+        // Find a safe cut point: walk from the tail, skip tool sequences
+        // A safe boundary is after a "user" or "model" message that is NOT
+        // immediately before a "tool" response.
+        let target_len = max_messages.saturating_sub(1); // -1 to make room for first_user
+        let tail_start = history.len().saturating_sub(target_len);
+
+        // Ensure we don't cut inside an assistant→tool sequence.
+        // Walk forward from tail_start until we find a safe boundary:
+        // safe = a "user" message, or a "model" message whose NEXT message is NOT "tool".
+        let mut safe_start = tail_start;
+        for i in tail_start..history.len() {
+            let role = history[i].role.as_str();
+            let next_role = history.get(i + 1).map(|m| m.role.as_str()).unwrap_or("");
+            match role {
+                "user" => {
+                    safe_start = i;
+                    break;
+                }
+                "model" | "assistant" if next_role != "tool" => {
+                    safe_start = i;
+                    break;
+                }
+                "tool" => {
+                    // Skip past all consecutive tool messages
+                    continue;
+                }
+                _ => {}
+            }
         }
-        let keep_start = history.len() - (max_messages - 1);
-        compacted.extend(history[keep_start..].iter().cloned());
+
+        let mut compacted: Vec<ChatMessage> = Vec::new();
+        if let Some(first) = first_user {
+            if safe_start == 0 || history[safe_start].id != first.id {
+                compacted.push(first);
+            }
+        }
+        compacted.extend(history[safe_start..].iter().cloned());
         *history = compacted;
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
 
     fn load_or_default(&self, filename: &str, default: &str) -> String {
-        let path = self.workspace_root
+        let path = self
+            .workspace_root
             .join("core_engine/src/agent_harness/prompts")
             .join(filename);
         fs::read_to_string(&path).unwrap_or_else(|_| default.to_string())
@@ -1562,8 +1562,11 @@ Do NOT save what the repo already records (code structure, past fixes, git histo
 
                 if let Some(name) = path.file_name() {
                     let name_str = name.to_string_lossy();
-                    if name_str == ".git" || name_str == ".idea" || name_str == "target"
-                        || name_str == "node_modules" || name_str == "logs"
+                    if name_str == ".git"
+                        || name_str == ".idea"
+                        || name_str == "target"
+                        || name_str == "node_modules"
+                        || name_str == "logs"
                     {
                         continue;
                     }
